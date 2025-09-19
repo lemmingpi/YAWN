@@ -90,7 +90,7 @@ FROM python:3.11-slim
 ## Quick Start Context
 This is a personal productivity tool, not enterprise software. Optimize for:
 - Developer velocity over perfection
-- Cost minimization (target <$5/month)
+- Cost minimization (target <$10/month)
 - Local performance over server features
 - Simple solutions at this scale (dozens of notes, not millions)
 
