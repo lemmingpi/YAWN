@@ -5,9 +5,8 @@
     export GIT_AUTHOR_NAME="Gogo (Claude Code)"
     export GIT_AUTHOR_EMAIL="gordon.palumbo+claude@gmail.com"
 - **Always create feature branch**: `git checkout -b feature/[descriptive-name]`
-- **Commit frequently**: Small, logical commits over large changes
-- **Push to origin**: `git push origin feature/[branch-name]`
-- **Create PR to upstream/main**: Never push directly to main
+- **Commit frequently**: Small, logical commits over large changes.  Commit refactors separately from feature implementation.
+- **Create GitHUB PR to upstream/main**: Never push directly to main
 
 ### Commit Message Format
 - type(scope): description [CLAUDE-ASSISTED]
