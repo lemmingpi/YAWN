@@ -71,7 +71,7 @@ FROM python:3.11-slim
 - nearform/temporal_tables for versioning
 
 ### Development Phases
-1. **Foundation** ✅: Chrome extension architecture, security hardening, context menu integration
+1. **Foundation**: Chrome extension architecture, security hardening, context menu integration
 2. **MVP**: Local storage, basic notes, manual sync
 3. **Enhanced**: Rich text, categories, auto-sync
 4. **Advanced**: Highlights, LLM integration, sharing

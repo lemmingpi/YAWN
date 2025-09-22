@@ -730,37 +730,6 @@ notes/
 
 ---
 
-## 🧪 Testing Entry Points
-
-### Backend API Testing
-- **Automated Tests**: `make test` runs pytest suite
-- **Test Coverage**: HTML report in `htmlcov/`
-- **Manual Testing**: `curl http://localhost:8000/` and `/api/health`
-- **Development Server**: `make dev` for live testing
-- **Code Quality**: `make lint` for automated checks
-
-### Extension Manual Testing Procedures
-- **Context Menu**: Right-click → "Show Web Notes Banner"
-- **Popup Interface**: Extension icon → buttons
-- **Error Scenarios**: Try on chrome:// pages
-- **Stats Tracking**: Monitor storage changes
-- **Security**: Test XSS attempts (should fail)
-
-### Development Workflow Testing
-- **Environment Setup**: `make setup` should complete without errors
-- **Cross-platform**: Test `./scripts/dev.sh` on different operating systems
-- **Code Formatting**: `make format` should auto-fix style issues
-- **Pre-commit Hooks**: Git commits should trigger quality checks
-
-### Automated Testing Opportunities
-- **Backend Unit Tests**: FastAPI endpoint testing (implemented)
-- **Extension Unit Tests**: JavaScript function testing
-- **Integration Tests**: Chrome API interactions
-- **E2E Tests**: Full user workflows
-- **Security Tests**: XSS prevention validation
-- **API Tests**: Chrome extension to backend communication
-
----
 
 ## 📚 Related Documentation
 
@@ -790,20 +759,22 @@ notes/
 
 ## 🏗️ Architecture Summary
 
-### Current State (Hello World Implementation)
-- ✅ **Chrome Extension**: Production-ready with context menu and popup
-- ✅ **Backend API**: FastAPI hello world with comprehensive DevOps tooling
-- ✅ **Development Environment**: Cross-platform automation with testing
-- ✅ **Code Quality**: Automated formatting, linting, and pre-commit hooks
+### Current Implementation Status
+- **Chrome Extension**: Production-ready with context menu and popup
+- **Backend API**: FastAPI hello world with comprehensive DevOps tooling
+- **Development Environment**: Cross-platform automation
+- **Code Quality**: Automated formatting, linting, and pre-commit hooks
 
-### Next Development Phase (Per PROJECT_SPEC.md)
-- 🔄 **Database Integration**: PostgreSQL with temporal versioning
-- 🔄 **Authentication**: Google OAuth for Chrome extensions
-- 🔄 **Note CRUD API**: Full REST endpoints for note management
-- 🔄 **DOM Anchoring**: Text fragments, XPath, CSS selectors
-- 🔄 **Cloud Deployment**: Google Cloud Run with auto-scaling
+### Technical Architecture
+- **Database Integration**: PostgreSQL with temporal versioning (planned)
+- **Authentication**: Google OAuth for Chrome extensions (planned)
+- **Note CRUD API**: Full REST endpoints for note management (planned)
+- **DOM Anchoring**: Text fragments, XPath, CSS selectors (planned)
+- **Cloud Deployment**: Google Cloud Run with auto-scaling (planned)
 
 ---
 
-*Last Updated: 2024-09-22 (Auto-generated from comprehensive DevOps setup)*
-*For implementation details, refer to inline documentation in source files and `make help` for development commands.*
+*Last Updated: 2024-09-22*
+*For development workflows and testing procedures, see CLAUDE_CONTEXT.md*
+*For session state and project rules, see CLAUDE.md*
+*For architecture and requirements, see PROJECT_SPEC.md*
