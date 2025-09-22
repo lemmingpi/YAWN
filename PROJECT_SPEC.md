@@ -94,3 +94,6 @@ This is a personal productivity tool, not enterprise software. Optimize for:
 - Local performance over server features
 - Simple solutions at this scale (dozens of notes, not millions)
 
+## TO DO
+- LLM integration - local or server side pro/cons
+- Workflows - game master, school notes, 
