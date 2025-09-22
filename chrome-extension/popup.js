@@ -1,6 +1,50 @@
 document.addEventListener('DOMContentLoaded', function() {
   const showBannerBtn = document.getElementById('show-banner');
   const hideBannerBtn = document.getElementById('hide-banner');
+  const clearStatsBtn = document.getElementById('clear-stats');
+
+  function updateStatsDisplay() {
+    chrome.storage.local.get(['extensionStats'], function(result) {
+      const stats = result.extensionStats || {
+        installDate: Date.now(),
+        bannerShows: 0,
+        popupOpens: 0,
+        lastSeen: Date.now()
+      };
+
+      const installDate = new Date(stats.installDate).toLocaleDateString();
+      const lastSeen = new Date(stats.lastSeen).toLocaleString();
+
+      document.getElementById('stats-content').innerHTML = `
+        <div style="font-size: 11px; line-height: 1.4;">
+          • Installed: ${installDate}<br>
+          • Banner shows: ${stats.bannerShows}<br>
+          • Popup opens: ${stats.popupOpens}<br>
+          • Last seen: ${lastSeen}
+        </div>
+      `;
+
+      if (!result.extensionStats) {
+        chrome.storage.local.set({extensionStats: stats});
+      }
+    });
+  }
+
+  function incrementPopupCount() {
+    chrome.storage.local.get(['extensionStats'], function(result) {
+      const stats = result.extensionStats || {
+        installDate: Date.now(),
+        bannerShows: 0,
+        popupOpens: 0,
+        lastSeen: Date.now()
+      };
+      stats.popupOpens++;
+      stats.lastSeen = Date.now();
+      chrome.storage.local.set({extensionStats: stats}, function() {
+        updateStatsDisplay();
+      });
+    });
+  }
 
   showBannerBtn.addEventListener('click', function() {
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
@@ -8,6 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
         target: {tabId: tabs[0].id},
         function: showHelloWorldBanner
       });
+      updateStatsDisplay();
     });
   });
 
@@ -20,14 +65,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  chrome.storage.local.get(['extensionStats'], function(result) {
-    const stats = result.extensionStats || { installDate: Date.now(), bannerShows: 0 };
-    console.log('Extension stats:', stats);
-
-    if (!result.extensionStats) {
-      chrome.storage.local.set({extensionStats: stats});
-    }
+  clearStatsBtn.addEventListener('click', function() {
+    chrome.storage.local.remove(['extensionStats'], function() {
+      updateStatsDisplay();
+    });
   });
+
+  // Initialize stats display and increment popup count
+  incrementPopupCount();
 });
 
 function showHelloWorldBanner() {
@@ -58,8 +103,8 @@ function showHelloWorldBanner() {
   banner.innerHTML = `
     <div style="display: flex; align-items: center; gap: 8px;">
       <span>🗒️</span>
-      <span>Web Notes - Popup Triggered!</span>
-      <span style="margin-left: 8px; opacity: 0.7; font-size: 18px;" onclick="this.parentElement.parentElement.remove()">×</span>
+      <span class="banner-message">Web Notes - Popup Triggered!</span>
+      <span class="banner-close" style="margin-left: 8px; opacity: 0.7; font-size: 18px; cursor: pointer; padding: 4px;">×</span>
     </div>
   `;
 
@@ -76,9 +121,26 @@ function showHelloWorldBanner() {
       }
     }
 
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+    }
+
     #web-notes-hello-banner:hover {
       transform: scale(1.05);
       box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .banner-close:hover {
+      opacity: 1 !important;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
     }
   `;
 
@@ -89,8 +151,23 @@ function showHelloWorldBanner() {
 
   document.body.appendChild(banner);
 
-  banner.addEventListener('click', function() {
+  // Add click handler for the main banner (not the close button)
+  const messageArea = banner.querySelector('.banner-message');
+  messageArea.addEventListener('click', function(e) {
+    e.stopPropagation();
     alert('Hello from Web Notes Chrome Extension!\\n\\nTriggered from popup button.');
+  });
+
+  // Add click handler for the close button
+  const closeButton = banner.querySelector('.banner-close');
+  closeButton.addEventListener('click', function(e) {
+    e.stopPropagation();
+    banner.style.animation = 'slideOut 0.3s ease-in forwards';
+    setTimeout(() => {
+      if (banner.parentNode) {
+        banner.remove();
+      }
+    }, 300);
   });
 
   chrome.storage.local.get(['extensionStats'], function(result) {

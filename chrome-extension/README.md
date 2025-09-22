@@ -30,18 +30,36 @@ This is a hello world Chrome extension for the Web Notes project. It demonstrate
 2. A popup should appear with:
    - Web Notes branding
    - Version information
-   - "Show Banner" and "Hide Banner" buttons
+   - "Show Banner", "Hide Banner", and "Clear Stats" buttons
+   - Local storage stats display
    - Feature preview list
 
 3. Test the popup buttons:
    - **Show Banner**: Creates a banner that says "Web Notes - Popup Triggered!"
    - **Hide Banner**: Removes any visible banner with animation
+   - **Clear Stats**: Resets all stored statistics
+
+### Local Storage Functionality Test
+**What's stored**: Install date, banner show count, popup open count, last seen timestamp
+
+**How to test**:
+1. Open popup - "Popup opens" count increases
+2. Click "Show Banner" - "Banner shows" count increases
+3. Click "Clear Stats" - All counts reset to zero
+4. Close and reopen popup - "Popup opens" count increases again
+5. **Advanced**: Open Chrome DevTools → Application tab → Storage → Local Storage → chrome-extension://[extension-id] to see raw data
 
 ### Browser Console Test
 1. Open Developer Tools (F12)
 2. Go to the Console tab
 3. Navigate to any website
 4. You should see: `Web Notes Hello World - Content script loaded!`
+
+### Banner Close Button Test
+1. Wait for auto-banner or click "Show Banner" in popup
+2. Click the **message text** (not the ×) - shows alert dialog
+3. Click the **× button** - banner slides out and disappears
+4. Verify the × has hover effect (background circle appears)
 
 ## Extension Features
 

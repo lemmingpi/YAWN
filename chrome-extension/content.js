@@ -28,8 +28,8 @@ function createHelloWorldBanner() {
   banner.innerHTML = `
     <div style="display: flex; align-items: center; gap: 8px;">
       <span>🗒️</span>
-      <span>Web Notes Hello World!</span>
-      <span style="margin-left: 8px; opacity: 0.7; font-size: 18px;" onclick="this.parentElement.parentElement.remove()">×</span>
+      <span class="banner-message">Web Notes Hello World!</span>
+      <span class="banner-close" style="margin-left: 8px; opacity: 0.7; font-size: 18px; cursor: pointer; padding: 4px;">×</span>
     </div>
   `;
 
@@ -46,17 +46,49 @@ function createHelloWorldBanner() {
       }
     }
 
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+    }
+
     #web-notes-hello-banner:hover {
       transform: scale(1.05);
       box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .banner-close:hover {
+      opacity: 1 !important;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
     }
   `;
 
   document.head.appendChild(style);
   document.body.appendChild(banner);
 
-  banner.addEventListener('click', function() {
+  // Add click handler for the main banner (not the close button)
+  const messageArea = banner.querySelector('.banner-message');
+  messageArea.addEventListener('click', function(e) {
+    e.stopPropagation();
     alert('Hello from Web Notes Chrome Extension!\\n\\nThis is a proof of concept for the future notes functionality.');
+  });
+
+  // Add click handler for the close button
+  const closeButton = banner.querySelector('.banner-close');
+  closeButton.addEventListener('click', function(e) {
+    e.stopPropagation();
+    banner.style.animation = 'slideOut 0.3s ease-in forwards';
+    setTimeout(() => {
+      if (banner.parentNode) {
+        banner.remove();
+      }
+    }, 300);
   });
 
   setTimeout(() => {
