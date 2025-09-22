@@ -1,0 +1,25 @@
+# Development dependencies for Web Notes API
+# Includes all base dependencies plus development tools
+
+-r base.txt
+
+# Code formatting and linting
+black==23.12.1
+isort==5.13.2
+flake8==7.0.0
+mypy==1.8.0
+
+# Testing framework
+pytest==7.4.3
+pytest-asyncio==0.23.2
+pytest-cov==4.1.0
+httpx==0.25.2              # For testing FastAPI endpoints
+
+# Development workflow tools
+pre-commit==3.6.0          # Git hooks for code quality
+pip-tools==7.3.0           # Dependency management
+watchdog==3.0.0            # File watching for development
+
+# Additional development utilities
+ipython==8.18.1            # Enhanced REPL
+jupyter==1.0.0             # Jupyter notebooks for experimentation

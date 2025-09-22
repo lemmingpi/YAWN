@@ -1,0 +1,40 @@
+[flake8]
+# Flake8 configuration for Web Notes API
+max-line-length = 88
+extend-ignore =
+    # Black compatibility
+    E203,  # whitespace before ':'
+    W503,  # line break before binary operator
+    # Docstring requirements (adjust as needed)
+    D100,  # Missing docstring in public module
+    D101,  # Missing docstring in public class
+    D102,  # Missing docstring in public method
+    D103,  # Missing docstring in public function
+    D104,  # Missing docstring in public package
+    D105,  # Missing docstring in magic method
+
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    .eggs,
+    *.egg,
+    chrome-extension,
+    .pytest_cache,
+    .mypy_cache
+
+per-file-ignores =
+    # Test files can have longer lines and missing docstrings
+    tests/*:D100,D101,D102,D103,E501
+    # Init files can be empty
+    __init__.py:D104,F401
+
+# Specific error codes we care about
+select =
+    E,  # pycodestyle errors
+    W,  # pycodestyle warnings
+    F,  # pyflakes
+    B,  # flake8-bugbear
+
+max-complexity = 10
+doctests = True

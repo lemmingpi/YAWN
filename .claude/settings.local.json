@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export GIT_AUTHOR_NAME=\"Gogo (Claude Code)\")",
+      "Bash(export:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git branch:*)",
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(\".venv/Scripts/activate\")",
+      "Bash(pip install:*)",
+      "Bash(chmod:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\Users\\gordo\\cluade\\notes1\\"
+    ]
+  }
+}

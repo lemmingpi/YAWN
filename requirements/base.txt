@@ -1,0 +1,12 @@
+# Core production dependencies for Web Notes API
+# Pin exact versions for reproducible builds
+
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Future production dependencies will go here:
+# sqlalchemy==2.0.23        # Database ORM
+# alembic==1.12.1           # Database migrations
+# google-auth==2.25.2       # Google OAuth validation
+# google-cloud-sql==1.1.1   # Cloud SQL connector
