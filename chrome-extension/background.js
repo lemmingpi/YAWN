@@ -120,8 +120,19 @@ async function createContextMenu() {
  */
 async function initializeStats() {
   try {
-    const stats = await getStats();
-    if (!stats.installDate) {
+    // Check if stats exist in storage directly, not via getStats()
+    const result = await new Promise((resolve) => {
+      chrome.storage.local.get([STATS_KEY], (result) => {
+        if (chrome.runtime.lastError) {
+          logError('Failed to check stats existence', chrome.runtime.lastError);
+          resolve(null);
+        } else {
+          resolve(result);
+        }
+      });
+    });
+
+    if (!result || !result[STATS_KEY]) {
       await setStats(DEFAULT_STATS);
       console.log('[Web Notes Extension] Stats initialized');
     }

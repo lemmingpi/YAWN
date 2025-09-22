@@ -110,10 +110,8 @@ async function updateStatsDisplay() {
 
     statsContentElement.appendChild(statsDiv);
 
-    // Initialize stats if they don't exist
-    if (!stats.installDate) {
-      await setStats(DEFAULT_STATS);
-    }
+    // Note: Stats initialization is handled by background script
+    // This function only displays existing stats
   } catch (error) {
     logError('Error updating stats display', error);
 
