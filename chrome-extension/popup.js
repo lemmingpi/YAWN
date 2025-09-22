@@ -86,7 +86,9 @@ async function updateStatsDisplay() {
     const lastSeen = new Date(stats.lastSeen).toLocaleString();
 
     // Clear existing content first
-    statsContentElement.innerHTML = '';
+    while (statsContentElement.firstChild) {
+      statsContentElement.removeChild(statsContentElement.firstChild);
+    }
 
     // Create stats display safely using DOM methods
     const statsDiv = document.createElement('div');
@@ -227,13 +229,31 @@ function showUserError(message) {
   try {
     const statusElement = document.querySelector('.status');
     if (statusElement) {
-      const originalContent = statusElement.innerHTML;
-      statusElement.innerHTML = `<strong>Error:</strong> ${message}`;
+      // Store original content for restoration
+      const originalChildren = Array.from(statusElement.childNodes);
+
+      // Clear and create error message safely
+      while (statusElement.firstChild) {
+        statusElement.removeChild(statusElement.firstChild);
+      }
+
+      const errorStrong = document.createElement('strong');
+      errorStrong.textContent = 'Error:';
+
+      const errorText = document.createTextNode(` ${message}`);
+
+      statusElement.appendChild(errorStrong);
+      statusElement.appendChild(errorText);
       statusElement.style.background = 'rgba(255, 0, 0, 0.2)';
 
       // Revert after 3 seconds
       setTimeout(() => {
-        statusElement.innerHTML = originalContent;
+        while (statusElement.firstChild) {
+          statusElement.removeChild(statusElement.firstChild);
+        }
+        originalChildren.forEach(child => {
+          statusElement.appendChild(child.cloneNode(true));
+        });
         statusElement.style.background = '';
       }, 3000);
     }

@@ -179,23 +179,6 @@ async function injectBannerScript(tabId) {
   }
 }
 
-/**
- * Updates stats counters
- * @param {Object} updates - Object with stat updates
- */
-async function updateStats(updates) {
-  try {
-    const stats = await getStats();
-    const updatedStats = {
-      ...stats,
-      ...updates,
-      lastSeen: Date.now()
-    };
-    await setStats(updatedStats);
-  } catch (error) {
-    logError('Failed to update stats', error);
-  }
-}
 
 // Event Listeners
 
@@ -227,9 +210,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     if (success) {
       // Update stats only on successful injection
-      await updateStats({
-        contextMenuClicks: (await getStats()).contextMenuClicks + 1,
-        bannerShows: (await getStats()).bannerShows + 1
+      const stats = await getStats();
+      await setStats({
+        ...stats,
+        contextMenuClicks: stats.contextMenuClicks + 1,
+        bannerShows: stats.bannerShows + 1,
+        lastSeen: Date.now()
       });
     }
   } catch (error) {
