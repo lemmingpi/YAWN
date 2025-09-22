@@ -76,6 +76,10 @@ This is a hello world Chrome extension for the Web Notes project. It demonstrate
 - ✅ Local storage integration with usage tracking
 - ✅ Click interactions and alerts
 - ✅ Background service worker for context menu handling
+- ✅ **Comprehensive error handling** and logging
+- ✅ **Security hardening** with CSP and XSS prevention
+- ✅ Tab validation and injection timeout protection
+- ✅ User-friendly error messages in popup
 
 ### Architecture Preview
 This hello world extension demonstrates the foundation for:
@@ -115,18 +119,28 @@ This hello world extension will be expanded to include:
 - Check that Developer Mode is enabled
 - Verify all files are in the correct directory
 - Check the Chrome Extensions page for error messages
+- Look for CSP violations in console if modifying code
 
 **Context menu not appearing?**
 - Ensure extension is properly loaded and enabled
 - Try right-clicking on different page elements
 - Check extension permissions in chrome://extensions
+- Avoid restricted pages (chrome://, extension pages)
 
 **Banner not appearing?**
 - Make sure you're using the context menu (right-click)
-- Check browser console for JavaScript errors
-- Ensure content script permissions are granted
+- Check for error messages in popup (red background)
+- Open DevTools console to see detailed error logs
+- Verify you're not on a restricted page type
 
 **Popup not working?**
 - Verify the extension is pinned and visible
 - Check for popup blocker interference
+- Look for error messages with red background in popup
+- Open DevTools to see console errors
 - Reload the extension if needed
+
+**Performance issues?**
+- Check console for timeout errors
+- Extension auto-handles script injection timeouts (5 seconds)
+- Multiple banner creation attempts are safely handled
