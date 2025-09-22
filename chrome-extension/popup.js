@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
         installDate: Date.now(),
         bannerShows: 0,
         popupOpens: 0,
+        contextMenuClicks: 0,
         lastSeen: Date.now()
       };
 
@@ -19,6 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div style="font-size: 11px; line-height: 1.4;">
           • Installed: ${installDate}<br>
           • Banner shows: ${stats.bannerShows}<br>
+          • Context menu clicks: ${stats.contextMenuClicks}<br>
           • Popup opens: ${stats.popupOpens}<br>
           • Last seen: ${lastSeen}
         </div>
@@ -36,6 +38,7 @@ document.addEventListener('DOMContentLoaded', function() {
         installDate: Date.now(),
         bannerShows: 0,
         popupOpens: 0,
+        contextMenuClicks: 0,
         lastSeen: Date.now()
       };
       stats.popupOpens++;

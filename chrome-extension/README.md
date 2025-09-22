@@ -19,11 +19,14 @@ This is a hello world Chrome extension for the Web Notes project. It demonstrate
 
 ## Testing the Extension
 
-### Automatic Content Script Test
+### Context Menu Test (Primary Feature)
 1. Navigate to any website (e.g., `https://google.com`)
-2. You should see a purple "Web Notes Hello World!" banner appear in the top-right corner
-3. Click the banner to see an alert message
-4. Click the "×" to close the banner
+2. **Right-click anywhere on the page**
+3. Look for "🗒️ Show Web Notes Banner" in the context menu
+4. Click it to show the banner
+5. Click the banner message to see an alert
+6. Click the "×" to close the banner
+7. Try right-clicking again - if banner exists, it will pulse instead of creating a new one
 
 ### Popup Interface Test
 1. Click the extension icon in the Chrome toolbar (🗒️)
@@ -40,23 +43,25 @@ This is a hello world Chrome extension for the Web Notes project. It demonstrate
    - **Clear Stats**: Resets all stored statistics
 
 ### Local Storage Functionality Test
-**What's stored**: Install date, banner show count, popup open count, last seen timestamp
+**What's stored**: Install date, banner show count, context menu click count, popup open count, last seen timestamp
 
 **How to test**:
 1. Open popup - "Popup opens" count increases
-2. Click "Show Banner" - "Banner shows" count increases
-3. Click "Clear Stats" - All counts reset to zero
-4. Close and reopen popup - "Popup opens" count increases again
-5. **Advanced**: Open Chrome DevTools → Application tab → Storage → Local Storage → chrome-extension://[extension-id] to see raw data
+2. Right-click → "Show Web Notes Banner" - "Context menu clicks" and "Banner shows" counts increase
+3. Click "Show Banner" in popup - "Banner shows" count increases
+4. Click "Clear Stats" - All counts reset to zero
+5. Close and reopen popup - "Popup opens" count increases again
+6. **Advanced**: Open Chrome DevTools → Application tab → Storage → Local Storage → chrome-extension://[extension-id] to see raw data
 
 ### Browser Console Test
 1. Open Developer Tools (F12)
 2. Go to the Console tab
 3. Navigate to any website
 4. You should see: `Web Notes Hello World - Content script loaded!`
+5. Check for background script messages when using context menu
 
 ### Banner Close Button Test
-1. Wait for auto-banner or click "Show Banner" in popup
+1. Right-click → "Show Web Notes Banner" or click "Show Banner" in popup
 2. Click the **message text** (not the ×) - shows alert dialog
 3. Click the **× button** - banner slides out and disappears
 4. Verify the × has hover effect (background circle appears)
@@ -65,10 +70,12 @@ This is a hello world Chrome extension for the Web Notes project. It demonstrate
 
 ### Current Features
 - ✅ Content script injection on all pages
-- ✅ Animated banner notifications
-- ✅ Extension popup interface
-- ✅ Local storage integration
+- ✅ **Context menu integration** - Right-click to show banner
+- ✅ Animated banner notifications with close functionality
+- ✅ Extension popup interface with manual controls
+- ✅ Local storage integration with usage tracking
 - ✅ Click interactions and alerts
+- ✅ Background service worker for context menu handling
 
 ### Architecture Preview
 This hello world extension demonstrates the foundation for:
@@ -82,10 +89,11 @@ This hello world extension demonstrates the foundation for:
 
 ```
 chrome-extension/
-├── manifest.json       # Extension configuration
-├── content.js         # Runs on all web pages
+├── manifest.json       # Extension configuration with context menu permissions
+├── background.js      # Service worker for context menu handling
+├── content.js         # Minimal content script (logs loading)
 ├── popup.html         # Extension popup interface
-├── popup.js          # Popup functionality
+├── popup.js          # Popup functionality with stats tracking
 ├── icon16.svg        # 16px icon
 ├── icon48.svg        # 48px icon
 ├── icon128.svg       # 128px icon
@@ -108,9 +116,14 @@ This hello world extension will be expanded to include:
 - Verify all files are in the correct directory
 - Check the Chrome Extensions page for error messages
 
+**Context menu not appearing?**
+- Ensure extension is properly loaded and enabled
+- Try right-clicking on different page elements
+- Check extension permissions in chrome://extensions
+
 **Banner not appearing?**
+- Make sure you're using the context menu (right-click)
 - Check browser console for JavaScript errors
-- Try refreshing the page
 - Ensure content script permissions are granted
 
 **Popup not working?**
