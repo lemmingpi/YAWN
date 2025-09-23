@@ -2,7 +2,7 @@
 # Cross-platform development workflow automation
 # Works on Windows (Git Bash), Unix, Linux, and Mac
 
-.PHONY: help setup dev test lint format clean install-dev check-env
+.PHONY: help setup dev test lint format clean install-dev check-env lint-js format-js install-js lint-all format-all
 .DEFAULT_GOAL := help
 
 # Colors for output (works in most terminals)
@@ -100,6 +100,51 @@ format: check-env ## Auto-format code with black and isort
 	@echo "$(YELLOW)Sorting imports with isort...$(NC)"
 	$(PYTHON) -m isort backend/ tests/
 	@echo "$(GREEN)✓ Code formatting completed$(NC)"
+
+install-js: ## Install JavaScript dependencies (Node.js and npm required)
+	@echo "$(BLUE)Installing JavaScript dependencies...$(NC)"
+	@command -v node >/dev/null 2>&1 || { echo "$(RED)✗ Node.js not found. Please install Node.js first$(NC)"; exit 1; }
+	@command -v npm >/dev/null 2>&1 || { echo "$(RED)✗ npm not found. Please install npm first$(NC)"; exit 1; }
+	npm install
+	@echo "$(GREEN)✓ JavaScript dependencies installed$(NC)"
+
+lint-js: ## Run ESLint on JavaScript files
+	@echo "$(BLUE)Running ESLint on JavaScript files...$(NC)"
+	@command -v node >/dev/null 2>&1 || { echo "$(RED)✗ Node.js not found. Run 'make install-js' first$(NC)"; exit 1; }
+	@test -d node_modules || { echo "$(RED)✗ Dependencies not installed. Run 'make install-js' first$(NC)"; exit 1; }
+	-npm run lint
+	@echo "$(GREEN)✓ JavaScript linting completed$(NC)"
+
+format-js: ## Format JavaScript and HTML files with Prettier
+	@echo "$(BLUE)Formatting JavaScript and HTML files...$(NC)"
+	@command -v node >/dev/null 2>&1 || { echo "$(RED)✗ Node.js not found. Run 'make install-js' first$(NC)"; exit 1; }
+	@test -d node_modules || { echo "$(RED)✗ Dependencies not installed. Run 'make install-js' first$(NC)"; exit 1; }
+	npm run format
+	@echo "$(GREEN)✓ JavaScript/HTML formatting completed$(NC)"
+
+lint-all: check-env ## Run all linting (Python and JavaScript)
+	@echo "$(BLUE)Running all code quality checks...$(NC)"
+	@echo "$(YELLOW)Checking Python code formatting with black...$(NC)"
+	$(PYTHON) -m black --check backend/ tests/
+	@echo "$(YELLOW)Checking Python import sorting with isort...$(NC)"
+	$(PYTHON) -m isort --check-only backend/ tests/
+	@echo "$(YELLOW)Running Python flake8 linting...$(NC)"
+	$(PYTHON) -m flake8 backend/ tests/
+	@echo "$(YELLOW)Running Python type checking with mypy...$(NC)"
+	$(PYTHON) -m mypy backend/
+	@echo "$(YELLOW)Running JavaScript linting with ESLint...$(NC)"
+	@command -v node >/dev/null 2>&1 || { echo "$(RED)✗ Node.js not found. Run 'make install-js' first$(NC)"; exit 1; }
+	@test -d node_modules || { echo "$(RED)✗ Dependencies not installed. Run 'make install-js' first$(NC)"; exit 1; }
+	-npm run lint
+	@echo "$(GREEN)✓ All code quality checks completed$(NC)"
+
+format-all: check-env format-js ## Auto-format all code (Python and JavaScript)
+	@echo "$(BLUE)Formatting all code...$(NC)"
+	@echo "$(YELLOW)Formatting Python with black...$(NC)"
+	$(PYTHON) -m black backend/ tests/
+	@echo "$(YELLOW)Sorting Python imports with isort...$(NC)"
+	$(PYTHON) -m isort backend/ tests/
+	@echo "$(GREEN)✓ All code formatting completed$(NC)"
 
 lock: check-env ## Generate locked requirements file
 	@echo "$(BLUE)Generating locked requirements...$(NC)"

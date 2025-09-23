@@ -4,7 +4,7 @@
  */
 
 // Constants
-const STATS_KEY = 'extensionStats';
+const STATS_KEY = "extensionStats";
 const SCRIPT_INJECTION_TIMEOUT = 5000;
 
 const DEFAULT_STATS = {
@@ -12,7 +12,7 @@ const DEFAULT_STATS = {
   bannerShows: 0,
   popupOpens: 0,
   contextMenuClicks: 0,
-  lastSeen: Date.now()
+  lastSeen: Date.now(),
 };
 
 /**
@@ -30,10 +30,10 @@ function logError(context, error) {
  */
 async function getStats() {
   try {
-    return new Promise((resolve) => {
-      chrome.storage.local.get([STATS_KEY], (result) => {
+    return new Promise(resolve => {
+      chrome.storage.local.get([STATS_KEY], result => {
         if (chrome.runtime.lastError) {
-          logError('Failed to get stats', chrome.runtime.lastError);
+          logError("Failed to get stats", chrome.runtime.lastError);
           resolve(DEFAULT_STATS);
         } else {
           resolve(result[STATS_KEY] || DEFAULT_STATS);
@@ -41,7 +41,7 @@ async function getStats() {
       });
     });
   } catch (error) {
-    logError('Error in getStats', error);
+    logError("Error in getStats", error);
     return DEFAULT_STATS;
   }
 }
@@ -53,10 +53,10 @@ async function getStats() {
  */
 async function setStats(stats) {
   try {
-    return new Promise((resolve) => {
-      chrome.storage.local.set({[STATS_KEY]: stats}, () => {
+    return new Promise(resolve => {
+      chrome.storage.local.set({ [STATS_KEY]: stats }, () => {
         if (chrome.runtime.lastError) {
-          logError('Failed to set stats', chrome.runtime.lastError);
+          logError("Failed to set stats", chrome.runtime.lastError);
           resolve(false);
         } else {
           resolve(true);
@@ -64,7 +64,7 @@ async function setStats(stats) {
       });
     });
   } catch (error) {
-    logError('Error in setStats', error);
+    logError("Error in setStats", error);
     return false;
   }
 }
@@ -74,9 +74,9 @@ async function setStats(stats) {
  */
 async function updateStatsDisplay() {
   try {
-    const statsContentElement = document.getElementById('stats-content');
+    const statsContentElement = document.getElementById("stats-content");
     if (!statsContentElement) {
-      logError('Stats display update failed', 'stats-content element not found');
+      logError("Stats display update failed", "stats-content element not found");
       return;
     }
 
@@ -91,19 +91,19 @@ async function updateStatsDisplay() {
     }
 
     // Create stats display safely using DOM methods
-    const statsDiv = document.createElement('div');
-    statsDiv.style.cssText = 'font-size: 11px; line-height: 1.4;';
+    const statsDiv = document.createElement("div");
+    statsDiv.style.cssText = "font-size: 11px; line-height: 1.4;";
 
     const statsData = [
       `• Installed: ${installDate}`,
       `• Banner shows: ${stats.bannerShows}`,
       `• Context menu clicks: ${stats.contextMenuClicks}`,
       `• Popup opens: ${stats.popupOpens}`,
-      `• Last seen: ${lastSeen}`
+      `• Last seen: ${lastSeen}`,
     ];
 
     statsData.forEach(statText => {
-      const statLine = document.createElement('div');
+      const statLine = document.createElement("div");
       statLine.textContent = statText;
       statsDiv.appendChild(statLine);
     });
@@ -113,12 +113,12 @@ async function updateStatsDisplay() {
     // Note: Stats initialization is handled by background script
     // This function only displays existing stats
   } catch (error) {
-    logError('Error updating stats display', error);
+    logError("Error updating stats display", error);
 
     // Fallback display
-    const statsContentElement = document.getElementById('stats-content');
+    const statsContentElement = document.getElementById("stats-content");
     if (statsContentElement) {
-      statsContentElement.textContent = 'Error loading stats';
+      statsContentElement.textContent = "Error loading stats";
     }
   }
 }
@@ -132,7 +132,7 @@ async function incrementPopupCount() {
     const updatedStats = {
       ...stats,
       popupOpens: stats.popupOpens + 1,
-      lastSeen: Date.now()
+      lastSeen: Date.now(),
     };
 
     const success = await setStats(updatedStats);
@@ -140,7 +140,7 @@ async function incrementPopupCount() {
       await updateStatsDisplay();
     }
   } catch (error) {
-    logError('Error incrementing popup count', error);
+    logError("Error incrementing popup count", error);
   }
 }
 
@@ -155,8 +155,13 @@ function isTabValid(tab) {
   }
 
   // Check for restricted URLs
-  const restrictedProtocols = ['chrome:', 'chrome-extension:', 'edge:', 'moz-extension:'];
-  const url = tab.url || '';
+  const restrictedProtocols = [
+    "chrome:",
+    "chrome-extension:",
+    "edge:",
+    "moz-extension:",
+  ];
+  const url = tab.url || "";
 
   return !restrictedProtocols.some(protocol => url.startsWith(protocol));
 }
@@ -167,13 +172,13 @@ function isTabValid(tab) {
  */
 async function getCurrentTab() {
   try {
-    return new Promise((resolve) => {
-      chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+    return new Promise(resolve => {
+      chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
         if (chrome.runtime.lastError) {
-          logError('Failed to query tabs', chrome.runtime.lastError);
+          logError("Failed to query tabs", chrome.runtime.lastError);
           resolve(null);
         } else if (!tabs || tabs.length === 0) {
-          logError('No active tab found', 'tabs array is empty');
+          logError("No active tab found", "tabs array is empty");
           resolve(null);
         } else {
           resolve(tabs[0]);
@@ -181,7 +186,7 @@ async function getCurrentTab() {
       });
     });
   } catch (error) {
-    logError('Error getting current tab', error);
+    logError("Error getting current tab", error);
     return null;
   }
 }
@@ -195,20 +200,26 @@ async function getCurrentTab() {
 async function executeScriptInTab(tabId, func) {
   try {
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Script injection timeout')), SCRIPT_INJECTION_TIMEOUT);
+      setTimeout(
+        () => reject(new Error("Script injection timeout")),
+        SCRIPT_INJECTION_TIMEOUT,
+      );
     });
 
     const injectionPromise = new Promise((resolve, reject) => {
-      chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        function: func
-      }, (result) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(result);
-        }
-      });
+      chrome.scripting.executeScript(
+        {
+          target: { tabId: tabId },
+          function: func,
+        },
+        result => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(result);
+          }
+        },
+      );
     });
 
     await Promise.race([injectionPromise, timeoutPromise]);
@@ -225,7 +236,7 @@ async function executeScriptInTab(tabId, func) {
  */
 function showUserError(message) {
   try {
-    const statusElement = document.querySelector('.status');
+    const statusElement = document.querySelector(".status");
     if (statusElement) {
       // Store original content for restoration
       const originalChildren = Array.from(statusElement.childNodes);
@@ -235,14 +246,14 @@ function showUserError(message) {
         statusElement.removeChild(statusElement.firstChild);
       }
 
-      const errorStrong = document.createElement('strong');
-      errorStrong.textContent = 'Error:';
+      const errorStrong = document.createElement("strong");
+      errorStrong.textContent = "Error:";
 
       const errorText = document.createTextNode(` ${message}`);
 
       statusElement.appendChild(errorStrong);
       statusElement.appendChild(errorText);
-      statusElement.style.background = 'rgba(255, 0, 0, 0.2)';
+      statusElement.style.background = "rgba(255, 0, 0, 0.2)";
 
       // Revert after 3 seconds
       setTimeout(() => {
@@ -252,39 +263,39 @@ function showUserError(message) {
         originalChildren.forEach(child => {
           statusElement.appendChild(child.cloneNode(true));
         });
-        statusElement.style.background = '';
+        statusElement.style.background = "";
       }, 3000);
     }
   } catch (error) {
-    logError('Error showing user error message', error);
+    logError("Error showing user error message", error);
   }
 }
 
 // DOM Ready Handler
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener("DOMContentLoaded", async function () {
   try {
     // Get DOM elements with validation
-    const showBannerBtn = document.getElementById('show-banner');
-    const hideBannerBtn = document.getElementById('hide-banner');
-    const clearStatsBtn = document.getElementById('clear-stats');
+    const showBannerBtn = document.getElementById("show-banner");
+    const hideBannerBtn = document.getElementById("hide-banner");
+    const clearStatsBtn = document.getElementById("clear-stats");
 
     if (!showBannerBtn || !hideBannerBtn || !clearStatsBtn) {
-      logError('DOM initialization failed', 'Required buttons not found');
+      logError("DOM initialization failed", "Required buttons not found");
       return;
     }
 
     // Show Banner Button
-    showBannerBtn.addEventListener('click', async function() {
+    showBannerBtn.addEventListener("click", async function () {
       try {
         const tab = await getCurrentTab();
 
         if (!tab) {
-          showUserError('Cannot access current tab');
+          showUserError("Cannot access current tab");
           return;
         }
 
         if (!isTabValid(tab)) {
-          showUserError('Cannot show banner on this page type');
+          showUserError("Cannot show banner on this page type");
           return;
         }
 
@@ -296,51 +307,51 @@ document.addEventListener('DOMContentLoaded', async function() {
           await setStats({
             ...stats,
             bannerShows: stats.bannerShows + 1,
-            lastSeen: Date.now()
+            lastSeen: Date.now(),
           });
           await updateStatsDisplay();
         } else {
-          showUserError('Failed to show banner');
+          showUserError("Failed to show banner");
         }
       } catch (error) {
-        logError('Error in show banner click handler', error);
-        showUserError('Unexpected error occurred');
+        logError("Error in show banner click handler", error);
+        showUserError("Unexpected error occurred");
       }
     });
 
     // Hide Banner Button
-    hideBannerBtn.addEventListener('click', async function() {
+    hideBannerBtn.addEventListener("click", async function () {
       try {
         const tab = await getCurrentTab();
 
         if (!tab) {
-          showUserError('Cannot access current tab');
+          showUserError("Cannot access current tab");
           return;
         }
 
         if (!isTabValid(tab)) {
-          showUserError('Cannot hide banner on this page type');
+          showUserError("Cannot hide banner on this page type");
           return;
         }
 
         const success = await executeScriptInTab(tab.id, hideHelloWorldBanner);
 
         if (!success) {
-          showUserError('Failed to hide banner');
+          showUserError("Failed to hide banner");
         }
       } catch (error) {
-        logError('Error in hide banner click handler', error);
-        showUserError('Unexpected error occurred');
+        logError("Error in hide banner click handler", error);
+        showUserError("Unexpected error occurred");
       }
     });
 
     // Clear Stats Button
-    clearStatsBtn.addEventListener('click', async function() {
+    clearStatsBtn.addEventListener("click", async function () {
       try {
-        const success = await new Promise((resolve) => {
+        const success = await new Promise(resolve => {
           chrome.storage.local.remove([STATS_KEY], () => {
             if (chrome.runtime.lastError) {
-              logError('Failed to clear stats', chrome.runtime.lastError);
+              logError("Failed to clear stats", chrome.runtime.lastError);
               resolve(false);
             } else {
               resolve(true);
@@ -351,19 +362,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (success) {
           await updateStatsDisplay();
         } else {
-          showUserError('Failed to clear stats');
+          showUserError("Failed to clear stats");
         }
       } catch (error) {
-        logError('Error in clear stats click handler', error);
-        showUserError('Failed to clear stats');
+        logError("Error in clear stats click handler", error);
+        showUserError("Failed to clear stats");
       }
     });
 
     // Initialize popup
     await incrementPopupCount();
-
   } catch (error) {
-    logError('Error during popup initialization', error);
+    logError("Error during popup initialization", error);
   }
 });
 
@@ -372,23 +382,23 @@ document.addEventListener('DOMContentLoaded', async function() {
  */
 function showHelloWorldBanner() {
   try {
-    const BANNER_ID = 'web-notes-hello-banner';
-    const BANNER_STYLE_ID = 'web-notes-banner-styles';
+    const BANNER_ID = "web-notes-hello-banner";
+    const BANNER_STYLE_ID = "web-notes-banner-styles";
 
     // Check if banner already exists
     const existingBanner = document.getElementById(BANNER_ID);
     if (existingBanner) {
-      existingBanner.style.animation = 'pulse 0.5s ease-in-out';
+      existingBanner.style.animation = "pulse 0.5s ease-in-out";
       setTimeout(() => {
         if (existingBanner.parentNode) {
-          existingBanner.style.animation = '';
+          existingBanner.style.animation = "";
         }
       }, 500);
       return;
     }
 
     // Create banner element safely
-    const banner = document.createElement('div');
+    const banner = document.createElement("div");
     banner.id = BANNER_ID;
     banner.style.cssText = `
       position: fixed;
@@ -409,20 +419,21 @@ function showHelloWorldBanner() {
     `;
 
     // Create banner content safely using DOM methods
-    const container = document.createElement('div');
-    container.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    const container = document.createElement("div");
+    container.style.cssText = "display: flex; align-items: center; gap: 8px;";
 
-    const icon = document.createElement('span');
-    icon.textContent = '🗒️';
+    const icon = document.createElement("span");
+    icon.textContent = "🗒️";
 
-    const message = document.createElement('span');
-    message.className = 'banner-message';
-    message.textContent = 'Web Notes - Popup Triggered!';
+    const message = document.createElement("span");
+    message.className = "banner-message";
+    message.textContent = "Web Notes - Popup Triggered!";
 
-    const closeButton = document.createElement('span');
-    closeButton.className = 'banner-close';
-    closeButton.textContent = '×';
-    closeButton.style.cssText = 'margin-left: 8px; opacity: 0.7; font-size: 18px; cursor: pointer; padding: 4px;';
+    const closeButton = document.createElement("span");
+    closeButton.className = "banner-close";
+    closeButton.textContent = "×";
+    closeButton.style.cssText =
+      "margin-left: 8px; opacity: 0.7; font-size: 18px; cursor: pointer; padding: 4px;";
 
     container.appendChild(icon);
     container.appendChild(message);
@@ -431,7 +442,7 @@ function showHelloWorldBanner() {
 
     // Add styles if not already present
     if (!document.getElementById(BANNER_STYLE_ID)) {
-      const style = document.createElement('style');
+      const style = document.createElement("style");
       style.id = BANNER_STYLE_ID;
       style.textContent = `
         @keyframes slideIn {
@@ -466,20 +477,22 @@ function showHelloWorldBanner() {
     if (document.body) {
       document.body.appendChild(banner);
     } else {
-      console.error('[Web Notes] Cannot add banner: document.body not available');
+      console.error("[Web Notes] Cannot add banner: document.body not available");
       return;
     }
 
     // Add event listeners with error handling
     try {
-      message.addEventListener('click', function(e) {
+      message.addEventListener("click", function (e) {
         e.stopPropagation();
-        alert('Hello from Web Notes Chrome Extension!\\n\\nTriggered from popup button.');
+        alert(
+          "Hello from Web Notes Chrome Extension!\\n\\nTriggered from popup button.",
+        );
       });
 
-      closeButton.addEventListener('click', function(e) {
+      closeButton.addEventListener("click", function (e) {
         e.stopPropagation();
-        banner.style.animation = 'slideOut 300ms ease-in forwards';
+        banner.style.animation = "slideOut 300ms ease-in forwards";
         setTimeout(() => {
           if (banner.parentNode) {
             banner.remove();
@@ -487,11 +500,10 @@ function showHelloWorldBanner() {
         }, 300);
       });
     } catch (error) {
-      console.error('[Web Notes] Error adding event listeners:', error);
+      console.error("[Web Notes] Error adding event listeners:", error);
     }
-
   } catch (error) {
-    console.error('[Web Notes] Error creating banner from popup:', error);
+    console.error("[Web Notes] Error creating banner from popup:", error);
   }
 }
 
@@ -500,9 +512,9 @@ function showHelloWorldBanner() {
  */
 function hideHelloWorldBanner() {
   try {
-    const banner = document.getElementById('web-notes-hello-banner');
+    const banner = document.getElementById("web-notes-hello-banner");
     if (banner) {
-      banner.style.animation = 'slideOut 300ms ease-in forwards';
+      banner.style.animation = "slideOut 300ms ease-in forwards";
       setTimeout(() => {
         if (banner.parentNode) {
           banner.remove();
@@ -510,6 +522,6 @@ function hideHelloWorldBanner() {
       }, 300);
     }
   } catch (error) {
-    console.error('[Web Notes] Error hiding banner:', error);
+    console.error("[Web Notes] Error hiding banner:", error);
   }
 }

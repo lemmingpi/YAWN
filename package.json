@@ -1,0 +1,35 @@
+{
+  "name": "web-notes",
+  "version": "0.1.0",
+  "description": "Chrome extension backend API for web notes with DOM anchoring",
+  "private": true,
+  "scripts": {
+    "lint": "eslint chrome-extension/**/*.js",
+    "lint:fix": "eslint chrome-extension/**/*.js --fix",
+    "format": "prettier --write \"chrome-extension/**/*.{js,html,json}\" \"*.{js,json}\"",
+    "format:check": "prettier --check \"chrome-extension/**/*.{js,html,json}\" \"*.{js,json}\"",
+    "lint:all": "npm run lint && npm run format:check",
+    "fix:all": "npm run lint:fix && npm run format"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gpalumbo/web-notes.git"
+  },
+  "author": "Gordon Palumbo <gordon.palumbo+claude@gmail.com>",
+  "license": "MIT",
+  "keywords": [
+    "chrome-extension",
+    "web-notes",
+    "dom-anchoring",
+    "javascript",
+    "html"
+  ]
+}

@@ -4,9 +4,9 @@
  */
 
 // Constants
-const EXTENSION_ID = 'show-web-notes-banner';
-const MENU_TITLE = '🗒️ Show Web Notes Banner';
-const STATS_KEY = 'extensionStats';
+const EXTENSION_ID = "show-web-notes-banner";
+const MENU_TITLE = "🗒️ Show Web Notes Banner";
+const STATS_KEY = "extensionStats";
 const SCRIPT_INJECTION_TIMEOUT = 5000; // 5 seconds
 
 // Default stats object
@@ -15,7 +15,7 @@ const DEFAULT_STATS = {
   bannerShows: 0,
   popupOpens: 0,
   contextMenuClicks: 0,
-  lastSeen: Date.now()
+  lastSeen: Date.now(),
 };
 
 /**
@@ -57,10 +57,10 @@ function safeApiCall(apiCall, context) {
  */
 async function getStats() {
   try {
-    return new Promise((resolve) => {
-      chrome.storage.local.get([STATS_KEY], (result) => {
+    return new Promise(resolve => {
+      chrome.storage.local.get([STATS_KEY], result => {
         if (chrome.runtime.lastError) {
-          logError('Failed to get stats', chrome.runtime.lastError);
+          logError("Failed to get stats", chrome.runtime.lastError);
           resolve(DEFAULT_STATS);
         } else {
           resolve(result[STATS_KEY] || DEFAULT_STATS);
@@ -68,7 +68,7 @@ async function getStats() {
       });
     });
   } catch (error) {
-    logError('Error in getStats', error);
+    logError("Error in getStats", error);
     return DEFAULT_STATS;
   }
 }
@@ -80,10 +80,10 @@ async function getStats() {
  */
 async function setStats(stats) {
   try {
-    return new Promise((resolve) => {
-      chrome.storage.local.set({[STATS_KEY]: stats}, () => {
+    return new Promise(resolve => {
+      chrome.storage.local.set({ [STATS_KEY]: stats }, () => {
         if (chrome.runtime.lastError) {
-          logError('Failed to set stats', chrome.runtime.lastError);
+          logError("Failed to set stats", chrome.runtime.lastError);
           resolve(false);
         } else {
           resolve(true);
@@ -91,7 +91,7 @@ async function setStats(stats) {
       });
     });
   } catch (error) {
-    logError('Error in setStats', error);
+    logError("Error in setStats", error);
     return false;
   }
 }
@@ -105,13 +105,13 @@ async function createContextMenu() {
       chrome.contextMenus.create({
         id: EXTENSION_ID,
         title: MENU_TITLE,
-        contexts: ['page', 'selection', 'link', 'image']
+        contexts: ["page", "selection", "link", "image"],
       });
-    }, 'Creating context menu');
+    }, "Creating context menu");
 
-    console.log('[Web Notes Extension] Context menu created successfully');
+    console.log("[Web Notes Extension] Context menu created successfully");
   } catch (error) {
-    logError('Failed to create context menu', error);
+    logError("Failed to create context menu", error);
   }
 }
 
@@ -121,10 +121,10 @@ async function createContextMenu() {
 async function initializeStats() {
   try {
     // Check if stats exist in storage directly, not via getStats()
-    const result = await new Promise((resolve) => {
-      chrome.storage.local.get([STATS_KEY], (result) => {
+    const result = await new Promise(resolve => {
+      chrome.storage.local.get([STATS_KEY], result => {
         if (chrome.runtime.lastError) {
-          logError('Failed to check stats existence', chrome.runtime.lastError);
+          logError("Failed to check stats existence", chrome.runtime.lastError);
           resolve(null);
         } else {
           resolve(result);
@@ -134,10 +134,10 @@ async function initializeStats() {
 
     if (!result || !result[STATS_KEY]) {
       await setStats(DEFAULT_STATS);
-      console.log('[Web Notes Extension] Stats initialized');
+      console.log("[Web Notes Extension] Stats initialized");
     }
   } catch (error) {
-    logError('Failed to initialize stats', error);
+    logError("Failed to initialize stats", error);
   }
 }
 
@@ -152,8 +152,13 @@ function isTabValid(tab) {
   }
 
   // Check for restricted URLs
-  const restrictedProtocols = ['chrome:', 'chrome-extension:', 'edge:', 'moz-extension:'];
-  const url = tab.url || '';
+  const restrictedProtocols = [
+    "chrome:",
+    "chrome-extension:",
+    "edge:",
+    "moz-extension:",
+  ];
+  const url = tab.url || "";
 
   return !restrictedProtocols.some(protocol => url.startsWith(protocol));
 }
@@ -166,20 +171,26 @@ function isTabValid(tab) {
 async function injectBannerScript(tabId) {
   try {
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Script injection timeout')), SCRIPT_INJECTION_TIMEOUT);
+      setTimeout(
+        () => reject(new Error("Script injection timeout")),
+        SCRIPT_INJECTION_TIMEOUT,
+      );
     });
 
     const injectionPromise = new Promise((resolve, reject) => {
-      chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        function: showWebNotesBanner
-      }, (result) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(result);
-        }
-      });
+      chrome.scripting.executeScript(
+        {
+          target: { tabId: tabId },
+          function: showWebNotesBanner,
+        },
+        result => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(result);
+          }
+        },
+      );
     });
 
     await Promise.race([injectionPromise, timeoutPromise]);
@@ -190,17 +201,16 @@ async function injectBannerScript(tabId) {
   }
 }
 
-
 // Event Listeners
 
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log('[Web Notes Extension] Extension installed/updated');
+  console.log("[Web Notes Extension] Extension installed/updated");
 
   try {
     await createContextMenu();
     await initializeStats();
   } catch (error) {
-    logError('Error during extension initialization', error);
+    logError("Error during extension initialization", error);
   }
 });
 
@@ -212,7 +222,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   try {
     // Validate tab
     if (!isTabValid(tab)) {
-      logError('Invalid tab for script injection', `Tab ID: ${tab?.id}, URL: ${tab?.url}`);
+      logError(
+        "Invalid tab for script injection",
+        `Tab ID: ${tab?.id}, URL: ${tab?.url}`,
+      );
       return;
     }
 
@@ -226,17 +239,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         ...stats,
         contextMenuClicks: stats.contextMenuClicks + 1,
         bannerShows: stats.bannerShows + 1,
-        lastSeen: Date.now()
+        lastSeen: Date.now(),
       });
     }
   } catch (error) {
-    logError('Error handling context menu click', error);
+    logError("Error handling context menu click", error);
   }
 });
 
 // Handle extension errors
 chrome.runtime.onStartup.addListener(() => {
-  console.log('[Web Notes Extension] Extension startup');
+  console.log("[Web Notes Extension] Extension startup");
 });
 
 /**
@@ -246,8 +259,8 @@ chrome.runtime.onStartup.addListener(() => {
 function showWebNotesBanner() {
   try {
     // Constants for banner creation
-    const BANNER_ID = 'web-notes-hello-banner';
-    const BANNER_STYLE_ID = 'web-notes-banner-styles';
+    const BANNER_ID = "web-notes-hello-banner";
+    const BANNER_STYLE_ID = "web-notes-banner-styles";
     const PULSE_DURATION = 500;
     const AUTO_FADE_DELAY = 5000;
     const CLOSE_ANIMATION_DURATION = 300;
@@ -256,17 +269,17 @@ function showWebNotesBanner() {
     const existingBanner = document.getElementById(BANNER_ID);
     if (existingBanner) {
       // Add pulse effect to existing banner
-      existingBanner.style.animation = 'pulse 0.5s ease-in-out';
+      existingBanner.style.animation = "pulse 0.5s ease-in-out";
       setTimeout(() => {
         if (existingBanner.parentNode) {
-          existingBanner.style.animation = '';
+          existingBanner.style.animation = "";
         }
       }, PULSE_DURATION);
       return;
     }
 
     // Create banner element safely
-    const banner = document.createElement('div');
+    const banner = document.createElement("div");
     banner.id = BANNER_ID;
 
     // Set styles via cssText to avoid CSP issues
@@ -289,20 +302,21 @@ function showWebNotesBanner() {
     `;
 
     // Create banner content safely using DOM methods
-    const container = document.createElement('div');
-    container.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    const container = document.createElement("div");
+    container.style.cssText = "display: flex; align-items: center; gap: 8px;";
 
-    const icon = document.createElement('span');
-    icon.textContent = '🗒️';
+    const icon = document.createElement("span");
+    icon.textContent = "🗒️";
 
-    const message = document.createElement('span');
-    message.className = 'banner-message';
-    message.textContent = 'Web Notes - Context Menu!';
+    const message = document.createElement("span");
+    message.className = "banner-message";
+    message.textContent = "Web Notes - Context Menu!";
 
-    const closeButton = document.createElement('span');
-    closeButton.className = 'banner-close';
-    closeButton.textContent = '×';
-    closeButton.style.cssText = 'margin-left: 8px; opacity: 0.7; font-size: 18px; cursor: pointer; padding: 4px;';
+    const closeButton = document.createElement("span");
+    closeButton.className = "banner-close";
+    closeButton.textContent = "×";
+    closeButton.style.cssText =
+      "margin-left: 8px; opacity: 0.7; font-size: 18px; cursor: pointer; padding: 4px;";
 
     container.appendChild(icon);
     container.appendChild(message);
@@ -311,7 +325,7 @@ function showWebNotesBanner() {
 
     // Add styles if not already present
     if (!document.getElementById(BANNER_STYLE_ID)) {
-      const style = document.createElement('style');
+      const style = document.createElement("style");
       style.id = BANNER_STYLE_ID;
       style.textContent = `
         @keyframes slideIn {
@@ -347,20 +361,22 @@ function showWebNotesBanner() {
     if (document.body) {
       document.body.appendChild(banner);
     } else {
-      console.error('[Web Notes] Cannot add banner: document.body not available');
+      console.error("[Web Notes] Cannot add banner: document.body not available");
       return;
     }
 
     // Add event listeners with error handling
     try {
       // Message click handler
-      message.addEventListener('click', function(e) {
+      message.addEventListener("click", function (e) {
         e.stopPropagation();
-        alert('Hello from Web Notes Chrome Extension!\\n\\nTriggered from right-click context menu.');
+        alert(
+          "Hello from Web Notes Chrome Extension!\\n\\nTriggered from right-click context menu.",
+        );
       });
 
       // Close button handler
-      closeButton.addEventListener('click', function(e) {
+      closeButton.addEventListener("click", function (e) {
         e.stopPropagation();
         banner.style.animation = `slideOut ${CLOSE_ANIMATION_DURATION}ms ease-in forwards`;
         setTimeout(() => {
@@ -370,17 +386,16 @@ function showWebNotesBanner() {
         }, CLOSE_ANIMATION_DURATION);
       });
     } catch (error) {
-      console.error('[Web Notes] Error adding event listeners:', error);
+      console.error("[Web Notes] Error adding event listeners:", error);
     }
 
     // Auto-fade after delay
     setTimeout(() => {
       if (banner.parentNode) {
-        banner.style.opacity = '0.8';
+        banner.style.opacity = "0.8";
       }
     }, AUTO_FADE_DELAY);
-
   } catch (error) {
-    console.error('[Web Notes] Error creating banner:', error);
+    console.error("[Web Notes] Error creating banner:", error);
   }
 }

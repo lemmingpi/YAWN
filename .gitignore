@@ -64,3 +64,16 @@ htmlcov/
 
 # Dependencies lock file (generated)
 requirements/requirements.lock
+
+# Node.js / JavaScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+.grunt
+bower_components

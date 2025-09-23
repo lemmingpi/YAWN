@@ -3,12 +3,7 @@
   "name": "Web Notes - Hello World",
   "version": "1.0.0",
   "description": "A hello world Chrome extension for the Web Notes app",
-  "permissions": [
-    "activeTab",
-    "storage",
-    "scripting",
-    "contextMenus"
-  ],
+  "permissions": ["activeTab", "storage", "scripting", "contextMenus"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Web Notes Hello World"
