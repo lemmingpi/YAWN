@@ -67,9 +67,10 @@ const elementCache = new Map();
 
 /**
  * Calculate note position based on target element or fallback coordinates with offset
+ * Notes can be positioned anywhere including off-screen - no restrictions applied
  * @param {Object} noteData - The note data object
  * @param {Element|null} targetElement - The target DOM element (if found)
- * @returns {Object} Position object with x, y coordinates
+ * @returns {Object} Position object with x, y coordinates and anchoring status
  */
 function calculateNotePosition(noteData, targetElement) {
   const offsetX = noteData.offsetX || 0;
@@ -93,21 +94,6 @@ function calculateNotePosition(noteData, targetElement) {
   }
 }
 
-/**
- * Pass-through function for note position (no boundary restrictions)
- * @param {number} x - Proposed X position
- * @param {number} y - Proposed Y position
- * @param {Element} noteElement - The note DOM element (unused)
- * @returns {Object} Position object with x, y coordinates (unchanged)
- */
-function adjustForBoundaries(x, y, noteElement) {
-  // No boundary restrictions - allow notes to be placed anywhere
-  return {
-    x: x,
-    y: y,
-    wasAdjusted: false,
-  };
-}
 
 /**
  * Update note offset in storage
@@ -223,6 +209,9 @@ function makeDraggable(noteElement, noteData, targetElement) {
     noteElement.style.transition = "none"; // Disable transitions during drag
 
     // Add event listeners to document for smooth dragging
+    // Note: { passive: false } is required on mousemove to allow preventDefault()
+    // This prevents text selection and other default behaviors during drag
+    // Performance impact: Disables scroll optimizations during drag operations
     document.addEventListener("mousemove", handleDragMove, { passive: false });
     document.addEventListener("mouseup", handleDragEnd, { once: true });
 
@@ -241,15 +230,15 @@ function makeDraggable(noteElement, noteData, targetElement) {
     const newOffsetX = startOffsetX + deltaX;
     const newOffsetY = startOffsetY + deltaY;
 
-    // Calculate new position
-    const proposedPosition = calculateNotePosition(
+    // Calculate and apply new position immediately (no restrictions)
+    const newPosition = calculateNotePosition(
       { ...noteData, offsetX: newOffsetX, offsetY: newOffsetY },
       targetElement
     );
 
-    // Update visual position immediately (no boundary restrictions)
-    noteElement.style.left = `${proposedPosition.x}px`;
-    noteElement.style.top = `${proposedPosition.y}px`;
+    // Update visual position immediately
+    noteElement.style.left = `${newPosition.x}px`;
+    noteElement.style.top = `${newPosition.y}px`;
 
     // Update the working offset values for this session
     noteData.offsetX = newOffsetX;
@@ -363,17 +352,14 @@ function displayNote(noteData) {
     // Set note text
     note.textContent = noteData.text;
 
-    // Add to page temporarily to get accurate dimensions for boundary adjustment
+    // Add to page temporarily to get accurate dimensions for positioning
     note.style.visibility = "hidden"; // Hide during positioning
     document.body.appendChild(note);
 
-    // Calculate position with offset support
-    const proposedPosition = calculateNotePosition(noteData, targetElement);
+    // Calculate final position with offset support
+    const finalPosition = calculateNotePosition(noteData, targetElement);
 
-    // Adjust position to stay within screen boundaries
-    const finalPosition = adjustForBoundaries(proposedPosition.x, proposedPosition.y, note);
-
-    // Apply final position
+    // Apply position (no restrictions - notes can be positioned anywhere)
     note.style.left = `${finalPosition.x}px`;
     note.style.top = `${finalPosition.y}px`;
     note.style.visibility = "visible"; // Show the note
@@ -394,7 +380,7 @@ function displayNote(noteData) {
     const offsetX = noteData.offsetX || 0;
     const offsetY = noteData.offsetY || 0;
     console.log(
-      `[Web Notes] Displaying draggable note ${proposedPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
+      `[Web Notes] Displaying draggable note ${finalPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
       `${noteData.elementSelector || noteData.elementXPath || "absolute coordinates"} ` +
       `with offset (${offsetX}, ${offsetY}) at position (${finalPosition.x}, ${finalPosition.y})`
     );
