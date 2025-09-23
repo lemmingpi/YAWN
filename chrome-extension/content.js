@@ -151,6 +151,45 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
 }
 
 /**
+ * Add interactive hover and focus effects to a note element
+ * @param {Element} noteElement - The note DOM element
+ * @param {boolean} isAnchored - Whether the note is anchored to a DOM element
+ */
+function addInteractiveEffects(noteElement, isAnchored) {
+  // Hover effects
+  noteElement.addEventListener("mouseenter", () => {
+    if (!noteElement.classList.contains("dragging")) {
+      noteElement.style.transform = "scale(1.02) translateZ(0)";
+      noteElement.style.boxShadow = "0 5px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1)";
+      noteElement.style.borderColor = isAnchored ? 'rgba(33, 150, 243, 0.4)' : 'rgba(233, 30, 99, 0.4)';
+    }
+  });
+
+  noteElement.addEventListener("mouseleave", () => {
+    if (!noteElement.classList.contains("dragging")) {
+      noteElement.style.transform = "scale(1) translateZ(0)";
+      noteElement.style.boxShadow = "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
+      noteElement.style.borderColor = isAnchored ? 'rgba(33, 150, 243, 0.2)' : 'rgba(233, 30, 99, 0.2)';
+    }
+  });
+
+  // Focus effects for accessibility
+  noteElement.setAttribute("tabindex", "0");
+  noteElement.setAttribute("role", "button");
+  noteElement.setAttribute("aria-label", `Draggable note: ${noteElement.textContent}`);
+
+  noteElement.addEventListener("focus", () => {
+    noteElement.style.outline = `2px solid ${isAnchored ? '#2196F3' : '#E91E63'}`;
+    noteElement.style.outlineOffset = "2px";
+  });
+
+  noteElement.addEventListener("blur", () => {
+    noteElement.style.outline = "none";
+    noteElement.style.outlineOffset = "0";
+  });
+}
+
+/**
  * Make a note element draggable
  * @param {Element} noteElement - The note DOM element
  * @param {Object} noteData - The note data object
@@ -174,10 +213,14 @@ function makeDraggable(noteElement, noteData, targetElement) {
     startOffsetX = noteData.offsetX || 0;
     startOffsetY = noteData.offsetY || 0;
 
-    // Change cursor and add visual feedback
+    // Enhanced drag visual feedback
+    noteElement.classList.add("dragging");
     noteElement.style.cursor = "grabbing";
-    noteElement.style.boxShadow = "0 4px 16px rgba(0, 0, 0, 0.3)";
-    noteElement.style.zIndex = "10001"; // Bring to front during drag
+    noteElement.style.transform = "scale(1.05) rotateZ(2deg) translateZ(0)";
+    noteElement.style.boxShadow = "0 8px 32px rgba(0, 0, 0, 0.24), 0 4px 8px rgba(0, 0, 0, 0.12)";
+    noteElement.style.zIndex = "10001";
+    noteElement.style.opacity = "0.9";
+    noteElement.style.transition = "none"; // Disable transitions during drag
 
     // Add event listeners to document for smooth dragging
     document.addEventListener("mousemove", handleDragMove, { passive: false });
@@ -221,10 +264,14 @@ function makeDraggable(noteElement, noteData, targetElement) {
 
     isDragging = false;
 
-    // Restore normal cursor and styling
+    // Restore normal styling with smooth transition
+    noteElement.classList.remove("dragging");
     noteElement.style.cursor = "move";
-    noteElement.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+    noteElement.style.transform = "scale(1) rotateZ(0deg) translateZ(0)";
+    noteElement.style.boxShadow = "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
     noteElement.style.zIndex = "10000";
+    noteElement.style.opacity = "1";
+    noteElement.style.transition = "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"; // Re-enable transitions
 
     // Remove drag event listeners
     document.removeEventListener("mousemove", handleDragMove);
@@ -283,22 +330,34 @@ function displayNote(noteData) {
     const note = document.createElement("div");
     note.id = noteData.id;
     note.className = "web-note";
+
+    // Enhanced styling with modern gradients and smooth transitions
+    const isAnchored = targetElement !== null;
     note.style.cssText = `
       position: absolute;
-      background: ${targetElement ? "lightblue" : "pink"};
-      color: black;
-      padding: 8px 12px;
-      border-radius: 4px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 12px;
+      background: ${isAnchored ?
+        'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)' :
+        'linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%)'};
+      color: #2c3e50;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-size: 13px;
       font-weight: 500;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      line-height: 1.4;
+      letter-spacing: 0.25px;
+      box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
       z-index: 10000;
       cursor: move;
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      min-width: 80px;
-      max-width: 200px;
+      border: 1px solid ${isAnchored ? 'rgba(33, 150, 243, 0.2)' : 'rgba(233, 30, 99, 0.2)'};
+      min-width: 85px;
+      max-width: 220px;
       word-wrap: break-word;
+      opacity: 0;
+      transform: scale(0.8);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     `;
 
     // Set note text
@@ -319,13 +378,17 @@ function displayNote(noteData) {
     note.style.top = `${finalPosition.y}px`;
     note.style.visibility = "visible"; // Show the note
 
-    // Set background color based on anchoring status
-    if (!proposedPosition.isAnchored) {
-      note.style.background = "pink";
-    }
+    // Add hover and focus effects
+    addInteractiveEffects(note, isAnchored);
 
     // Make the note draggable
     makeDraggable(note, noteData, targetElement);
+
+    // Animate in with a slight delay for smooth appearance
+    requestAnimationFrame(() => {
+      note.style.opacity = "1";
+      note.style.transform = "scale(1)";
+    });
 
     // Enhanced logging
     const offsetX = noteData.offsetX || 0;
