@@ -226,7 +226,7 @@ if ("navigation" in window) {
 function createNoteAtCoords(noteNumber, coords) {
   try {
     // Generate unique note ID
-    const noteId = `web-note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const noteId = `web-note-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const noteText = `MY NOTE #${noteNumber}`;
 
     let targetElement = null;
