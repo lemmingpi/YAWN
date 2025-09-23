@@ -256,46 +256,49 @@ function createNoteAtCoords(noteNumber, coords) {
       fallbackPosition = { x: 100, y: 100 };
     }
 
-    // Create note element
-    const note = document.createElement("div");
-    note.id = noteId;
-    note.className = "web-note";
-    note.style.cssText = `
-      position: absolute;
-      background: ${targetElement ? "lightblue" : "pink"};
-      color: black;
-      padding: 8px 12px;
-      border-radius: 4px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 12px;
-      font-weight: 500;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-      z-index: 10000;
-      cursor: move;
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      min-width: 80px;
-      max-width: 200px;
-      word-wrap: break-word;
-    `;
+    // // Create note element
+    // const note = document.createElement("div");
+    // note.id = noteId;
+    // note.className = "web-note";
+    // note.style.cssText = `
+    //   position: absolute;
+    //   background: ${targetElement ? "lightblue" : "pink"};
+    //   color: black;
+    //   padding: 8px 12px;
+    //   border-radius: 4px;
+    //   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    //   font-size: 12px;
+    //   font-weight: 500;
+    //   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    //   z-index: 10000;
+    //   cursor: move;
+    //   border: 1px solid rgba(0, 0, 0, 0.1);
+    //   min-width: 80px;
+    //   max-width: 200px;
+    //   word-wrap: break-word;
+    // `;
 
-    // Set note text
-    note.textContent = noteText;
+    // // Set note text
+    // note.textContent = noteText;
 
     // Position the note
+    let posLeft = 100;
+    let posTop = 100;
     if (targetElement && elementSelector) {
       // Position relative to target element
       const rect = targetElement.getBoundingClientRect();
-      note.style.left = `${rect.left + window.scrollX}px`;
-      note.style.top = `${rect.top + window.scrollY - 30}px`;
+      posLeft = rect.left + window.scrollX;
+      posTop = rect.top + window.scrollY - 30;
     } else if (fallbackPosition) {
-      // Use fallback absolute position with pink background
-      note.style.left = `${fallbackPosition.x}px`;
-      note.style.top = `${fallbackPosition.y - 30}px`;
-      note.style.background = "pink";
+      // Use fallback absolute position
+      posLeft = fallbackPosition.x;
+      posTop = fallbackPosition.y - 30;
     }
 
-    // Add to page
-    document.body.appendChild(note);
+
+
+    // // Add to page
+    // document.body.appendChild(note);
 
     // Store note data
     const noteData = {
@@ -305,12 +308,13 @@ function createNoteAtCoords(noteNumber, coords) {
       elementSelector: elementSelector,
       elementXPath: elementXPath,
       fallbackPosition: fallbackPosition || {
-        x: parseInt(note.style.left),
-        y: parseInt(note.style.top),
+        x: posLeft,
+        y: posTop,
       },
       timestamp: Date.now(),
       isVisible: true,
     };
+    displayNote(noteData);
 
     // Store in chrome storage using shared constants
     chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
