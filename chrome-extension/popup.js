@@ -1,73 +1,15 @@
 /**
  * Popup script for Web Notes Chrome Extension
  * Handles popup UI interactions with comprehensive error handling
+ * Uses shared utilities from shared-utils.js
  */
 
-// Constants
-const STATS_KEY = "extensionStats";
-const SCRIPT_INJECTION_TIMEOUT = 5000;
+/* global EXTENSION_CONSTANTS, logError, getStats, setStats, isTabValid */
 
-const DEFAULT_STATS = {
-  installDate: Date.now(),
-  bannerShows: 0,
-  popupOpens: 0,
-  contextMenuClicks: 0,
-  lastSeen: Date.now(),
-};
+// Use shared constants and functions
+// EXTENSION_CONSTANTS, logError, getStats, setStats, isTabValid are imported
 
-/**
- * Logs errors with context information
- * @param {string} context - Where the error occurred
- * @param {Error|any} error - The error object or message
- */
-function logError(context, error) {
-  console.error(`[Web Notes Popup] ${context}:`, error);
-}
-
-/**
- * Gets extension stats from storage with error handling
- * @returns {Promise<Object>} Promise resolving to stats object
- */
-async function getStats() {
-  try {
-    return new Promise(resolve => {
-      chrome.storage.local.get([STATS_KEY], result => {
-        if (chrome.runtime.lastError) {
-          logError("Failed to get stats", chrome.runtime.lastError);
-          resolve(DEFAULT_STATS);
-        } else {
-          resolve(result[STATS_KEY] || DEFAULT_STATS);
-        }
-      });
-    });
-  } catch (error) {
-    logError("Error in getStats", error);
-    return DEFAULT_STATS;
-  }
-}
-
-/**
- * Sets extension stats in storage with error handling
- * @param {Object} stats - Stats object to save
- * @returns {Promise<boolean>} Promise resolving to success status
- */
-async function setStats(stats) {
-  try {
-    return new Promise(resolve => {
-      chrome.storage.local.set({ [STATS_KEY]: stats }, () => {
-        if (chrome.runtime.lastError) {
-          logError("Failed to set stats", chrome.runtime.lastError);
-          resolve(false);
-        } else {
-          resolve(true);
-        }
-      });
-    });
-  } catch (error) {
-    logError("Error in setStats", error);
-    return false;
-  }
-}
+// All storage and logging functions now imported from shared-utils.js
 
 /**
  * Updates stats display in the popup
@@ -145,28 +87,6 @@ async function incrementPopupCount() {
 }
 
 /**
- * Validates tab before script injection
- * @param {Object} tab - Chrome tab object
- * @returns {boolean} Whether tab is valid for injection
- */
-function isTabValid(tab) {
-  if (!tab || !tab.id || tab.id === chrome.tabs.TAB_ID_NONE) {
-    return false;
-  }
-
-  // Check for restricted URLs
-  const restrictedProtocols = [
-    "chrome:",
-    "chrome-extension:",
-    "edge:",
-    "moz-extension:",
-  ];
-  const url = tab.url || "";
-
-  return !restrictedProtocols.some(protocol => url.startsWith(protocol));
-}
-
-/**
  * Gets current active tab with error handling
  * @returns {Promise<Object|null>} Promise resolving to tab object or null
  */
@@ -202,7 +122,7 @@ async function executeScriptInTab(tabId, func) {
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(
         () => reject(new Error("Script injection timeout")),
-        SCRIPT_INJECTION_TIMEOUT,
+        EXTENSION_CONSTANTS.SCRIPT_INJECTION_TIMEOUT,
       );
     });
 
@@ -349,7 +269,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     clearStatsBtn.addEventListener("click", async function () {
       try {
         const success = await new Promise(resolve => {
-          chrome.storage.local.remove([STATS_KEY], () => {
+          chrome.storage.local.remove([EXTENSION_CONSTANTS.STATS_KEY], () => {
             if (chrome.runtime.lastError) {
               logError("Failed to clear stats", chrome.runtime.lastError);
               resolve(false);

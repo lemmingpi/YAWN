@@ -3,98 +3,21 @@
  * Handles context menu creation, click events, and error handling
  */
 
+/* global importScripts, EXTENSION_CONSTANTS, logError, safeApiCall */
+/* global getStats, setStats, getNotes, isTabValid */
+
+// Import shared utilities
+importScripts("shared-utils.js");
+
 // Constants
-const EXTENSION_ID = "show-web-notes-banner";
-const MENU_TITLE = "🗒️ Show Web Notes Banner";
-const STATS_KEY = "extensionStats";
-const SCRIPT_INJECTION_TIMEOUT = 5000; // 5 seconds
+const EXTENSION_ID = "add-web-note";
+const MENU_TITLE = "🗒️ Add Web Note";
 
-// Default stats object
-const DEFAULT_STATS = {
-  installDate: Date.now(),
-  bannerShows: 0,
-  popupOpens: 0,
-  contextMenuClicks: 0,
-  lastSeen: Date.now(),
-};
+// Use shared utility functions from shared-utils.js
+// logError, safeApiCall, getStats, setStats, getNotes, isTabValid are now imported
 
-/**
- * Logs errors with context information
- * @param {string} context - Where the error occurred
- * @param {Error|any} error - The error object or message
- */
-function logError(context, error) {
-  console.error(`[Web Notes Extension] ${context}:`, error);
-}
-
-/**
- * Safely executes Chrome API calls with error handling
- * @param {Function} apiCall - The Chrome API function to call
- * @param {string} context - Description of the operation
- * @returns {Promise} Promise that resolves with the result or rejects with error
- */
-function safeApiCall(apiCall, context) {
-  return new Promise((resolve, reject) => {
-    try {
-      const result = apiCall();
-      if (chrome.runtime.lastError) {
-        const error = new Error(chrome.runtime.lastError.message);
-        logError(context, error);
-        reject(error);
-      } else {
-        resolve(result);
-      }
-    } catch (error) {
-      logError(context, error);
-      reject(error);
-    }
-  });
-}
-
-/**
- * Gets extension stats from storage with error handling
- * @returns {Promise<Object>} Promise resolving to stats object
- */
-async function getStats() {
-  try {
-    return new Promise(resolve => {
-      chrome.storage.local.get([STATS_KEY], result => {
-        if (chrome.runtime.lastError) {
-          logError("Failed to get stats", chrome.runtime.lastError);
-          resolve(DEFAULT_STATS);
-        } else {
-          resolve(result[STATS_KEY] || DEFAULT_STATS);
-        }
-      });
-    });
-  } catch (error) {
-    logError("Error in getStats", error);
-    return DEFAULT_STATS;
-  }
-}
-
-/**
- * Sets extension stats in storage with error handling
- * @param {Object} stats - Stats object to save
- * @returns {Promise<boolean>} Promise resolving to success status
- */
-async function setStats(stats) {
-  try {
-    return new Promise(resolve => {
-      chrome.storage.local.set({ [STATS_KEY]: stats }, () => {
-        if (chrome.runtime.lastError) {
-          logError("Failed to set stats", chrome.runtime.lastError);
-          resolve(false);
-        } else {
-          resolve(true);
-        }
-      });
-    });
-  } catch (error) {
-    logError("Error in setStats", error);
-    return false;
-  }
-}
+// Track ongoing injections to prevent race conditions
+const ongoingInjections = new Set();
 
 /**
  * Creates context menu with error handling
@@ -122,7 +45,7 @@ async function initializeStats() {
   try {
     // Check if stats exist in storage directly, not via getStats()
     const result = await new Promise(resolve => {
-      chrome.storage.local.get([STATS_KEY], result => {
+      chrome.storage.local.get([EXTENSION_CONSTANTS.STATS_KEY], result => {
         if (chrome.runtime.lastError) {
           logError("Failed to check stats existence", chrome.runtime.lastError);
           resolve(null);
@@ -132,8 +55,8 @@ async function initializeStats() {
       });
     });
 
-    if (!result || !result[STATS_KEY]) {
-      await setStats(DEFAULT_STATS);
+    if (!result || !result[EXTENSION_CONSTANTS.STATS_KEY]) {
+      await setStats(EXTENSION_CONSTANTS.DEFAULT_STATS);
       console.log("[Web Notes Extension] Stats initialized");
     }
   } catch (error) {
@@ -142,48 +65,33 @@ async function initializeStats() {
 }
 
 /**
- * Validates tab before script injection
- * @param {Object} tab - Chrome tab object
- * @returns {boolean} Whether tab is valid for injection
- */
-function isTabValid(tab) {
-  if (!tab || !tab.id || tab.id === chrome.tabs.TAB_ID_NONE) {
-    return false;
-  }
-
-  // Check for restricted URLs
-  const restrictedProtocols = [
-    "chrome:",
-    "chrome-extension:",
-    "edge:",
-    "moz-extension:",
-  ];
-  const url = tab.url || "";
-
-  return !restrictedProtocols.some(protocol => url.startsWith(protocol));
-}
-
-/**
- * Injects banner script with timeout and error handling
- * @param {number} tabId - Tab ID to inject into
+ * Creates a note using coordinates from content script
+ * @param {number} tabId - Tab ID to send message to
+ * @param {number} noteNumber - The note number for this URL
  * @returns {Promise<boolean>} Promise resolving to success status
  */
-async function injectBannerScript(tabId) {
+async function createNoteWithCoordinates(tabId, noteNumber) {
   try {
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(
-        () => reject(new Error("Script injection timeout")),
-        SCRIPT_INJECTION_TIMEOUT,
-      );
-    });
+    // Check for ongoing operation in this tab
+    if (ongoingInjections.has(tabId)) {
+      logError("Note creation already in progress", `Tab ID: ${tabId}`);
+      return false;
+    }
 
-    const injectionPromise = new Promise((resolve, reject) => {
-      chrome.scripting.executeScript(
-        {
-          target: { tabId: tabId },
-          function: showWebNotesBanner,
-        },
+    // Mark operation as ongoing
+    ongoingInjections.add(tabId);
+
+    // Get click coordinates from content script
+    const response = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Message timeout"));
+      }, EXTENSION_CONSTANTS.SCRIPT_INJECTION_TIMEOUT);
+
+      chrome.tabs.sendMessage(
+        tabId,
+        { action: "getLastClickCoords" },
         result => {
+          clearTimeout(timeout);
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
           } else {
@@ -193,11 +101,42 @@ async function injectBannerScript(tabId) {
       );
     });
 
-    await Promise.race([injectionPromise, timeoutPromise]);
-    return true;
+    if (!response || !response.success) {
+      logError("Failed to get click coordinates", "No valid response");
+      return false;
+    }
+
+    // Send message to create note with coordinates
+    const createResponse = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Note creation timeout"));
+      }, EXTENSION_CONSTANTS.SCRIPT_INJECTION_TIMEOUT);
+
+      chrome.tabs.sendMessage(
+        tabId,
+        {
+          action: "createNote",
+          noteNumber: noteNumber,
+          coords: response.coords,
+        },
+        result => {
+          clearTimeout(timeout);
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(result);
+          }
+        },
+      );
+    });
+
+    return createResponse && createResponse.success;
   } catch (error) {
-    logError(`Failed to inject script into tab ${tabId}`, error);
+    logError(`Failed to create note in tab ${tabId}`, error);
     return false;
+  } finally {
+    // Always clean up the operation tracker
+    ongoingInjections.delete(tabId);
   }
 }
 
@@ -229,8 +168,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       return;
     }
 
-    // Inject banner script
-    const success = await injectBannerScript(tab.id);
+    // Get next note number
+    const notes = await getNotes();
+    const urlNotes = notes[tab.url] || [];
+    const noteNumber = urlNotes.length + 1;
+
+    // Get click coordinates from content script and create note
+    const success = await createNoteWithCoordinates(tab.id, noteNumber);
 
     if (success) {
       // Update stats only on successful injection
@@ -238,7 +182,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       await setStats({
         ...stats,
         contextMenuClicks: stats.contextMenuClicks + 1,
-        bannerShows: stats.bannerShows + 1,
+        notesCreated: stats.notesCreated + 1,
         lastSeen: Date.now(),
       });
     }
@@ -252,150 +196,3 @@ chrome.runtime.onStartup.addListener(() => {
   console.log("[Web Notes Extension] Extension startup");
 });
 
-/**
- * Function to be injected into web pages
- * This function is executed in the page context, not the extension context
- */
-function showWebNotesBanner() {
-  try {
-    // Constants for banner creation
-    const BANNER_ID = "web-notes-hello-banner";
-    const BANNER_STYLE_ID = "web-notes-banner-styles";
-    const PULSE_DURATION = 500;
-    const AUTO_FADE_DELAY = 5000;
-    const CLOSE_ANIMATION_DURATION = 300;
-
-    // Check if banner already exists
-    const existingBanner = document.getElementById(BANNER_ID);
-    if (existingBanner) {
-      // Add pulse effect to existing banner
-      existingBanner.style.animation = "pulse 0.5s ease-in-out";
-      setTimeout(() => {
-        if (existingBanner.parentNode) {
-          existingBanner.style.animation = "";
-        }
-      }, PULSE_DURATION);
-      return;
-    }
-
-    // Create banner element safely
-    const banner = document.createElement("div");
-    banner.id = BANNER_ID;
-
-    // Set styles via cssText to avoid CSP issues
-    banner.style.cssText = `
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 12px 20px;
-      border-radius: 8px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 600;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-      z-index: 10000;
-      cursor: pointer;
-      animation: slideIn 0.3s ease-out;
-      transition: all 0.3s ease;
-    `;
-
-    // Create banner content safely using DOM methods
-    const container = document.createElement("div");
-    container.style.cssText = "display: flex; align-items: center; gap: 8px;";
-
-    const icon = document.createElement("span");
-    icon.textContent = "🗒️";
-
-    const message = document.createElement("span");
-    message.className = "banner-message";
-    message.textContent = "Web Notes - Context Menu!";
-
-    const closeButton = document.createElement("span");
-    closeButton.className = "banner-close";
-    closeButton.textContent = "×";
-    closeButton.style.cssText =
-      "margin-left: 8px; opacity: 0.7; font-size: 18px; cursor: pointer; padding: 4px;";
-
-    container.appendChild(icon);
-    container.appendChild(message);
-    container.appendChild(closeButton);
-    banner.appendChild(container);
-
-    // Add styles if not already present
-    if (!document.getElementById(BANNER_STYLE_ID)) {
-      const style = document.createElement("style");
-      style.id = BANNER_STYLE_ID;
-      style.textContent = `
-        @keyframes slideIn {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-          from { transform: translateX(0); opacity: 1; }
-          to { transform: translateX(100%); opacity: 0; }
-        }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.05); }
-        }
-        #${BANNER_ID}:hover {
-          transform: scale(1.05);
-          box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
-        }
-        .banner-close:hover {
-          opacity: 1 !important;
-          background: rgba(255, 255, 255, 0.2);
-          border-radius: 50%;
-        }
-      `;
-
-      // Safely append to head
-      if (document.head) {
-        document.head.appendChild(style);
-      }
-    }
-
-    // Safely append to body
-    if (document.body) {
-      document.body.appendChild(banner);
-    } else {
-      console.error("[Web Notes] Cannot add banner: document.body not available");
-      return;
-    }
-
-    // Add event listeners with error handling
-    try {
-      // Message click handler
-      message.addEventListener("click", function (e) {
-        e.stopPropagation();
-        alert(
-          "Hello from Web Notes Chrome Extension!\\n\\nTriggered from right-click context menu.",
-        );
-      });
-
-      // Close button handler
-      closeButton.addEventListener("click", function (e) {
-        e.stopPropagation();
-        banner.style.animation = `slideOut ${CLOSE_ANIMATION_DURATION}ms ease-in forwards`;
-        setTimeout(() => {
-          if (banner.parentNode) {
-            banner.remove();
-          }
-        }, CLOSE_ANIMATION_DURATION);
-      });
-    } catch (error) {
-      console.error("[Web Notes] Error adding event listeners:", error);
-    }
-
-    // Auto-fade after delay
-    setTimeout(() => {
-      if (banner.parentNode) {
-        banner.style.opacity = "0.8";
-      }
-    }, AUTO_FADE_DELAY);
-  } catch (error) {
-    console.error("[Web Notes] Error creating banner:", error);
-  }
-}
