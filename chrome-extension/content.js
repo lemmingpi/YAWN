@@ -94,45 +94,18 @@ function calculateNotePosition(noteData, targetElement) {
 }
 
 /**
- * Adjust note position to prevent it from going off-screen
+ * Pass-through function for note position (no boundary restrictions)
  * @param {number} x - Proposed X position
  * @param {number} y - Proposed Y position
- * @param {Element} noteElement - The note DOM element (for getting dimensions)
- * @returns {Object} Adjusted position object with x, y coordinates
+ * @param {Element} noteElement - The note DOM element (unused)
+ * @returns {Object} Position object with x, y coordinates (unchanged)
  */
 function adjustForBoundaries(x, y, noteElement) {
-  // Get viewport dimensions
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  // Get note dimensions
-  const noteRect = noteElement.getBoundingClientRect();
-  const noteWidth = noteRect.width || 200; // fallback to max-width
-  const noteHeight = noteRect.height || 50; // reasonable fallback
-
-  // Get scroll position
-  const scrollX = window.scrollX;
-  const scrollY = window.scrollY;
-
-  // Calculate boundaries relative to scroll position
-  const minX = scrollX + 10; // 10px margin from left edge
-  const maxX = scrollX + viewportWidth - noteWidth - 10; // 10px margin from right edge
-  const minY = scrollY + 10; // 10px margin from top edge
-  const maxY = scrollY + viewportHeight - noteHeight - 10; // 10px margin from bottom edge
-
-  // Clamp position to boundaries
-  const adjustedX = Math.max(minX, Math.min(maxX, x));
-  const adjustedY = Math.max(minY, Math.min(maxY, y));
-
-  // Log if position was adjusted
-  if (adjustedX !== x || adjustedY !== y) {
-    console.log(`[Web Notes] Position adjusted from (${x}, ${y}) to (${adjustedX}, ${adjustedY}) to stay on screen`);
-  }
-
+  // No boundary restrictions - allow notes to be placed anywhere
   return {
-    x: adjustedX,
-    y: adjustedY,
-    wasAdjusted: adjustedX !== x || adjustedY !== y,
+    x: x,
+    y: y,
+    wasAdjusted: false,
   };
 }
 
@@ -231,12 +204,9 @@ function makeDraggable(noteElement, noteData, targetElement) {
       targetElement
     );
 
-    // Adjust for boundaries
-    const finalPosition = adjustForBoundaries(proposedPosition.x, proposedPosition.y, noteElement);
-
-    // Update visual position immediately
-    noteElement.style.left = `${finalPosition.x}px`;
-    noteElement.style.top = `${finalPosition.y}px`;
+    // Update visual position immediately (no boundary restrictions)
+    noteElement.style.left = `${proposedPosition.x}px`;
+    noteElement.style.top = `${proposedPosition.y}px`;
 
     // Update the working offset values for this session
     noteData.offsetX = newOffsetX;
@@ -363,7 +333,7 @@ function displayNote(noteData) {
     console.log(
       `[Web Notes] Displaying draggable note ${proposedPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
       `${noteData.elementSelector || noteData.elementXPath || "absolute coordinates"} ` +
-      `with offset (${offsetX}, ${offsetY})${finalPosition.wasAdjusted ? " [position adjusted for boundaries]" : ""}`
+      `with offset (${offsetX}, ${offsetY}) at position (${finalPosition.x}, ${finalPosition.y})`
     );
   } catch (error) {
     console.error("[Web Notes] Error displaying note:", error);
