@@ -127,24 +127,27 @@ function displayNote(noteData) {
     // Set note text
     note.textContent = noteData.text;
 
-    // Position the note
+    // Position the note with offset support and backward compatibility
+    const offsetX = noteData.offsetX || 0;
+    const offsetY = noteData.offsetY || 0;
+
     if (targetElement) {
-      // Position relative to found DOM element
+      // Position relative to found DOM element with offset
       const rect = targetElement.getBoundingClientRect();
-      note.style.left = `${rect.left + window.scrollX}px`;
-      note.style.top = `${rect.top + window.scrollY - 30}px`;
+      note.style.left = `${rect.left + window.scrollX + offsetX}px`;
+      note.style.top = `${rect.top + window.scrollY - 30 + offsetY}px`;
       console.log(
         `[Web Notes] Displaying note anchored to DOM element: ${
           noteData.elementSelector || noteData.elementXPath
-        }`,
+        } with offset (${offsetX}, ${offsetY})`,
       );
     } else {
-      // Use fallback position with pink background
-      note.style.left = `${noteData.fallbackPosition.x}px`;
-      note.style.top = `${noteData.fallbackPosition.y}px`;
+      // Use fallback position with offset
+      note.style.left = `${noteData.fallbackPosition.x + offsetX}px`;
+      note.style.top = `${noteData.fallbackPosition.y + offsetY}px`;
       note.style.background = "pink";
       console.log(
-        "[Web Notes] Displaying note at fallback position (DOM element not found)",
+        `[Web Notes] Displaying note at fallback position with offset (${offsetX}, ${offsetY})`,
       );
     }
 
@@ -281,6 +284,8 @@ function createNoteAtCoords(noteNumber, coords) {
         x: posLeft,
         y: posTop,
       },
+      offsetX: 0,
+      offsetY: 0,
       timestamp: Date.now(),
       isVisible: true,
     };
