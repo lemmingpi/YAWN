@@ -66,6 +66,77 @@ function loadExistingNotes() {
 const elementCache = new Map();
 
 /**
+ * Calculate note position based on target element or fallback coordinates with offset
+ * @param {Object} noteData - The note data object
+ * @param {Element|null} targetElement - The target DOM element (if found)
+ * @returns {Object} Position object with x, y coordinates
+ */
+function calculateNotePosition(noteData, targetElement) {
+  const offsetX = noteData.offsetX || 0;
+  const offsetY = noteData.offsetY || 0;
+
+  if (targetElement) {
+    // Position relative to found DOM element with offset
+    const rect = targetElement.getBoundingClientRect();
+    return {
+      x: rect.left + window.scrollX + offsetX,
+      y: rect.top + window.scrollY - 30 + offsetY,
+      isAnchored: true,
+    };
+  } else {
+    // Use fallback position with offset
+    return {
+      x: noteData.fallbackPosition.x + offsetX,
+      y: noteData.fallbackPosition.y + offsetY,
+      isAnchored: false,
+    };
+  }
+}
+
+/**
+ * Adjust note position to prevent it from going off-screen
+ * @param {number} x - Proposed X position
+ * @param {number} y - Proposed Y position
+ * @param {Element} noteElement - The note DOM element (for getting dimensions)
+ * @returns {Object} Adjusted position object with x, y coordinates
+ */
+function adjustForBoundaries(x, y, noteElement) {
+  // Get viewport dimensions
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  // Get note dimensions
+  const noteRect = noteElement.getBoundingClientRect();
+  const noteWidth = noteRect.width || 200; // fallback to max-width
+  const noteHeight = noteRect.height || 50; // reasonable fallback
+
+  // Get scroll position
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+
+  // Calculate boundaries relative to scroll position
+  const minX = scrollX + 10; // 10px margin from left edge
+  const maxX = scrollX + viewportWidth - noteWidth - 10; // 10px margin from right edge
+  const minY = scrollY + 10; // 10px margin from top edge
+  const maxY = scrollY + viewportHeight - noteHeight - 10; // 10px margin from bottom edge
+
+  // Clamp position to boundaries
+  const adjustedX = Math.max(minX, Math.min(maxX, x));
+  const adjustedY = Math.max(minY, Math.min(maxY, y));
+
+  // Log if position was adjusted
+  if (adjustedX !== x || adjustedY !== y) {
+    console.log(`[Web Notes] Position adjusted from (${x}, ${y}) to (${adjustedX}, ${adjustedY}) to stay on screen`);
+  }
+
+  return {
+    x: adjustedX,
+    y: adjustedY,
+    wasAdjusted: adjustedX !== x || adjustedY !== y,
+  };
+}
+
+/**
  * Display a note on the page with optimized DOM queries
  * @param {Object} noteData - The note data object
  */
@@ -127,32 +198,34 @@ function displayNote(noteData) {
     // Set note text
     note.textContent = noteData.text;
 
-    // Position the note with offset support and backward compatibility
-    const offsetX = noteData.offsetX || 0;
-    const offsetY = noteData.offsetY || 0;
+    // Add to page temporarily to get accurate dimensions for boundary adjustment
+    note.style.visibility = "hidden"; // Hide during positioning
+    document.body.appendChild(note);
 
-    if (targetElement) {
-      // Position relative to found DOM element with offset
-      const rect = targetElement.getBoundingClientRect();
-      note.style.left = `${rect.left + window.scrollX + offsetX}px`;
-      note.style.top = `${rect.top + window.scrollY - 30 + offsetY}px`;
-      console.log(
-        `[Web Notes] Displaying note anchored to DOM element: ${
-          noteData.elementSelector || noteData.elementXPath
-        } with offset (${offsetX}, ${offsetY})`,
-      );
-    } else {
-      // Use fallback position with offset
-      note.style.left = `${noteData.fallbackPosition.x + offsetX}px`;
-      note.style.top = `${noteData.fallbackPosition.y + offsetY}px`;
+    // Calculate position with offset support
+    const proposedPosition = calculateNotePosition(noteData, targetElement);
+
+    // Adjust position to stay within screen boundaries
+    const finalPosition = adjustForBoundaries(proposedPosition.x, proposedPosition.y, note);
+
+    // Apply final position
+    note.style.left = `${finalPosition.x}px`;
+    note.style.top = `${finalPosition.y}px`;
+    note.style.visibility = "visible"; // Show the note
+
+    // Set background color based on anchoring status
+    if (!proposedPosition.isAnchored) {
       note.style.background = "pink";
-      console.log(
-        `[Web Notes] Displaying note at fallback position with offset (${offsetX}, ${offsetY})`,
-      );
     }
 
-    // Add to page
-    document.body.appendChild(note);
+    // Enhanced logging
+    const offsetX = noteData.offsetX || 0;
+    const offsetY = noteData.offsetY || 0;
+    console.log(
+      `[Web Notes] Displaying note ${proposedPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
+      `${noteData.elementSelector || noteData.elementXPath || "absolute coordinates"} ` +
+      `with offset (${offsetX}, ${offsetY})${finalPosition.wasAdjusted ? " [position adjusted for boundaries]" : ""}`
+    );
   } catch (error) {
     console.error("[Web Notes] Error displaying note:", error);
   }
