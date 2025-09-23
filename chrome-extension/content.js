@@ -137,6 +137,142 @@ function adjustForBoundaries(x, y, noteElement) {
 }
 
 /**
+ * Update note offset in storage
+ * @param {string} noteId - The note ID
+ * @param {number} newOffsetX - New X offset
+ * @param {number} newOffsetY - New Y offset
+ */
+function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
+  try {
+    chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+      if (chrome.runtime.lastError) {
+        console.error("[Web Notes] Failed to get notes for offset update:", chrome.runtime.lastError);
+        return;
+      }
+
+      const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+      const urlNotes = notes[window.location.href] || [];
+
+      // Find and update the specific note
+      const noteIndex = urlNotes.findIndex(note => note.id === noteId);
+      if (noteIndex !== -1) {
+        urlNotes[noteIndex].offsetX = newOffsetX;
+        urlNotes[noteIndex].offsetY = newOffsetY;
+
+        // Save back to storage
+        notes[window.location.href] = urlNotes;
+        chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, function () {
+          if (chrome.runtime.lastError) {
+            console.error("[Web Notes] Failed to save note offset:", chrome.runtime.lastError);
+          } else {
+            console.log(`[Web Notes] Updated note ${noteId} offset to (${newOffsetX}, ${newOffsetY})`);
+          }
+        });
+      } else {
+        console.warn(`[Web Notes] Note ${noteId} not found for offset update`);
+      }
+    });
+  } catch (error) {
+    console.error("[Web Notes] Error updating note offset:", error);
+  }
+}
+
+/**
+ * Make a note element draggable
+ * @param {Element} noteElement - The note DOM element
+ * @param {Object} noteData - The note data object
+ * @param {Element|null} targetElement - The target element the note is anchored to
+ */
+function makeDraggable(noteElement, noteData, targetElement) {
+  let isDragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let startOffsetX = noteData.offsetX || 0;
+  let startOffsetY = noteData.offsetY || 0;
+
+  function handleDragStart(e) {
+    // Prevent default drag behavior and text selection
+    e.preventDefault();
+    e.stopPropagation();
+
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    startOffsetX = noteData.offsetX || 0;
+    startOffsetY = noteData.offsetY || 0;
+
+    // Change cursor and add visual feedback
+    noteElement.style.cursor = "grabbing";
+    noteElement.style.boxShadow = "0 4px 16px rgba(0, 0, 0, 0.3)";
+    noteElement.style.zIndex = "10001"; // Bring to front during drag
+
+    // Add event listeners to document for smooth dragging
+    document.addEventListener("mousemove", handleDragMove, { passive: false });
+    document.addEventListener("mouseup", handleDragEnd, { once: true });
+
+    console.log(`[Web Notes] Started dragging note ${noteData.id}`);
+  }
+
+  function handleDragMove(e) {
+    if (!isDragging) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Calculate new offset based on drag delta
+    const deltaX = e.clientX - dragStartX;
+    const deltaY = e.clientY - dragStartY;
+    const newOffsetX = startOffsetX + deltaX;
+    const newOffsetY = startOffsetY + deltaY;
+
+    // Calculate new position
+    const proposedPosition = calculateNotePosition(
+      { ...noteData, offsetX: newOffsetX, offsetY: newOffsetY },
+      targetElement
+    );
+
+    // Adjust for boundaries
+    const finalPosition = adjustForBoundaries(proposedPosition.x, proposedPosition.y, noteElement);
+
+    // Update visual position immediately
+    noteElement.style.left = `${finalPosition.x}px`;
+    noteElement.style.top = `${finalPosition.y}px`;
+
+    // Update the working offset values for this session
+    noteData.offsetX = newOffsetX;
+    noteData.offsetY = newOffsetY;
+  }
+
+  function handleDragEnd(e) {
+    if (!isDragging) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    isDragging = false;
+
+    // Restore normal cursor and styling
+    noteElement.style.cursor = "move";
+    noteElement.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.15)";
+    noteElement.style.zIndex = "10000";
+
+    // Remove drag event listeners
+    document.removeEventListener("mousemove", handleDragMove);
+
+    // Save the final offset to storage
+    updateNoteOffset(noteData.id, noteData.offsetX || 0, noteData.offsetY || 0);
+
+    console.log(`[Web Notes] Finished dragging note ${noteData.id} to offset (${noteData.offsetX || 0}, ${noteData.offsetY || 0})`);
+  }
+
+  // Add mousedown event listener to start dragging
+  noteElement.addEventListener("mousedown", handleDragStart);
+
+  // Prevent text selection during potential drag
+  noteElement.addEventListener("selectstart", e => e.preventDefault());
+}
+
+/**
  * Display a note on the page with optimized DOM queries
  * @param {Object} noteData - The note data object
  */
@@ -218,11 +354,14 @@ function displayNote(noteData) {
       note.style.background = "pink";
     }
 
+    // Make the note draggable
+    makeDraggable(note, noteData, targetElement);
+
     // Enhanced logging
     const offsetX = noteData.offsetX || 0;
     const offsetY = noteData.offsetY || 0;
     console.log(
-      `[Web Notes] Displaying note ${proposedPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
+      `[Web Notes] Displaying draggable note ${proposedPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
       `${noteData.elementSelector || noteData.elementXPath || "absolute coordinates"} ` +
       `with offset (${offsetX}, ${offsetY})${finalPosition.wasAdjusted ? " [position adjusted for boundaries]" : ""}`
     );
