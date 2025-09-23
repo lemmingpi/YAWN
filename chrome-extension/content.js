@@ -256,31 +256,6 @@ function createNoteAtCoords(noteNumber, coords) {
       fallbackPosition = { x: 100, y: 100 };
     }
 
-    // // Create note element
-    // const note = document.createElement("div");
-    // note.id = noteId;
-    // note.className = "web-note";
-    // note.style.cssText = `
-    //   position: absolute;
-    //   background: ${targetElement ? "lightblue" : "pink"};
-    //   color: black;
-    //   padding: 8px 12px;
-    //   border-radius: 4px;
-    //   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    //   font-size: 12px;
-    //   font-weight: 500;
-    //   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    //   z-index: 10000;
-    //   cursor: move;
-    //   border: 1px solid rgba(0, 0, 0, 0.1);
-    //   min-width: 80px;
-    //   max-width: 200px;
-    //   word-wrap: break-word;
-    // `;
-
-    // // Set note text
-    // note.textContent = noteText;
-
     // Position the note
     let posLeft = 100;
     let posTop = 100;
@@ -294,11 +269,6 @@ function createNoteAtCoords(noteNumber, coords) {
       posLeft = fallbackPosition.x;
       posTop = fallbackPosition.y - 30;
     }
-
-
-
-    // // Add to page
-    // document.body.appendChild(note);
 
     // Store note data
     const noteData = {
