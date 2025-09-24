@@ -53,6 +53,7 @@ class MarkdownRenderer {
         }
 
         const titleAttr = title ? ` title="${this.escapeHtml(title)}"` : "";
+        // eslint-disable-next-line max-len
         return `<a href="${this.escapeHtml(href)}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
       };
 
@@ -216,8 +217,9 @@ const NoteDataUtils = {
     }
 
     // Legacy note without content field - migrate from text or create default
-    const content = noteData.text || `Note #${noteData.id.split('-').pop()}`;
+    const content = noteData.text || `Note #${noteData.id.split("-").pop()}`;
 
+    // eslint-disable-next-line max-len
     console.log(`[Web Notes] Migrating note ${noteData.id}: "${noteData.text}" -> "${content}"`);
 
     // Create migrated note data
@@ -227,11 +229,16 @@ const NoteDataUtils = {
     delete migratedNote.text;
 
     // Save to storage if requested
+    // eslint-disable-next-line no-undef
     if (saveIfMigrated && typeof updateNote === "function") {
       try {
+        // eslint-disable-next-line max-len
+        // eslint-disable-next-line no-undef
         await updateNote(noteData.url || window.location.href, noteData.id, migratedNote);
+        // eslint-disable-next-line max-len
         console.log(`[Web Notes] Migrated and saved note ${noteData.id}`);
       } catch (error) {
+        // eslint-disable-next-line max-len
         console.error(`[Web Notes] Failed to save migrated note ${noteData.id}:`, error);
       }
     }

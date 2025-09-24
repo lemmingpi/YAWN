@@ -291,6 +291,7 @@ function ensureAllNotesVisibleBatched(allNotes, urlNotes) {
     }
   });
 
+  // eslint-disable-next-line max-len
   console.log(`[Web Notes] Completed visibility check - processed ${notes.length} notes, repositioned ${notesRepositioned}`);
 }
 
@@ -502,6 +503,7 @@ function makeDraggable(noteElement, noteData, targetElement) {
       ensureNoteVisibility(noteElement, noteData);
     }, TIMING.DOM_UPDATE_DELAY);
 
+    // eslint-disable-next-line max-len
     console.log(`[Web Notes] Finished dragging note ${noteData.id} to offset (${noteData.offsetX || 0}, ${noteData.offsetY || 0})`);
   }
 
