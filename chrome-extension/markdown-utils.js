@@ -4,7 +4,7 @@
  */
 
 /* eslint-env webextensions */
-/* global marked, DOMPurify */
+/* global marked, DOMPurify, updateNote */
 
 /**
  * Markdown utility class with security and performance optimizations
@@ -229,11 +229,9 @@ const NoteDataUtils = {
     delete migratedNote.text;
 
     // Save to storage if requested
-    // eslint-disable-next-line no-undef
     if (saveIfMigrated && typeof updateNote === "function") {
       try {
         // eslint-disable-next-line max-len
-        // eslint-disable-next-line no-undef
         await updateNote(noteData.url || window.location.href, noteData.id, migratedNote);
         // eslint-disable-next-line max-len
         console.log(`[Web Notes] Migrated and saved note ${noteData.id}`);
