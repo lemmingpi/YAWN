@@ -14,9 +14,10 @@ NC := \033[0m # No Color
 
 # Detect platform for path handling
 UNAME_S := $(shell uname -s 2>/dev/null || echo "Windows")
+MAKEFILE_DIR := $(shell dirname $(shell readlink -f $(firstword $(MAKEFILE_LIST))))
 ifeq ($(OS),Windows_NT)
     DETECTED_OS := Windows
-    VENV_BIN := .venv/Scripts
+    VENV_BIN := ${MAKEFILE_DIR}/.venv/Scripts
     PYTHON := $(VENV_BIN)/python.exe
     PIP := $(VENV_BIN)/pip.exe
 else

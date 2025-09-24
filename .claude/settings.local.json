@@ -23,7 +23,9 @@
       "Bash(make:*)",
       "WebSearch",
       "Bash(npm install:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npx eslint chrome-extension/markdown-utils.js)",
+      "Bash(npx eslint:*)"
     ],
     "deny": [],
     "ask": [],
