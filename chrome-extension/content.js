@@ -3,6 +3,14 @@
 
 /* global EXTENSION_CONSTANTS */
 
+// Timing constants for better maintainability
+const TIMING = {
+  DOM_UPDATE_DELAY: 100,        // Time to allow DOM updates to complete
+  FADE_ANIMATION_DELAY: 250,    // Time for fade-in animation to complete
+  RESIZE_DEBOUNCE: 300,         // Debounce delay for resize events
+  SCROLL_DEBOUNCE: 200          // Debounce delay for scroll events (if needed)
+};
+
 console.log("Web Notes - Content script loaded!");
 
 // Store the last right-click coordinates for note positioning
@@ -167,18 +175,22 @@ function repositionAllNotes() {
   const notes = document.querySelectorAll('.web-note');
   console.log(`[Web Notes] Repositioning ${notes.length} notes after window resize`);
 
-  notes.forEach(noteElement => {
-    const noteId = noteElement.id;
+  if (notes.length === 0) {
+    return;
+  }
 
-    // Get note data from storage to recalculate position
-    chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
-      if (chrome.runtime.lastError) {
-        console.error("[Web Notes] Failed to get notes for repositioning:", chrome.runtime.lastError);
-        return;
-      }
+  // Batch storage operation - fetch all notes once
+  chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+    if (chrome.runtime.lastError) {
+      console.error("[Web Notes] Failed to get notes for repositioning:", chrome.runtime.lastError);
+      return;
+    }
 
-      const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
-      const urlNotes = notes[window.location.href] || [];
+    const allNotes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+    const urlNotes = allNotes[window.location.href] || [];
+
+    notes.forEach(noteElement => {
+      const noteId = noteElement.id;
 
       // Find the note data
       const noteData = urlNotes.find(note => note.id === noteId);
@@ -203,12 +215,12 @@ function repositionAllNotes() {
 
       console.log(`[Web Notes] Repositioned note ${noteId} to (${newPosition.x}, ${newPosition.y})`);
     });
-  });
 
-  // Ensure all notes have minimum visibility after repositioning
-  setTimeout(() => {
-    ensureAllNotesVisible();
-  }, 100); // Small delay to allow DOM updates
+    // Ensure all notes have minimum visibility after repositioning
+    setTimeout(() => {
+      ensureAllNotesVisibleBatched(allNotes, urlNotes);
+    }, TIMING.DOM_UPDATE_DELAY);
+  });
 }
 
 /**
@@ -228,35 +240,50 @@ function ensureAllNotesVisible() {
   const notes = document.querySelectorAll('.web-note');
   console.log(`[Web Notes] Checking ${notes.length} notes for visibility`);
 
+  if (notes.length === 0) {
+    return;
+  }
+
+  // Batch storage operation - fetch all notes once
+  chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+    if (chrome.runtime.lastError) {
+      console.error("[Web Notes] Storage error getting note data:", chrome.runtime.lastError);
+      return;
+    }
+
+    const allNotes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+    const urlNotes = allNotes[window.location.href] || [];
+
+    ensureAllNotesVisibleBatched(allNotes, urlNotes);
+  });
+}
+
+/**
+ * Batched version of ensureAllNotesVisible that uses pre-fetched data
+ * @param {Object} allNotes - All notes from storage
+ * @param {Array} urlNotes - Notes for current URL
+ */
+function ensureAllNotesVisibleBatched(allNotes, urlNotes) {
+  const notes = document.querySelectorAll('.web-note');
   let notesRepositioned = 0;
 
   notes.forEach((noteElement, index) => {
     console.log(`[Web Notes] Checking note ${index + 1}/${notes.length}: ${noteElement.id}`);
 
-    // Get note data from storage
-    chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
-      if (chrome.runtime.lastError) {
-        console.error("[Web Notes] Storage error getting note data:", chrome.runtime.lastError);
-        return;
-      }
+    const noteData = urlNotes.find(note => note.id === noteElement.id);
 
-      const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
-      const urlNotes = notes[window.location.href] || [];
-      const noteData = urlNotes.find(note => note.id === noteElement.id);
-
-      if (noteData) {
-        const wasRepositioned = ensureNoteVisibility(noteElement, noteData);
-        if (wasRepositioned) {
-          notesRepositioned++;
-          console.log(`[Web Notes] Repositioned note ${noteElement.id} for visibility`);
-        }
-      } else {
-        console.warn(`[Web Notes] Note data not found for ${noteElement.id}`);
+    if (noteData) {
+      const wasRepositioned = ensureNoteVisibility(noteElement, noteData);
+      if (wasRepositioned) {
+        notesRepositioned++;
+        console.log(`[Web Notes] Repositioned note ${noteElement.id} for visibility`);
       }
-    });
+    } else {
+      console.warn(`[Web Notes] Note data not found for ${noteElement.id}`);
+    }
   });
 
-  console.log(`[Web Notes] Completed visibility check - processed ${notes.length} notes`);
+  console.log(`[Web Notes] Completed visibility check - processed ${notes.length} notes, repositioned ${notesRepositioned}`);
 }
 
 /**
@@ -464,18 +491,8 @@ function makeDraggable(noteElement, noteData, targetElement) {
 
     // Ensure note maintains minimum visibility after drag
     setTimeout(() => {
-      chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
-        if (chrome.runtime.lastError) return;
-
-        const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
-        const urlNotes = notes[window.location.href] || [];
-        const noteData = urlNotes.find(note => note.id === noteElement.id);
-
-        if (noteData) {
-          ensureNoteVisibility(noteElement, noteData);
-        }
-      });
-    }, 100);
+      ensureNoteVisibility(noteElement, noteData);
+    }, TIMING.DOM_UPDATE_DELAY);
 
     console.log(`[Web Notes] Finished dragging note ${noteData.id} to offset (${noteData.offsetX || 0}, ${noteData.offsetY || 0})`);
   }
@@ -587,7 +604,7 @@ function displayNote(noteData) {
       // Ensure note has minimum visibility after animation
       setTimeout(() => {
         ensureNoteVisibility(note, noteData);
-      }, 250); // After fade-in animation
+      }, TIMING.FADE_ANIMATION_DELAY);
     });
 
     // Enhanced logging
@@ -646,7 +663,7 @@ function startUrlMonitoring() {
 startUrlMonitoring();
 
 // Add window resize handling with debouncing
-window.addEventListener('resize', debounce(handleWindowResize, 300));
+window.addEventListener('resize', debounce(handleWindowResize, TIMING.RESIZE_DEBOUNCE));
 
 // Note: Scroll handling removed to prevent repositioning during normal scrolling
 // Notes should only be repositioned when truly inaccessible (outside page bounds)
