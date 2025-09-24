@@ -66,6 +66,7 @@ htmlcov/
 requirements/requirements.lock
 
 # Node.js / JavaScript
+chrome-extension/libs/
 node_modules/
 npm-debug.log*
 yarn-debug.log*
