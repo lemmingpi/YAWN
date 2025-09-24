@@ -3,6 +3,15 @@
 
 /* global EXTENSION_CONSTANTS */
 
+// Timing constants for better maintainability
+const TIMING = {
+  DOM_UPDATE_DELAY: 100,        // Time to allow DOM updates to complete
+  FADE_ANIMATION_DELAY: 250,    // Time for fade-in animation to complete
+  RESIZE_DEBOUNCE: 300,         // Debounce delay for resize events
+  SCROLL_DEBOUNCE: 200,         // Debounce delay for scroll events (if needed)
+  URL_MONITOR_INTERVAL: 2000    // Interval for URL change monitoring (2 seconds)
+};
+
 console.log("Web Notes - Content script loaded!");
 
 // Store the last right-click coordinates for note positioning
@@ -64,6 +73,219 @@ function loadExistingNotes() {
 
 // Cache for DOM queries to improve performance
 const elementCache = new Map();
+
+
+/**
+ * Debounce utility to limit function execution frequency
+ * @param {Function} func - Function to debounce
+ * @param {number} delay - Delay in milliseconds
+ * @returns {Function} Debounced function
+ */
+function debounce(func, delay) {
+  let timeoutId;
+  return function (...args) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func.apply(this, args), delay);
+  };
+}
+
+/**
+ * Ensure a note is accessible by repositioning if it's outside page boundaries
+ * Only repositions notes that are truly inaccessible (beyond scrollable area)
+ * @param {Element} noteElement - The note DOM element
+ * @param {Object} noteData - The note data object
+ * @returns {boolean} True if note was repositioned
+ */
+function ensureNoteVisibility(noteElement, noteData) {
+  const noteRect = noteElement.getBoundingClientRect();
+  const noteX = noteRect.left + window.scrollX;
+  const noteY = noteRect.top + window.scrollY;
+
+  // Get page dimensions (scrollable area)
+  const pageWidth = document.documentElement.scrollWidth;
+  const pageHeight = document.documentElement.scrollHeight;
+  const minVisible = 50; // Minimum pixels that must be visible on page
+
+  let newX = noteX;
+  let newY = noteY;
+  let wasRepositioned = false;
+
+  // Only reposition if note is outside the scrollable page boundaries
+  // (not just outside the current viewport)
+
+  if (noteX + noteRect.width < 0) {
+    // Note is completely off the left edge of the page
+    newX = minVisible;
+    wasRepositioned = true;
+  } else if (noteX > pageWidth) {
+    // Note is completely off the right edge of the page
+    newX = pageWidth - noteRect.width - minVisible;
+    wasRepositioned = true;
+  }
+
+  if (noteY + noteRect.height < 0) {
+    // Note is completely off the top edge of the page
+    newY = minVisible;
+    wasRepositioned = true;
+  } else if (noteY > pageHeight) {
+    // Note is completely off the bottom edge of the page
+    newY = pageHeight - noteRect.height - minVisible;
+    wasRepositioned = true;
+  }
+
+  if (wasRepositioned) {
+    // Update note position
+    noteElement.style.left = `${newX}px`;
+    noteElement.style.top = `${newY}px`;
+
+    // Update stored offset based on note type
+    if (noteData.elementSelector || noteData.elementXPath) {
+      // For anchored notes, calculate new offset from target element
+      const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`);
+      const targetElement = selectorResults.element;
+
+      if (targetElement) {
+        const rect = targetElement.getBoundingClientRect();
+        const elementX = rect.left + window.scrollX;
+        const elementY = rect.top + window.scrollY - 30;
+
+        const newOffsetX = newX - elementX;
+        const newOffsetY = newY - elementY;
+
+        updateNoteOffset(noteData.id, newOffsetX, newOffsetY);
+        noteData.offsetX = newOffsetX;
+        noteData.offsetY = newOffsetY;
+      }
+    } else {
+      // For fallback notes, update fallback position
+      noteData.fallbackPosition.x = newX;
+      noteData.fallbackPosition.y = newY;
+    }
+
+    console.log(`[Web Notes] Repositioned note ${noteData.id} from outside page bounds to (${newX}, ${newY})`);
+  }
+
+  return wasRepositioned;
+}
+
+
+/**
+ * Reposition all existing notes after window resize
+ */
+function repositionAllNotes() {
+  const notes = document.querySelectorAll('.web-note');
+  console.log(`[Web Notes] Repositioning ${notes.length} notes after window resize`);
+
+  if (notes.length === 0) {
+    return;
+  }
+
+  // Batch storage operation - fetch all notes once
+  chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+    if (chrome.runtime.lastError) {
+      console.error("[Web Notes] Failed to get notes for repositioning:", chrome.runtime.lastError);
+      return;
+    }
+
+    const allNotes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+    const urlNotes = allNotes[window.location.href] || [];
+
+    notes.forEach(noteElement => {
+      const noteId = noteElement.id;
+
+      // Find the note data
+      const noteData = urlNotes.find(note => note.id === noteId);
+      if (!noteData) {
+        console.warn(`[Web Notes] Note data not found for repositioning: ${noteId}`);
+        return;
+      }
+
+      // Find target element if note is anchored
+      let targetElement = null;
+      if (noteData.elementSelector || noteData.elementXPath) {
+        const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`);
+        targetElement = selectorResults.element;
+      }
+
+      // Recalculate position
+      const newPosition = calculateNotePosition(noteData, targetElement);
+
+      // Update note position with smooth transition
+      noteElement.style.left = `${newPosition.x}px`;
+      noteElement.style.top = `${newPosition.y}px`;
+
+      console.log(`[Web Notes] Repositioned note ${noteId} to (${newPosition.x}, ${newPosition.y})`);
+    });
+
+    // Ensure all notes have minimum visibility after repositioning
+    setTimeout(() => {
+      ensureAllNotesVisibleBatched(allNotes, urlNotes);
+    }, TIMING.DOM_UPDATE_DELAY);
+  });
+}
+
+/**
+ * Handle window resize events
+ */
+function handleWindowResize() {
+  console.log("[Web Notes] Window resized, repositioning notes");
+  repositionAllNotes();
+}
+
+/**
+ * Ensure all notes have minimum visibility by repositioning if needed
+ */
+function ensureAllNotesVisible() {
+  console.log("[Web Notes] Ensuring all notes have minimum visibility");
+
+  const notes = document.querySelectorAll('.web-note');
+  console.log(`[Web Notes] Checking ${notes.length} notes for visibility`);
+
+  if (notes.length === 0) {
+    return;
+  }
+
+  // Batch storage operation - fetch all notes once
+  chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+    if (chrome.runtime.lastError) {
+      console.error("[Web Notes] Storage error getting note data:", chrome.runtime.lastError);
+      return;
+    }
+
+    const allNotes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+    const urlNotes = allNotes[window.location.href] || [];
+
+    ensureAllNotesVisibleBatched(allNotes, urlNotes);
+  });
+}
+
+/**
+ * Batched version of ensureAllNotesVisible that uses pre-fetched data
+ * @param {Object} allNotes - All notes from storage
+ * @param {Array} urlNotes - Notes for current URL
+ */
+function ensureAllNotesVisibleBatched(allNotes, urlNotes) {
+  const notes = document.querySelectorAll('.web-note');
+  let notesRepositioned = 0;
+
+  notes.forEach((noteElement, index) => {
+    console.log(`[Web Notes] Checking note ${index + 1}/${notes.length}: ${noteElement.id}`);
+
+    const noteData = urlNotes.find(note => note.id === noteElement.id);
+
+    if (noteData) {
+      const wasRepositioned = ensureNoteVisibility(noteElement, noteData);
+      if (wasRepositioned) {
+        notesRepositioned++;
+        console.log(`[Web Notes] Repositioned note ${noteElement.id} for visibility`);
+      }
+    } else {
+      console.warn(`[Web Notes] Note data not found for ${noteElement.id}`);
+    }
+  });
+
+  console.log(`[Web Notes] Completed visibility check - processed ${notes.length} notes, repositioned ${notesRepositioned}`);
+}
 
 /**
  * Calculate note position based on target element or fallback coordinates with offset
@@ -268,6 +490,11 @@ function makeDraggable(noteElement, noteData, targetElement) {
     // Save the final offset to storage
     updateNoteOffset(noteData.id, noteData.offsetX || 0, noteData.offsetY || 0);
 
+    // Ensure note maintains minimum visibility after drag
+    setTimeout(() => {
+      ensureNoteVisibility(noteElement, noteData);
+    }, TIMING.DOM_UPDATE_DELAY);
+
     console.log(`[Web Notes] Finished dragging note ${noteData.id} to offset (${noteData.offsetX || 0}, ${noteData.offsetY || 0})`);
   }
 
@@ -290,7 +517,7 @@ function displayNote(noteData) {
     }
 
     let targetElement = null;
-    const cacheKey = `${noteData.elementSelector}-${noteData.elementXPath}`;
+    const cacheKey = `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`;
 
     // Check cache first
     if (elementCache.has(cacheKey)) {
@@ -374,6 +601,11 @@ function displayNote(noteData) {
     requestAnimationFrame(() => {
       note.style.opacity = "1";
       note.style.transform = "scale(1)";
+
+      // Ensure note has minimum visibility after animation
+      setTimeout(() => {
+        ensureNoteVisibility(note, noteData);
+      }, TIMING.FADE_ANIMATION_DELAY);
     });
 
     // Enhanced logging
@@ -419,13 +651,19 @@ function startUrlMonitoring() {
       document.querySelectorAll(".web-note").forEach(note => note.remove());
 
       // Load notes for new URL with debouncing
-      setTimeout(loadExistingNotes, 100);
+      setTimeout(loadExistingNotes, TIMING.DOM_UPDATE_DELAY);
     }
-  }, 2000); // Reduced frequency to 2 seconds
+  }, TIMING.URL_MONITOR_INTERVAL);
 }
 
 // Start monitoring
 startUrlMonitoring();
+
+// Add window resize handling with debouncing
+window.addEventListener('resize', debounce(handleWindowResize, TIMING.RESIZE_DEBOUNCE));
+
+// Note: Scroll handling removed to prevent repositioning during normal scrolling
+// Notes should only be repositioned when truly inaccessible (outside page bounds)
 
 // Clean up on page unload to prevent memory leaks
 window.addEventListener("beforeunload", () => {
@@ -433,6 +671,9 @@ window.addEventListener("beforeunload", () => {
     clearInterval(urlCheckInterval);
     urlCheckInterval = null;
   }
+
+  // Clean up any remaining note elements
+  document.querySelectorAll(".web-note").forEach(note => note.remove());
 });
 
 // Also use modern navigation API if available
