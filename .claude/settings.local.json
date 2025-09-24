@@ -20,7 +20,10 @@
       "Bash(npm run fix:all:*)",
       "Bash(npm run format:*)",
       "Bash(npm run lint:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "WebSearch",
+      "Bash(npm install:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": [],

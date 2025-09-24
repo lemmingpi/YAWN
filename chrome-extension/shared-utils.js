@@ -100,6 +100,75 @@ async function getNotes() {
 }
 
 /**
+ * Save notes to storage with error handling
+ * @param {Object} notes - Notes object organized by URL
+ * @returns {Promise<boolean>} Promise resolving to success status
+ */
+async function setNotes(notes) {
+  try {
+    return new Promise(resolve => {
+      chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, () => {
+        if (chrome.runtime.lastError) {
+          logError("Failed to set notes", chrome.runtime.lastError);
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      });
+    });
+  } catch (error) {
+    logError("Error in setNotes", error);
+    return false;
+  }
+}
+
+/**
+ * Update a single note in storage
+ * @param {string} url - The URL where the note exists
+ * @param {string} noteId - The note ID to update
+ * @param {Object} noteData - The updated note data
+ * @returns {Promise<boolean>} Promise resolving to success status
+ */
+async function updateNote(url, noteId, noteData) {
+  try {
+    const notes = await getNotes();
+    const urlNotes = notes[url] || [];
+    const noteIndex = urlNotes.findIndex(note => note.id === noteId);
+
+    if (noteIndex !== -1) {
+      urlNotes[noteIndex] = { ...urlNotes[noteIndex], ...noteData, lastEdited: Date.now() };
+      notes[url] = urlNotes;
+      return await setNotes(notes);
+    } else {
+      logError("Note not found for update", { url, noteId });
+      return false;
+    }
+  } catch (error) {
+    logError("Error updating note", error);
+    return false;
+  }
+}
+
+/**
+ * Add a new note to storage
+ * @param {string} url - The URL where to add the note
+ * @param {Object} noteData - The note data to add
+ * @returns {Promise<boolean>} Promise resolving to success status
+ */
+async function addNote(url, noteData) {
+  try {
+    const notes = await getNotes();
+    const urlNotes = notes[url] || [];
+    urlNotes.push(noteData);
+    notes[url] = urlNotes;
+    return await setNotes(notes);
+  } catch (error) {
+    logError("Error adding note", error);
+    return false;
+  }
+}
+
+/**
  * Validates tab before script injection
  * @param {Object} tab - Chrome tab object
  * @returns {boolean} Whether tab is valid for injection
@@ -154,6 +223,9 @@ if (typeof module !== "undefined" && module.exports) {
     getStats,
     setStats,
     getNotes,
+    setNotes,
+    updateNote,
+    addNote,
     isTabValid,
     safeApiCall,
   };
