@@ -123,7 +123,7 @@ async function setNotes(notes) {
 }
 
 /**
- * Update a single note in storage
+ * Update a single note in storage with enhanced URL matching
  * @param {string} url - The URL where the note exists
  * @param {string} noteId - The note ID to update
  * @param {Object} noteData - The updated note data
@@ -132,20 +132,123 @@ async function setNotes(notes) {
 async function updateNote(url, noteId, noteData) {
   try {
     const notes = await getNotes();
-    const urlNotes = notes[url] || [];
-    const noteIndex = urlNotes.findIndex(note => note.id === noteId);
+    const matchingUrls = findMatchingUrlsInStorage(url, notes);
 
-    if (noteIndex !== -1) {
-      urlNotes[noteIndex] = { ...urlNotes[noteIndex], ...noteData, lastEdited: Date.now() };
-      notes[url] = urlNotes;
-      return await setNotes(notes);
-    } else {
-      logError("Note not found for update", { url, noteId });
+    // Try to find the note in any of the matching URL variations
+    for (const matchingUrl of matchingUrls) {
+      const urlNotes = notes[matchingUrl] || [];
+      const noteIndex = urlNotes.findIndex(note => note.id === noteId);
+
+      if (noteIndex !== -1) {
+        urlNotes[noteIndex] = { ...urlNotes[noteIndex], ...noteData, lastEdited: Date.now() };
+        notes[matchingUrl] = urlNotes;
+        return await setNotes(notes);
+      }
+    }
+
+    // If not found in existing URLs, try adding to normalized URL
+    const normalizedUrl = normalizeUrlForNoteStorage(url);
+    if (!matchingUrls.includes(normalizedUrl)) {
+      logError("Note not found for update", { url, noteId, searchedUrls: matchingUrls });
       return false;
     }
+
+    logError("Note not found for update", { url, noteId });
+    return false;
   } catch (error) {
     logError("Error updating note", error);
     return false;
+  }
+}
+
+/**
+ * Normalize URL for note storage by removing anchor fragments while preserving query parameters
+ * This allows notes to be visible across anchor navigation within the same page
+ * @param {string} url - The URL to normalize
+ * @returns {string} Normalized URL without anchor fragment
+ */
+function normalizeUrlForNoteStorage(url) {
+  try {
+    if (!url || typeof url !== 'string') {
+      logError("Invalid URL for normalization", url);
+      return url || '';
+    }
+
+    const urlObj = new URL(url);
+    // Remove the hash/fragment (everything after #)
+    urlObj.hash = '';
+
+    // Keep query parameters as they're important for dynamic page content
+    return urlObj.toString();
+  } catch (error) {
+    // If URL parsing fails, try simple string manipulation as fallback
+    logError("URL parsing failed, using string fallback", error);
+
+    const hashIndex = url.indexOf('#');
+    if (hashIndex !== -1) {
+      return url.substring(0, hashIndex);
+    }
+    return url;
+  }
+}
+
+/**
+ * Find all URLs in storage that match the given URL (ignoring anchors)
+ * This handles migration from exact URL matching to normalized URL matching
+ * @param {string} targetUrl - The URL to find matches for
+ * @param {Object} notes - The notes storage object
+ * @returns {Array<string>} Array of matching URL keys found in storage
+ */
+function findMatchingUrlsInStorage(targetUrl, notes) {
+  try {
+    const normalizedTarget = normalizeUrlForNoteStorage(targetUrl);
+    const matchingUrls = [];
+
+    for (const storedUrl of Object.keys(notes)) {
+      const normalizedStored = normalizeUrlForNoteStorage(storedUrl);
+      if (normalizedStored === normalizedTarget) {
+        matchingUrls.push(storedUrl);
+      }
+    }
+
+    return matchingUrls;
+  } catch (error) {
+    logError("Error finding matching URLs", error);
+    return [];
+  }
+}
+
+/**
+ * Get all notes for a URL, including notes stored under different anchor variations
+ * @param {string} url - The URL to get notes for
+ * @param {Object} allNotes - The complete notes storage object
+ * @returns {Array} Combined array of all matching notes
+ */
+function getNotesForUrl(url, allNotes) {
+  try {
+    const matchingUrls = findMatchingUrlsInStorage(url, allNotes);
+    const combinedNotes = [];
+
+    for (const matchingUrl of matchingUrls) {
+      const urlNotes = allNotes[matchingUrl] || [];
+      combinedNotes.push(...urlNotes);
+    }
+
+    // Remove duplicates based on note ID (shouldn't happen, but safety check)
+    const uniqueNotes = [];
+    const seenIds = new Set();
+
+    for (const note of combinedNotes) {
+      if (!seenIds.has(note.id)) {
+        seenIds.add(note.id);
+        uniqueNotes.push(note);
+      }
+    }
+
+    return uniqueNotes;
+  } catch (error) {
+    logError("Error getting notes for URL", error);
+    return [];
   }
 }
 
@@ -158,9 +261,10 @@ async function updateNote(url, noteId, noteData) {
 async function addNote(url, noteData) {
   try {
     const notes = await getNotes();
-    const urlNotes = notes[url] || [];
+    const normalizedUrl = normalizeUrlForNoteStorage(url);
+    const urlNotes = notes[normalizedUrl] || [];
     urlNotes.push(noteData);
-    notes[url] = urlNotes;
+    notes[normalizedUrl] = urlNotes;
     return await setNotes(notes);
   } catch (error) {
     logError("Error adding note", error);
@@ -226,6 +330,9 @@ if (typeof module !== "undefined" && module.exports) {
     setNotes,
     updateNote,
     addNote,
+    normalizeUrlForNoteStorage,
+    findMatchingUrlsInStorage,
+    getNotesForUrl,
     isTabValid,
     safeApiCall,
   };
