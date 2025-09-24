@@ -118,11 +118,37 @@ function getOffCanvasDirection(noteElement) {
   const pageWidth = document.documentElement.scrollWidth;
   const pageHeight = document.documentElement.scrollHeight;
 
-  if (noteX < 0) return 'left';
-  if (noteY < 0) return 'top';
-  if (noteX + noteRect.width > pageWidth) return 'right';
-  if (noteY + noteRect.height > pageHeight) return 'bottom';
+  // Debug logging for troubleshooting
+  console.log(`[Web Notes] Checking off-canvas direction for note:`, {
+    noteX,
+    noteY,
+    noteWidth: noteRect.width,
+    noteHeight: noteRect.height,
+    pageWidth,
+    pageHeight,
+    noteRight: noteX + noteRect.width,
+    noteBottom: noteY + noteRect.height
+  });
 
+  // Check each direction - prioritize based on how far off-canvas
+  if (noteX < 0) {
+    console.log(`[Web Notes] Note is off-canvas to the LEFT (noteX: ${noteX})`);
+    return 'left';
+  }
+  if (noteY < 0) {
+    console.log(`[Web Notes] Note is off-canvas to the TOP (noteY: ${noteY})`);
+    return 'top';
+  }
+  if (noteX + noteRect.width > pageWidth) {
+    console.log(`[Web Notes] Note is off-canvas to the RIGHT (noteRight: ${noteX + noteRect.width}, pageWidth: ${pageWidth})`);
+    return 'right';
+  }
+  if (noteY + noteRect.height > pageHeight) {
+    console.log(`[Web Notes] Note is off-canvas to the BOTTOM (noteBottom: ${noteY + noteRect.height}, pageHeight: ${pageHeight})`);
+    return 'bottom';
+  }
+
+  console.log(`[Web Notes] Note is ON-CANVAS`);
   return null; // Note is on-canvas
 }
 
@@ -238,32 +264,49 @@ function createOffCanvasHandle(noteData, noteElement, direction) {
   };
   handle.textContent = arrows[direction] || '•';
 
-  // Position handle at viewport edge
+  // Position handle at viewport edge aligned with note position
   const viewport = {
     width: window.innerWidth,
     height: window.innerHeight
   };
 
+  // Get note's current position relative to viewport
+  const noteRect = noteElement.getBoundingClientRect();
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+
+  // Calculate note's viewport position
+  const noteViewportX = noteRect.left;
+  const noteViewportY = noteRect.top;
+
   switch (direction) {
     case 'left':
       handle.style.left = '10px';
-      handle.style.top = '50%';
-      handle.style.transform = 'translateY(-50%)';
+      // Align handle vertically with note, but keep it within viewport
+      const leftY = Math.max(10, Math.min(viewport.height - 34, noteViewportY + noteRect.height / 2 - 12));
+      handle.style.top = `${leftY}px`;
+      handle.style.transform = 'none';
       break;
     case 'right':
       handle.style.right = '10px';
-      handle.style.top = '50%';
-      handle.style.transform = 'translateY(-50%)';
+      // Align handle vertically with note, but keep it within viewport
+      const rightY = Math.max(10, Math.min(viewport.height - 34, noteViewportY + noteRect.height / 2 - 12));
+      handle.style.top = `${rightY}px`;
+      handle.style.transform = 'none';
       break;
     case 'top':
       handle.style.top = '10px';
-      handle.style.left = '50%';
-      handle.style.transform = 'translateX(-50%)';
+      // Align handle horizontally with note, but keep it within viewport
+      const topX = Math.max(10, Math.min(viewport.width - 34, noteViewportX + noteRect.width / 2 - 12));
+      handle.style.left = `${topX}px`;
+      handle.style.transform = 'none';
       break;
     case 'bottom':
       handle.style.bottom = '10px';
-      handle.style.left = '50%';
-      handle.style.transform = 'translateX(-50%)';
+      // Align handle horizontally with note, but keep it within viewport
+      const bottomX = Math.max(10, Math.min(viewport.width - 34, noteViewportX + noteRect.width / 2 - 12));
+      handle.style.left = `${bottomX}px`;
+      handle.style.transform = 'none';
       break;
   }
 
@@ -608,6 +651,8 @@ function removeOffCanvasHandle(noteId) {
  * Update all off-canvas handles based on current note positions
  */
 function updateOffCanvasHandles() {
+  console.log("[Web Notes] Starting off-canvas handle update");
+
   // Remove all existing handles
   offCanvasHandles.forEach((handle, noteId) => {
     handle.remove();
@@ -616,13 +661,24 @@ function updateOffCanvasHandles() {
 
   // Check all notes and create handles for off-canvas ones
   const notes = document.querySelectorAll('.web-note');
-  notes.forEach(noteElement => {
+  console.log(`[Web Notes] Checking ${notes.length} notes for off-canvas status`);
+
+  let handlesCreated = 0;
+
+  notes.forEach((noteElement, index) => {
+    console.log(`[Web Notes] Checking note ${index + 1}/${notes.length}: ${noteElement.id}`);
+
     if (isNoteOffCanvas(noteElement)) {
       const direction = getOffCanvasDirection(noteElement);
       if (direction) {
+        console.log(`[Web Notes] Note ${noteElement.id} is off-canvas in direction: ${direction}`);
+
         // Get note data from element ID
         chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
-          if (chrome.runtime.lastError) return;
+          if (chrome.runtime.lastError) {
+            console.error("[Web Notes] Storage error getting note data:", chrome.runtime.lastError);
+            return;
+          }
 
           const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
           const urlNotes = notes[window.location.href] || [];
@@ -630,13 +686,21 @@ function updateOffCanvasHandles() {
 
           if (noteData) {
             createOffCanvasHandle(noteData, noteElement, direction);
+            handlesCreated++;
+            console.log(`[Web Notes] Created handle ${handlesCreated} for note ${noteElement.id}`);
+          } else {
+            console.warn(`[Web Notes] Note data not found for ${noteElement.id}`);
           }
         });
+      } else {
+        console.log(`[Web Notes] Note ${noteElement.id} is off-canvas but direction could not be determined`);
       }
+    } else {
+      console.log(`[Web Notes] Note ${noteElement.id} is on-canvas`);
     }
   });
 
-  console.log(`[Web Notes] Updated off-canvas handles`);
+  console.log(`[Web Notes] Completed off-canvas handle update - processing ${notes.length} notes`);
 }
 
 /**
@@ -1022,6 +1086,12 @@ startUrlMonitoring();
 
 // Add window resize handling with debouncing
 window.addEventListener('resize', debounce(handleWindowResize, 300));
+
+// Add scroll handling to update handle positions
+window.addEventListener('scroll', debounce(() => {
+  console.log("[Web Notes] Scroll detected, updating off-canvas handles");
+  updateOffCanvasHandles();
+}, 200));
 
 // Clean up on page unload to prevent memory leaks
 window.addEventListener("beforeunload", () => {
