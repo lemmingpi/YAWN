@@ -291,8 +291,8 @@ function createOffCanvasHandle(noteData, noteElement, direction) {
     bringNoteBackToCanvas(noteData, noteElement, direction);
   });
 
-  // Add drag capability
-  makeDraggable(handle, noteData, null);
+  // Add drag capability to handle - brings note back to canvas
+  makeHandleDraggable(handle, noteData, noteElement);
 
   // Add to page
   document.body.appendChild(handle);
@@ -327,18 +327,45 @@ function showNoteTooltip(handleElement, noteData) {
     z-index: 10003;
     pointer-events: none;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transform: translateY(-100%);
   `;
 
   tooltip.textContent = noteData.text;
 
-  // Position tooltip above handle
-  const handleRect = handleElement.getBoundingClientRect();
-  tooltip.style.left = `${handleRect.left + handleRect.width / 2}px`;
-  tooltip.style.top = `${handleRect.top - 10}px`;
-  tooltip.style.transform = 'translate(-50%, -100%)';
-
+  // Add tooltip to DOM first to get dimensions
   document.body.appendChild(tooltip);
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const handleRect = handleElement.getBoundingClientRect();
+  const viewport = {
+    width: window.innerWidth,
+    height: window.innerHeight
+  };
+
+  // Smart positioning to keep tooltip on screen
+  let left = handleRect.left + handleRect.width / 2;
+  let top = handleRect.top - 10;
+  let transform = 'translate(-50%, -100%)';
+
+  // Check if tooltip would go off left edge
+  if (left - tooltipRect.width / 2 < 10) {
+    left = handleRect.right + 10;
+    top = handleRect.top + handleRect.height / 2;
+    transform = 'translateY(-50%)';
+  }
+  // Check if tooltip would go off right edge
+  else if (left + tooltipRect.width / 2 > viewport.width - 10) {
+    left = handleRect.left - 10;
+    top = handleRect.top + handleRect.height / 2;
+    transform = 'translate(-100%, -50%)';
+  }
+  // Check if tooltip would go off top edge
+  else if (top - tooltipRect.height < 10) {
+    top = handleRect.bottom + 10;
+    transform = 'translate(-50%, 0)';
+  }
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+  tooltip.style.transform = transform;
 }
 
 /**
@@ -349,6 +376,143 @@ function hideNoteTooltip() {
   if (existingTooltip) {
     existingTooltip.remove();
   }
+}
+
+/**
+ * Make a handle draggable to bring the note back to canvas
+ * @param {Element} handleElement - The handle DOM element
+ * @param {Object} noteData - The note data object
+ * @param {Element} noteElement - The note DOM element
+ */
+function makeHandleDraggable(handleElement, noteData, noteElement) {
+  let isDragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+
+  function handleDragStart(e) {
+    // Prevent default drag behavior and text selection
+    e.preventDefault();
+    e.stopPropagation();
+
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+
+    // Enhanced drag visual feedback for handle
+    handleElement.style.cursor = "grabbing";
+    handleElement.style.transform += " scale(1.3)";
+    handleElement.style.opacity = "1";
+    handleElement.style.boxShadow = "0 4px 16px rgba(0, 0, 0, 0.4)";
+
+    // Hide tooltip during drag
+    hideNoteTooltip();
+
+    // Add event listeners to document for smooth dragging
+    // Note: { passive: false } is required on mousemove to allow preventDefault()
+    // This prevents text selection and other default behaviors during drag
+    // Performance impact: Disables scroll optimizations during drag operations
+    document.addEventListener("mousemove", handleDragMove, { passive: false });
+    document.addEventListener("mouseup", handleDragEnd, { once: true });
+
+    console.log(`[Web Notes] Started dragging handle for note ${noteData.id}`);
+  }
+
+  function handleDragMove(e) {
+    if (!isDragging) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Calculate drag delta from handle start position
+    const deltaX = e.clientX - dragStartX;
+    const deltaY = e.clientY - dragStartY;
+
+    // Calculate where the note would be positioned
+    const notePosition = {
+      x: e.clientX - 100, // Center note on cursor (approximate note width/2)
+      y: e.clientY - 25   // Center note on cursor (approximate note height/2)
+    };
+
+    // Update note position in real-time during drag
+    noteElement.style.left = `${notePosition.x}px`;
+    noteElement.style.top = `${notePosition.y}px`;
+    noteElement.style.opacity = "0.7"; // Make note semi-transparent during drag
+    noteElement.style.pointerEvents = "none"; // Prevent interference during drag
+  }
+
+  function handleDragEnd(e) {
+    if (!isDragging) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    isDragging = false;
+
+    // Restore handle styling
+    handleElement.style.cursor = "pointer";
+    handleElement.style.transform = handleElement.style.transform.replace(" scale(1.3)", "");
+    handleElement.style.opacity = "0.8";
+    handleElement.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.2)";
+
+    // Restore note styling
+    noteElement.style.opacity = "1";
+    noteElement.style.pointerEvents = "auto";
+
+    // Calculate final note position
+    const finalX = e.clientX - 100;
+    const finalY = e.clientY - 25;
+
+    // Update note position
+    noteElement.style.left = `${finalX}px`;
+    noteElement.style.top = `${finalY}px`;
+
+    // Calculate new offset based on note type
+    let newOffsetX = 0;
+    let newOffsetY = 0;
+
+    if (noteData.elementSelector || noteData.elementXPath) {
+      // For anchored notes, calculate offset from target element
+      const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector}-${noteData.elementXPath}`);
+      const targetElement = selectorResults.element;
+
+      if (targetElement) {
+        const rect = targetElement.getBoundingClientRect();
+        const elementX = rect.left + window.scrollX;
+        const elementY = rect.top + window.scrollY - 30;
+
+        newOffsetX = finalX - elementX;
+        newOffsetY = finalY - elementY;
+      }
+    } else {
+      // For fallback notes, update the fallback position
+      noteData.fallbackPosition.x = finalX;
+      noteData.fallbackPosition.y = finalY;
+    }
+
+    // Update stored offsets
+    updateNoteOffset(noteData.id, newOffsetX, newOffsetY);
+    noteData.offsetX = newOffsetX;
+    noteData.offsetY = newOffsetY;
+
+    // Remove drag event listeners
+    document.removeEventListener("mousemove", handleDragMove);
+
+    // Remove the handle since note is now on canvas
+    removeOffCanvasHandle(noteData.id);
+
+    // Update all handles in case other notes are now off-canvas
+    setTimeout(() => {
+      updateOffCanvasHandles();
+    }, 100);
+
+    console.log(`[Web Notes] Handle drag completed - brought note ${noteData.id} to canvas at (${finalX}, ${finalY})`);
+  }
+
+  // Add mousedown event listener to start dragging
+  handleElement.addEventListener("mousedown", handleDragStart);
+
+  // Prevent text selection during potential drag
+  handleElement.addEventListener("selectstart", e => e.preventDefault());
 }
 
 /**
