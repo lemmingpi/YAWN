@@ -81,39 +81,46 @@ function debounce(func, delay) {
 }
 
 /**
- * Ensure a note has at least 50px visible on screen by repositioning if needed
+ * Ensure a note is accessible by repositioning if it's outside page boundaries
+ * Only repositions notes that are truly inaccessible (beyond scrollable area)
  * @param {Element} noteElement - The note DOM element
  * @param {Object} noteData - The note data object
  * @returns {boolean} True if note was repositioned
  */
 function ensureNoteVisibility(noteElement, noteData) {
   const noteRect = noteElement.getBoundingClientRect();
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  const minVisible = 50; // Minimum pixels that must be visible
+  const noteX = noteRect.left + window.scrollX;
+  const noteY = noteRect.top + window.scrollY;
 
-  let newX = noteRect.left + window.scrollX;
-  let newY = noteRect.top + window.scrollY;
+  // Get page dimensions (scrollable area)
+  const pageWidth = document.documentElement.scrollWidth;
+  const pageHeight = document.documentElement.scrollHeight;
+  const minVisible = 50; // Minimum pixels that must be visible on page
+
+  let newX = noteX;
+  let newY = noteY;
   let wasRepositioned = false;
 
-  // Check if note needs repositioning
-  if (noteRect.right < minVisible) {
-    // Note is too far left - move it to show 50px
-    newX = window.scrollX - noteRect.width + minVisible;
+  // Only reposition if note is outside the scrollable page boundaries
+  // (not just outside the current viewport)
+
+  if (noteX + noteRect.width < 0) {
+    // Note is completely off the left edge of the page
+    newX = minVisible;
     wasRepositioned = true;
-  } else if (noteRect.left > viewportWidth - minVisible) {
-    // Note is too far right - move it to show 50px
-    newX = window.scrollX + viewportWidth - minVisible;
+  } else if (noteX > pageWidth) {
+    // Note is completely off the right edge of the page
+    newX = pageWidth - noteRect.width - minVisible;
     wasRepositioned = true;
   }
 
-  if (noteRect.bottom < minVisible) {
-    // Note is too far up - move it to show 50px
-    newY = window.scrollY - noteRect.height + minVisible;
+  if (noteY + noteRect.height < 0) {
+    // Note is completely off the top edge of the page
+    newY = minVisible;
     wasRepositioned = true;
-  } else if (noteRect.top > viewportHeight - minVisible) {
-    // Note is too far down - move it to show 50px
-    newY = window.scrollY + viewportHeight - minVisible;
+  } else if (noteY > pageHeight) {
+    // Note is completely off the bottom edge of the page
+    newY = pageHeight - noteRect.height - minVisible;
     wasRepositioned = true;
   }
 
@@ -146,7 +153,7 @@ function ensureNoteVisibility(noteElement, noteData) {
       noteData.fallbackPosition.y = newY;
     }
 
-    console.log(`[Web Notes] Repositioned note ${noteData.id} to ensure visibility at (${newX}, ${newY})`);
+    console.log(`[Web Notes] Repositioned note ${noteData.id} from outside page bounds to (${newX}, ${newY})`);
   }
 
   return wasRepositioned;
@@ -641,11 +648,8 @@ startUrlMonitoring();
 // Add window resize handling with debouncing
 window.addEventListener('resize', debounce(handleWindowResize, 300));
 
-// Add scroll handling to ensure notes remain visible
-window.addEventListener('scroll', debounce(() => {
-  console.log("[Web Notes] Scroll detected, ensuring notes remain visible");
-  ensureAllNotesVisible();
-}, 200));
+// Note: Scroll handling removed to prevent repositioning during normal scrolling
+// Notes should only be repositioned when truly inaccessible (outside page bounds)
 
 // Clean up on page unload to prevent memory leaks
 window.addEventListener("beforeunload", () => {
