@@ -65,8 +65,6 @@ function loadExistingNotes() {
 // Cache for DOM queries to improve performance
 const elementCache = new Map();
 
-// Track off-canvas handles to prevent duplicates
-const offCanvasHandles = new Map();
 
 /**
  * Debounce utility to limit function execution frequency
@@ -83,74 +81,77 @@ function debounce(func, delay) {
 }
 
 /**
- * Check if a note is off-canvas (outside scrollable page area)
+ * Ensure a note has at least 50px visible on screen by repositioning if needed
  * @param {Element} noteElement - The note DOM element
- * @returns {boolean} True if note is outside page boundaries
+ * @param {Object} noteData - The note data object
+ * @returns {boolean} True if note was repositioned
  */
-function isNoteOffCanvas(noteElement) {
+function ensureNoteVisibility(noteElement, noteData) {
   const noteRect = noteElement.getBoundingClientRect();
-  const noteX = noteRect.left + window.scrollX;
-  const noteY = noteRect.top + window.scrollY;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const minVisible = 50; // Minimum pixels that must be visible
 
-  // Get page dimensions (scrollable area)
-  const pageWidth = document.documentElement.scrollWidth;
-  const pageHeight = document.documentElement.scrollHeight;
+  let newX = noteRect.left + window.scrollX;
+  let newY = noteRect.top + window.scrollY;
+  let wasRepositioned = false;
 
-  // Check if note is outside page boundaries (not just viewport)
-  return (
-    noteX < 0 ||                              // Left of page
-    noteY < 0 ||                              // Above page
-    noteX + noteRect.width > pageWidth ||     // Right of page
-    noteY + noteRect.height > pageHeight      // Below page
-  );
+  // Check if note needs repositioning
+  if (noteRect.right < minVisible) {
+    // Note is too far left - move it to show 50px
+    newX = window.scrollX - noteRect.width + minVisible;
+    wasRepositioned = true;
+  } else if (noteRect.left > viewportWidth - minVisible) {
+    // Note is too far right - move it to show 50px
+    newX = window.scrollX + viewportWidth - minVisible;
+    wasRepositioned = true;
+  }
+
+  if (noteRect.bottom < minVisible) {
+    // Note is too far up - move it to show 50px
+    newY = window.scrollY - noteRect.height + minVisible;
+    wasRepositioned = true;
+  } else if (noteRect.top > viewportHeight - minVisible) {
+    // Note is too far down - move it to show 50px
+    newY = window.scrollY + viewportHeight - minVisible;
+    wasRepositioned = true;
+  }
+
+  if (wasRepositioned) {
+    // Update note position
+    noteElement.style.left = `${newX}px`;
+    noteElement.style.top = `${newY}px`;
+
+    // Update stored offset based on note type
+    if (noteData.elementSelector || noteData.elementXPath) {
+      // For anchored notes, calculate new offset from target element
+      const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector}-${noteData.elementXPath}`);
+      const targetElement = selectorResults.element;
+
+      if (targetElement) {
+        const rect = targetElement.getBoundingClientRect();
+        const elementX = rect.left + window.scrollX;
+        const elementY = rect.top + window.scrollY - 30;
+
+        const newOffsetX = newX - elementX;
+        const newOffsetY = newY - elementY;
+
+        updateNoteOffset(noteData.id, newOffsetX, newOffsetY);
+        noteData.offsetX = newOffsetX;
+        noteData.offsetY = newOffsetY;
+      }
+    } else {
+      // For fallback notes, update fallback position
+      noteData.fallbackPosition.x = newX;
+      noteData.fallbackPosition.y = newY;
+    }
+
+    console.log(`[Web Notes] Repositioned note ${noteData.id} to ensure visibility at (${newX}, ${newY})`);
+  }
+
+  return wasRepositioned;
 }
 
-/**
- * Get the direction where an off-canvas note is located
- * @param {Element} noteElement - The note DOM element
- * @returns {string|null} Direction: 'left', 'right', 'top', 'bottom', or null if on-canvas
- */
-function getOffCanvasDirection(noteElement) {
-  const noteRect = noteElement.getBoundingClientRect();
-  const noteX = noteRect.left + window.scrollX;
-  const noteY = noteRect.top + window.scrollY;
-
-  const pageWidth = document.documentElement.scrollWidth;
-  const pageHeight = document.documentElement.scrollHeight;
-
-  // Debug logging for troubleshooting
-  console.log(`[Web Notes] Checking off-canvas direction for note:`, {
-    noteX,
-    noteY,
-    noteWidth: noteRect.width,
-    noteHeight: noteRect.height,
-    pageWidth,
-    pageHeight,
-    noteRight: noteX + noteRect.width,
-    noteBottom: noteY + noteRect.height
-  });
-
-  // Check each direction - prioritize based on how far off-canvas
-  if (noteX < 0) {
-    console.log(`[Web Notes] Note is off-canvas to the LEFT (noteX: ${noteX})`);
-    return 'left';
-  }
-  if (noteY < 0) {
-    console.log(`[Web Notes] Note is off-canvas to the TOP (noteY: ${noteY})`);
-    return 'top';
-  }
-  if (noteX + noteRect.width > pageWidth) {
-    console.log(`[Web Notes] Note is off-canvas to the RIGHT (noteRight: ${noteX + noteRect.width}, pageWidth: ${pageWidth})`);
-    return 'right';
-  }
-  if (noteY + noteRect.height > pageHeight) {
-    console.log(`[Web Notes] Note is off-canvas to the BOTTOM (noteBottom: ${noteY + noteRect.height}, pageHeight: ${pageHeight})`);
-    return 'bottom';
-  }
-
-  console.log(`[Web Notes] Note is ON-CANVAS`);
-  return null; // Note is on-canvas
-}
 
 /**
  * Reposition all existing notes after window resize
@@ -197,9 +198,9 @@ function repositionAllNotes() {
     });
   });
 
-  // Update off-canvas handles after repositioning
+  // Ensure all notes have minimum visibility after repositioning
   setTimeout(() => {
-    updateOffCanvasHandles();
+    ensureAllNotesVisible();
   }, 100); // Small delay to allow DOM updates
 }
 
@@ -212,495 +213,43 @@ function handleWindowResize() {
 }
 
 /**
- * Create an off-canvas handle for a note that's outside page boundaries
- * @param {Object} noteData - The note data object
- * @param {Element} noteElement - The note DOM element
- * @param {string} direction - Direction where note is located: 'left', 'right', 'top', 'bottom'
+ * Ensure all notes have minimum visibility by repositioning if needed
  */
-function createOffCanvasHandle(noteData, noteElement, direction) {
-  const handleId = `handle-${noteData.id}`;
+function ensureAllNotesVisible() {
+  console.log("[Web Notes] Ensuring all notes have minimum visibility");
 
-  // Remove existing handle if it exists
-  const existingHandle = document.getElementById(handleId);
-  if (existingHandle) {
-    existingHandle.remove();
-  }
-
-  // Create handle element
-  const handle = document.createElement('div');
-  handle.id = handleId;
-  handle.className = 'web-note-handle';
-
-  const isAnchored = noteData.elementSelector || noteData.elementXPath;
-  const handleColor = isAnchored ? '#2196F3' : '#E91E63';
-
-  // Handle styling
-  handle.style.cssText = `
-    position: fixed;
-    width: 24px;
-    height: 24px;
-    background: ${handleColor};
-    border: 2px solid white;
-    border-radius: 50%;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    cursor: pointer;
-    z-index: 10002;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    color: white;
-    font-weight: bold;
-    transition: all 0.2s ease;
-    opacity: 0.8;
-  `;
-
-  // Add directional arrow
-  const arrows = {
-    left: '←',
-    right: '→',
-    top: '↑',
-    bottom: '↓'
-  };
-  handle.textContent = arrows[direction] || '•';
-
-  // Position handle at viewport edge aligned with note position
-  const viewport = {
-    width: window.innerWidth,
-    height: window.innerHeight
-  };
-
-  // Get note's current position relative to viewport
-  const noteRect = noteElement.getBoundingClientRect();
-  const scrollX = window.scrollX;
-  const scrollY = window.scrollY;
-
-  // Calculate note's viewport position
-  const noteViewportX = noteRect.left;
-  const noteViewportY = noteRect.top;
-
-  switch (direction) {
-    case 'left':
-      handle.style.left = '10px';
-      // Align handle vertically with note, but keep it within viewport
-      const leftY = Math.max(10, Math.min(viewport.height - 34, noteViewportY + noteRect.height / 2 - 12));
-      handle.style.top = `${leftY}px`;
-      handle.style.transform = 'none';
-      break;
-    case 'right':
-      handle.style.right = '10px';
-      // Align handle vertically with note, but keep it within viewport
-      const rightY = Math.max(10, Math.min(viewport.height - 34, noteViewportY + noteRect.height / 2 - 12));
-      handle.style.top = `${rightY}px`;
-      handle.style.transform = 'none';
-      break;
-    case 'top':
-      handle.style.top = '10px';
-      // Align handle horizontally with note, but keep it within viewport
-      const topX = Math.max(10, Math.min(viewport.width - 34, noteViewportX + noteRect.width / 2 - 12));
-      handle.style.left = `${topX}px`;
-      handle.style.transform = 'none';
-      break;
-    case 'bottom':
-      handle.style.bottom = '10px';
-      // Align handle horizontally with note, but keep it within viewport
-      const bottomX = Math.max(10, Math.min(viewport.width - 34, noteViewportX + noteRect.width / 2 - 12));
-      handle.style.left = `${bottomX}px`;
-      handle.style.transform = 'none';
-      break;
-  }
-
-  // Add hover effects
-  handle.addEventListener('mouseenter', () => {
-    handle.style.opacity = '1';
-    handle.style.transform += ' scale(1.2)';
-
-    // Show tooltip with note content
-    showNoteTooltip(handle, noteData);
-  });
-
-  handle.addEventListener('mouseleave', () => {
-    handle.style.opacity = '0.8';
-    handle.style.transform = handle.style.transform.replace(' scale(1.2)', '');
-
-    // Hide tooltip
-    hideNoteTooltip();
-  });
-
-  // Add click handler to bring note back
-  handle.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    bringNoteBackToCanvas(noteData, noteElement, direction);
-  });
-
-  // Add drag capability to handle - brings note back to canvas
-  makeHandleDraggable(handle, noteData, noteElement);
-
-  // Add to page
-  document.body.appendChild(handle);
-
-  // Track handle
-  offCanvasHandles.set(noteData.id, handle);
-
-  console.log(`[Web Notes] Created off-canvas handle for note ${noteData.id} (direction: ${direction})`);
-}
-
-/**
- * Show tooltip with note content when hovering over handle
- * @param {Element} handleElement - The handle element
- * @param {Object} noteData - The note data object
- */
-function showNoteTooltip(handleElement, noteData) {
-  // Remove existing tooltip
-  hideNoteTooltip();
-
-  const tooltip = document.createElement('div');
-  tooltip.id = 'web-note-tooltip';
-  tooltip.style.cssText = `
-    position: fixed;
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    max-width: 200px;
-    word-wrap: break-word;
-    z-index: 10003;
-    pointer-events: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  `;
-
-  tooltip.textContent = noteData.text;
-
-  // Add tooltip to DOM first to get dimensions
-  document.body.appendChild(tooltip);
-  const tooltipRect = tooltip.getBoundingClientRect();
-  const handleRect = handleElement.getBoundingClientRect();
-  const viewport = {
-    width: window.innerWidth,
-    height: window.innerHeight
-  };
-
-  // Smart positioning to keep tooltip on screen
-  let left = handleRect.left + handleRect.width / 2;
-  let top = handleRect.top - 10;
-  let transform = 'translate(-50%, -100%)';
-
-  // Check if tooltip would go off left edge
-  if (left - tooltipRect.width / 2 < 10) {
-    left = handleRect.right + 10;
-    top = handleRect.top + handleRect.height / 2;
-    transform = 'translateY(-50%)';
-  }
-  // Check if tooltip would go off right edge
-  else if (left + tooltipRect.width / 2 > viewport.width - 10) {
-    left = handleRect.left - 10;
-    top = handleRect.top + handleRect.height / 2;
-    transform = 'translate(-100%, -50%)';
-  }
-  // Check if tooltip would go off top edge
-  else if (top - tooltipRect.height < 10) {
-    top = handleRect.bottom + 10;
-    transform = 'translate(-50%, 0)';
-  }
-
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
-  tooltip.style.transform = transform;
-}
-
-/**
- * Hide note tooltip
- */
-function hideNoteTooltip() {
-  const existingTooltip = document.getElementById('web-note-tooltip');
-  if (existingTooltip) {
-    existingTooltip.remove();
-  }
-}
-
-/**
- * Make a handle draggable to bring the note back to canvas
- * @param {Element} handleElement - The handle DOM element
- * @param {Object} noteData - The note data object
- * @param {Element} noteElement - The note DOM element
- */
-function makeHandleDraggable(handleElement, noteData, noteElement) {
-  let isDragging = false;
-  let dragStartX = 0;
-  let dragStartY = 0;
-
-  function handleDragStart(e) {
-    // Prevent default drag behavior and text selection
-    e.preventDefault();
-    e.stopPropagation();
-
-    isDragging = true;
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-
-    // Enhanced drag visual feedback for handle
-    handleElement.style.cursor = "grabbing";
-    handleElement.style.transform += " scale(1.3)";
-    handleElement.style.opacity = "1";
-    handleElement.style.boxShadow = "0 4px 16px rgba(0, 0, 0, 0.4)";
-
-    // Hide tooltip during drag
-    hideNoteTooltip();
-
-    // Add event listeners to document for smooth dragging
-    // Note: { passive: false } is required on mousemove to allow preventDefault()
-    // This prevents text selection and other default behaviors during drag
-    // Performance impact: Disables scroll optimizations during drag operations
-    document.addEventListener("mousemove", handleDragMove, { passive: false });
-    document.addEventListener("mouseup", handleDragEnd, { once: true });
-
-    console.log(`[Web Notes] Started dragging handle for note ${noteData.id}`);
-  }
-
-  function handleDragMove(e) {
-    if (!isDragging) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Calculate drag delta from handle start position
-    const deltaX = e.clientX - dragStartX;
-    const deltaY = e.clientY - dragStartY;
-
-    // Calculate where the note would be positioned
-    const notePosition = {
-      x: e.clientX - 100, // Center note on cursor (approximate note width/2)
-      y: e.clientY - 25   // Center note on cursor (approximate note height/2)
-    };
-
-    // Update note position in real-time during drag
-    noteElement.style.left = `${notePosition.x}px`;
-    noteElement.style.top = `${notePosition.y}px`;
-    noteElement.style.opacity = "0.7"; // Make note semi-transparent during drag
-    noteElement.style.pointerEvents = "none"; // Prevent interference during drag
-  }
-
-  function handleDragEnd(e) {
-    if (!isDragging) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    isDragging = false;
-
-    // Restore handle styling
-    handleElement.style.cursor = "pointer";
-    handleElement.style.transform = handleElement.style.transform.replace(" scale(1.3)", "");
-    handleElement.style.opacity = "0.8";
-    handleElement.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.2)";
-
-    // Restore note styling
-    noteElement.style.opacity = "1";
-    noteElement.style.pointerEvents = "auto";
-
-    // Calculate final note position
-    const finalX = e.clientX - 100;
-    const finalY = e.clientY - 25;
-
-    // Update note position
-    noteElement.style.left = `${finalX}px`;
-    noteElement.style.top = `${finalY}px`;
-
-    // Calculate new offset based on note type
-    let newOffsetX = 0;
-    let newOffsetY = 0;
-
-    if (noteData.elementSelector || noteData.elementXPath) {
-      // For anchored notes, calculate offset from target element
-      const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector}-${noteData.elementXPath}`);
-      const targetElement = selectorResults.element;
-
-      if (targetElement) {
-        const rect = targetElement.getBoundingClientRect();
-        const elementX = rect.left + window.scrollX;
-        const elementY = rect.top + window.scrollY - 30;
-
-        newOffsetX = finalX - elementX;
-        newOffsetY = finalY - elementY;
-      }
-    } else {
-      // For fallback notes, update the fallback position
-      noteData.fallbackPosition.x = finalX;
-      noteData.fallbackPosition.y = finalY;
-    }
-
-    // Update stored offsets
-    updateNoteOffset(noteData.id, newOffsetX, newOffsetY);
-    noteData.offsetX = newOffsetX;
-    noteData.offsetY = newOffsetY;
-
-    // Remove drag event listeners
-    document.removeEventListener("mousemove", handleDragMove);
-
-    // Remove the handle since note is now on canvas
-    removeOffCanvasHandle(noteData.id);
-
-    // Update all handles in case other notes are now off-canvas
-    setTimeout(() => {
-      updateOffCanvasHandles();
-    }, 100);
-
-    console.log(`[Web Notes] Handle drag completed - brought note ${noteData.id} to canvas at (${finalX}, ${finalY})`);
-  }
-
-  // Add mousedown event listener to start dragging
-  handleElement.addEventListener("mousedown", handleDragStart);
-
-  // Prevent text selection during potential drag
-  handleElement.addEventListener("selectstart", e => e.preventDefault());
-}
-
-/**
- * Bring an off-canvas note back to the canvas
- * @param {Object} noteData - The note data object
- * @param {Element} noteElement - The note DOM element
- * @param {string} direction - Direction where note was located
- */
-function bringNoteBackToCanvas(noteData, noteElement, direction) {
-  const viewport = {
-    width: window.innerWidth,
-    height: window.innerHeight
-  };
-
-  const scrollX = window.scrollX;
-  const scrollY = window.scrollY;
-
-  let newX, newY;
-
-  // Calculate new position near the appropriate edge
-  switch (direction) {
-    case 'left':
-      newX = scrollX + 20;
-      newY = scrollY + viewport.height / 2;
-      break;
-    case 'right':
-      newX = scrollX + viewport.width - 220; // Account for note width
-      newY = scrollY + viewport.height / 2;
-      break;
-    case 'top':
-      newX = scrollX + viewport.width / 2;
-      newY = scrollY + 20;
-      break;
-    case 'bottom':
-      newX = scrollX + viewport.width / 2;
-      newY = scrollY + viewport.height - 80; // Account for note height
-      break;
-    default:
-      newX = scrollX + 20;
-      newY = scrollY + 20;
-  }
-
-  // Update note position
-  noteElement.style.left = `${newX}px`;
-  noteElement.style.top = `${newY}px`;
-
-  // Calculate new offset based on note type
-  let newOffsetX = 0;
-  let newOffsetY = 0;
-
-  if (noteData.elementSelector || noteData.elementXPath) {
-    // For anchored notes, calculate offset from target element
-    const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector}-${noteData.elementXPath}`);
-    const targetElement = selectorResults.element;
-
-    if (targetElement) {
-      const rect = targetElement.getBoundingClientRect();
-      const elementX = rect.left + window.scrollX;
-      const elementY = rect.top + window.scrollY - 30;
-
-      newOffsetX = newX - elementX;
-      newOffsetY = newY - elementY;
-    }
-  } else {
-    // For fallback notes, update the fallback position
-    noteData.fallbackPosition.x = newX;
-    noteData.fallbackPosition.y = newY;
-  }
-
-  // Update stored offsets
-  updateNoteOffset(noteData.id, newOffsetX, newOffsetY);
-
-  // Remove the handle
-  removeOffCanvasHandle(noteData.id);
-
-  console.log(`[Web Notes] Brought note ${noteData.id} back to canvas at (${newX}, ${newY})`);
-}
-
-/**
- * Remove off-canvas handle for a specific note
- * @param {string} noteId - The note ID
- */
-function removeOffCanvasHandle(noteId) {
-  const handle = offCanvasHandles.get(noteId);
-  if (handle) {
-    handle.remove();
-    offCanvasHandles.delete(noteId);
-    console.log(`[Web Notes] Removed off-canvas handle for note ${noteId}`);
-  }
-}
-
-/**
- * Update all off-canvas handles based on current note positions
- */
-function updateOffCanvasHandles() {
-  console.log("[Web Notes] Starting off-canvas handle update");
-
-  // Remove all existing handles
-  offCanvasHandles.forEach((handle, noteId) => {
-    handle.remove();
-  });
-  offCanvasHandles.clear();
-
-  // Check all notes and create handles for off-canvas ones
   const notes = document.querySelectorAll('.web-note');
-  console.log(`[Web Notes] Checking ${notes.length} notes for off-canvas status`);
+  console.log(`[Web Notes] Checking ${notes.length} notes for visibility`);
 
-  let handlesCreated = 0;
+  let notesRepositioned = 0;
 
   notes.forEach((noteElement, index) => {
     console.log(`[Web Notes] Checking note ${index + 1}/${notes.length}: ${noteElement.id}`);
 
-    if (isNoteOffCanvas(noteElement)) {
-      const direction = getOffCanvasDirection(noteElement);
-      if (direction) {
-        console.log(`[Web Notes] Note ${noteElement.id} is off-canvas in direction: ${direction}`);
-
-        // Get note data from element ID
-        chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
-          if (chrome.runtime.lastError) {
-            console.error("[Web Notes] Storage error getting note data:", chrome.runtime.lastError);
-            return;
-          }
-
-          const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
-          const urlNotes = notes[window.location.href] || [];
-          const noteData = urlNotes.find(note => note.id === noteElement.id);
-
-          if (noteData) {
-            createOffCanvasHandle(noteData, noteElement, direction);
-            handlesCreated++;
-            console.log(`[Web Notes] Created handle ${handlesCreated} for note ${noteElement.id}`);
-          } else {
-            console.warn(`[Web Notes] Note data not found for ${noteElement.id}`);
-          }
-        });
-      } else {
-        console.log(`[Web Notes] Note ${noteElement.id} is off-canvas but direction could not be determined`);
+    // Get note data from storage
+    chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+      if (chrome.runtime.lastError) {
+        console.error("[Web Notes] Storage error getting note data:", chrome.runtime.lastError);
+        return;
       }
-    } else {
-      console.log(`[Web Notes] Note ${noteElement.id} is on-canvas`);
-    }
+
+      const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+      const urlNotes = notes[window.location.href] || [];
+      const noteData = urlNotes.find(note => note.id === noteElement.id);
+
+      if (noteData) {
+        const wasRepositioned = ensureNoteVisibility(noteElement, noteData);
+        if (wasRepositioned) {
+          notesRepositioned++;
+          console.log(`[Web Notes] Repositioned note ${noteElement.id} for visibility`);
+        }
+      } else {
+        console.warn(`[Web Notes] Note data not found for ${noteElement.id}`);
+      }
+    });
   });
 
-  console.log(`[Web Notes] Completed off-canvas handle update - processing ${notes.length} notes`);
+  console.log(`[Web Notes] Completed visibility check - processed ${notes.length} notes`);
 }
 
 /**
@@ -906,9 +455,19 @@ function makeDraggable(noteElement, noteData, targetElement) {
     // Save the final offset to storage
     updateNoteOffset(noteData.id, noteData.offsetX || 0, noteData.offsetY || 0);
 
-    // Check if note is now off-canvas after drag and update handles
+    // Ensure note maintains minimum visibility after drag
     setTimeout(() => {
-      updateOffCanvasHandles();
+      chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+        if (chrome.runtime.lastError) return;
+
+        const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+        const urlNotes = notes[window.location.href] || [];
+        const noteData = urlNotes.find(note => note.id === noteElement.id);
+
+        if (noteData) {
+          ensureNoteVisibility(noteElement, noteData);
+        }
+      });
     }, 100);
 
     console.log(`[Web Notes] Finished dragging note ${noteData.id} to offset (${noteData.offsetX || 0}, ${noteData.offsetY || 0})`);
@@ -1018,14 +577,9 @@ function displayNote(noteData) {
       note.style.opacity = "1";
       note.style.transform = "scale(1)";
 
-      // Check if note needs off-canvas handle after animation
+      // Ensure note has minimum visibility after animation
       setTimeout(() => {
-        if (isNoteOffCanvas(note)) {
-          const direction = getOffCanvasDirection(note);
-          if (direction) {
-            createOffCanvasHandle(noteData, note, direction);
-          }
-        }
+        ensureNoteVisibility(note, noteData);
       }, 250); // After fade-in animation
     });
 
@@ -1087,10 +641,10 @@ startUrlMonitoring();
 // Add window resize handling with debouncing
 window.addEventListener('resize', debounce(handleWindowResize, 300));
 
-// Add scroll handling to update handle positions
+// Add scroll handling to ensure notes remain visible
 window.addEventListener('scroll', debounce(() => {
-  console.log("[Web Notes] Scroll detected, updating off-canvas handles");
-  updateOffCanvasHandles();
+  console.log("[Web Notes] Scroll detected, ensuring notes remain visible");
+  ensureAllNotesVisible();
 }, 200));
 
 // Clean up on page unload to prevent memory leaks
@@ -1100,11 +654,8 @@ window.addEventListener("beforeunload", () => {
     urlCheckInterval = null;
   }
 
-  // Clean up off-canvas handles
-  offCanvasHandles.forEach((handle, noteId) => {
-    handle.remove();
-  });
-  offCanvasHandles.clear();
+  // Clean up any remaining note elements
+  document.querySelectorAll(".web-note").forEach(note => note.remove());
 });
 
 // Also use modern navigation API if available
