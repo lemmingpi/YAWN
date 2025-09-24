@@ -1,7 +1,7 @@
 // Web Notes - Content script
-// Loads and displays existing notes for the current page
+// Loads and displays existing notes for the current page with markdown editing support
 
-/* global EXTENSION_CONSTANTS */
+/* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote */
 
 // Timing constants for better maintainability
 const TIMING = {
@@ -9,7 +9,17 @@ const TIMING = {
   FADE_ANIMATION_DELAY: 250,    // Time for fade-in animation to complete
   RESIZE_DEBOUNCE: 300,         // Debounce delay for resize events
   SCROLL_DEBOUNCE: 200,         // Debounce delay for scroll events (if needed)
-  URL_MONITOR_INTERVAL: 2000    // Interval for URL change monitoring (2 seconds)
+  URL_MONITOR_INTERVAL: 2000,   // Interval for URL change monitoring (2 seconds)
+  AUTOSAVE_DELAY: 1000,         // Auto-save delay during editing (1 second)
+  DOUBLE_CLICK_DELAY: 300,       // Max time between clicks for double-click (300ms)
+};
+
+// Editing state management
+const EditingState = {
+  currentlyEditingNote: null,
+  lastClickTime: 0,
+  lastClickedNote: null,
+  autosaveTimeouts: new Map(), // Map of noteId -> timeout
 };
 
 console.log("Web Notes - Content script loaded!");
@@ -47,9 +57,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 /**
  * Load and display existing notes for the current URL
  */
-function loadExistingNotes() {
+async function loadExistingNotes() {
   try {
-    chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+    chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], async function (result) {
       if (chrome.runtime.lastError) {
         console.error("[Web Notes] Failed to load notes:", chrome.runtime.lastError);
         return;
@@ -60,11 +70,34 @@ function loadExistingNotes() {
 
       console.log(`[Web Notes] Found ${urlNotes.length} notes for current URL`);
 
-      urlNotes.forEach(noteData => {
+      // Migrate and display notes, saving if migration occurred
+      let needsBulkSave = false;
+      const migratedNotes = [];
+
+      for (const noteData of urlNotes) {
         if (noteData.isVisible) {
-          displayNote(noteData);
+          const migratedNote = await NoteDataUtils.migrateLegacyNote(noteData, false);
+          if (migratedNote !== noteData) {
+            needsBulkSave = true;
+          }
+          migratedNotes.push(migratedNote);
+          displayNote(migratedNote);
+        } else {
+          migratedNotes.push(noteData);
         }
-      });
+      }
+
+      // Save all migrated notes in bulk if any were migrated
+      if (needsBulkSave) {
+        notes[window.location.href] = migratedNotes;
+        chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, function () {
+          if (chrome.runtime.lastError) {
+            console.error("[Web Notes] Failed to save migrated notes:", chrome.runtime.lastError);
+          } else {
+            console.log("[Web Notes] Successfully saved migrated notes");
+          }
+        });
+      }
     });
   } catch (error) {
     console.error("[Web Notes] Error loading existing notes:", error);
@@ -173,7 +206,7 @@ function ensureNoteVisibility(noteElement, noteData) {
  * Reposition all existing notes after window resize
  */
 function repositionAllNotes() {
-  const notes = document.querySelectorAll('.web-note');
+  const notes = document.querySelectorAll(".web-note");
   console.log(`[Web Notes] Repositioning ${notes.length} notes after window resize`);
 
   if (notes.length === 0) {
@@ -232,32 +265,6 @@ function handleWindowResize() {
   repositionAllNotes();
 }
 
-/**
- * Ensure all notes have minimum visibility by repositioning if needed
- */
-function ensureAllNotesVisible() {
-  console.log("[Web Notes] Ensuring all notes have minimum visibility");
-
-  const notes = document.querySelectorAll('.web-note');
-  console.log(`[Web Notes] Checking ${notes.length} notes for visibility`);
-
-  if (notes.length === 0) {
-    return;
-  }
-
-  // Batch storage operation - fetch all notes once
-  chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
-    if (chrome.runtime.lastError) {
-      console.error("[Web Notes] Storage error getting note data:", chrome.runtime.lastError);
-      return;
-    }
-
-    const allNotes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
-    const urlNotes = allNotes[window.location.href] || [];
-
-    ensureAllNotesVisibleBatched(allNotes, urlNotes);
-  });
-}
 
 /**
  * Batched version of ensureAllNotesVisible that uses pre-fetched data
@@ -265,7 +272,7 @@ function ensureAllNotesVisible() {
  * @param {Array} urlNotes - Notes for current URL
  */
 function ensureAllNotesVisibleBatched(allNotes, urlNotes) {
-  const notes = document.querySelectorAll('.web-note');
+  const notes = document.querySelectorAll(".web-note");
   let notesRepositioned = 0;
 
   notes.forEach((noteElement, index) => {
@@ -369,7 +376,7 @@ function addInteractiveEffects(noteElement, isAnchored) {
     if (!noteElement.classList.contains("dragging")) {
       noteElement.style.transform = "scale(1.02) translateZ(0)";
       noteElement.style.boxShadow = "0 5px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1)";
-      noteElement.style.borderColor = isAnchored ? 'rgba(33, 150, 243, 0.4)' : 'rgba(233, 30, 99, 0.4)';
+      noteElement.style.borderColor = isAnchored ? "rgba(33, 150, 243, 0.4)" : "rgba(233, 30, 99, 0.4)";
     }
   });
 
@@ -377,7 +384,7 @@ function addInteractiveEffects(noteElement, isAnchored) {
     if (!noteElement.classList.contains("dragging")) {
       noteElement.style.transform = "scale(1) translateZ(0)";
       noteElement.style.boxShadow = "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
-      noteElement.style.borderColor = isAnchored ? 'rgba(33, 150, 243, 0.2)' : 'rgba(233, 30, 99, 0.2)';
+      noteElement.style.borderColor = isAnchored ? "rgba(33, 150, 243, 0.2)" : "rgba(233, 30, 99, 0.2)";
     }
   });
 
@@ -387,7 +394,7 @@ function addInteractiveEffects(noteElement, isAnchored) {
   noteElement.setAttribute("aria-label", `Draggable note: ${noteElement.textContent}`);
 
   noteElement.addEventListener("focus", () => {
-    noteElement.style.outline = `2px solid ${isAnchored ? '#2196F3' : '#E91E63'}`;
+    noteElement.style.outline = `2px solid ${isAnchored ? "#2196F3" : "#E91E63"}`;
     noteElement.style.outlineOffset = "2px";
   });
 
@@ -455,7 +462,7 @@ function makeDraggable(noteElement, noteData, targetElement) {
     // Calculate and apply new position immediately (no restrictions)
     const newPosition = calculateNotePosition(
       { ...noteData, offsetX: newOffsetX, offsetY: newOffsetY },
-      targetElement
+      targetElement,
     );
 
     // Update visual position immediately
@@ -506,6 +513,328 @@ function makeDraggable(noteElement, noteData, targetElement) {
 }
 
 /**
+ * Add double-click editing capability to a note
+ * @param {Element} noteElement - The note DOM element
+ * @param {Object} noteData - The note data object
+ */
+function addEditingCapability(noteElement, noteData) {
+  let clickTimeout = null;
+
+  // Handle click events for double-click detection
+  function handleNoteClick(event) {
+    // Don't interfere with dragging
+    if (noteElement.classList.contains("dragging")) {
+      return;
+    }
+
+    event.stopPropagation();
+
+    const now = Date.now();
+    const timeDiff = now - EditingState.lastClickTime;
+
+    if (EditingState.lastClickedNote === noteElement && timeDiff < TIMING.DOUBLE_CLICK_DELAY) {
+      // Double-click detected - always use current data from element
+      clearTimeout(clickTimeout);
+      const currentNoteData = noteElement.noteData || noteData;
+      enterEditMode(noteElement, currentNoteData);
+    } else {
+      // Single click - wait to see if there's a second click
+      EditingState.lastClickTime = now;
+      EditingState.lastClickedNote = noteElement;
+
+      clickTimeout = setTimeout(() => {
+        // Single click confirmed - do nothing for now
+        EditingState.lastClickedNote = null;
+      }, TIMING.DOUBLE_CLICK_DELAY);
+    }
+  }
+
+  // Add click listener
+  noteElement.addEventListener("click", handleNoteClick);
+
+  // Prevent text selection during potential double-click
+  noteElement.addEventListener("selectstart", (e) => {
+    if (!noteElement.classList.contains("editing")) {
+      e.preventDefault();
+    }
+  });
+}
+
+/**
+ * Enter edit mode for a note
+ * @param {Element} noteElement - The note DOM element
+ * @param {Object} noteData - The note data object (may be stale, will use fresh data from element)
+ */
+function enterEditMode(noteElement, noteData) {
+  // Exit any currently editing note
+  if (EditingState.currentlyEditingNote && EditingState.currentlyEditingNote !== noteElement) {
+    exitEditMode(EditingState.currentlyEditingNote, false);
+  }
+
+  EditingState.currentlyEditingNote = noteElement;
+  noteElement.classList.add("editing");
+
+  // CRITICAL FIX: Always use the most recent data from the DOM element
+  // The noteData parameter may be stale from the original closure
+  const currentNoteData = noteElement.noteData || noteData;
+  const content = currentNoteData.content || "";
+
+  // Create textarea for editing
+  const textarea = document.createElement("textarea");
+  textarea.className = "note-editor";
+  textarea.value = content;
+
+  // Style the textarea to match the note
+  const noteStyles = window.getComputedStyle(noteElement);
+  textarea.style.cssText = `
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+    font-family: ${noteStyles.fontFamily};
+    font-size: ${noteStyles.fontSize};
+    font-weight: ${noteStyles.fontWeight};
+    line-height: ${noteStyles.lineHeight};
+    letter-spacing: ${noteStyles.letterSpacing};
+    color: ${noteStyles.color};
+    padding: 0;
+    margin: 0;
+    resize: none;
+    outline: none;
+    overflow: hidden;
+  `;
+
+  // Store original content for cancellation
+  textarea.originalContent = content;
+
+  // Clear note content and add textarea
+  noteElement.innerHTML = "";
+  noteElement.appendChild(textarea);
+
+  // Focus and select content
+  textarea.focus();
+  textarea.select();
+
+  // Disable dragging during edit
+  noteElement.style.cursor = "text";
+
+  // Add visual indicator for edit mode
+  noteElement.style.borderColor = "#2196F3";
+  noteElement.style.borderWidth = "2px";
+  noteElement.style.borderStyle = "solid";
+
+  // Auto-resize textarea
+  function autoResize() {
+    textarea.style.height = "auto";
+    textarea.style.height = textarea.scrollHeight + "px";
+  }
+
+  textarea.addEventListener("input", autoResize);
+  autoResize(); // Initial resize
+
+  // Add keyboard shortcuts
+  textarea.addEventListener("keydown", (event) => {
+    handleEditKeydown(event, noteElement, currentNoteData, textarea);
+  });
+
+  // Auto-save functionality
+  let saveTimeout;
+  textarea.addEventListener("input", () => {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+      autoSaveNote(noteElement, currentNoteData, textarea.value);
+    }, TIMING.AUTOSAVE_DELAY);
+    EditingState.autosaveTimeouts.set(currentNoteData.id, saveTimeout);
+  });
+
+  // Click outside to save and exit
+  function handleClickOutside(event) {
+    if (!noteElement.contains(event.target)) {
+      exitEditMode(noteElement, true);
+      document.removeEventListener("click", handleClickOutside);
+    }
+  }
+
+  // Add click outside listener after a brief delay to avoid immediate trigger
+  setTimeout(() => {
+    document.addEventListener("click", handleClickOutside);
+  }, 100);
+
+  console.log(`[Web Notes] Entered edit mode for note ${currentNoteData.id}`);
+}
+
+/**
+ * Exit edit mode for a note
+ * @param {Element} noteElement - The note DOM element
+ * @param {boolean} save - Whether to save changes
+ */
+function exitEditMode(noteElement, save = true) {
+  if (!noteElement.classList.contains("editing")) {
+    return; // Not in edit mode
+  }
+
+  const textarea = noteElement.querySelector(".note-editor");
+  if (!textarea) {
+    return; // No textarea found
+  }
+
+  // Always use current data from element (may have been updated since edit mode started)
+  const noteData = noteElement.noteData;
+  if (!noteData) {
+    console.error("[Web Notes] No note data found on element during exit edit mode");
+    return;
+  }
+  const newContent = save ? textarea.value : textarea.originalContent;
+
+  // Clear any pending auto-save
+  if (EditingState.autosaveTimeouts.has(noteData.id)) {
+    clearTimeout(EditingState.autosaveTimeouts.get(noteData.id));
+    EditingState.autosaveTimeouts.delete(noteData.id);
+  }
+
+  // Update note data and display
+  if (save && newContent !== textarea.originalContent) {
+    const updatedData = NoteDataUtils.createNoteData(noteData, newContent);
+    // CRITICAL: Update the DOM element's data to ensure consistency
+    noteElement.noteData = updatedData;
+
+    // Save to storage
+    updateNote(window.location.href, noteData.id, updatedData).then(success => {
+      if (success) {
+        console.log(`[Web Notes] Note ${noteData.id} saved successfully`);
+      } else {
+        console.error(`[Web Notes] Failed to save note ${noteData.id}`);
+      }
+    });
+  }
+
+  // Restore note display using the most current data
+  const displayContent = NoteDataUtils.getDisplayContent(noteElement.noteData);
+  noteElement.innerHTML = displayContent.html;
+
+  // Restore styling
+  noteElement.classList.remove("editing");
+  noteElement.style.cursor = "move";
+  noteElement.style.borderColor = "";
+  noteElement.style.borderWidth = "";
+  noteElement.style.borderStyle = "";
+
+  // Clear editing state
+  EditingState.currentlyEditingNote = null;
+
+  console.log(`[Web Notes] Exited edit mode for note ${noteData.id}, saved: ${save}`);
+}
+
+/**
+ * Handle keyboard shortcuts during editing
+ * @param {KeyboardEvent} event - The keyboard event
+ * @param {Element} noteElement - The note DOM element
+ * @param {Object} noteData - The note data object
+ * @param {Element} textarea - The textarea element
+ */
+function handleEditKeydown(event, noteElement, noteData, textarea) {
+  // Escape key - cancel and revert
+  if (event.key === "Escape") {
+    event.preventDefault();
+    exitEditMode(noteElement, false);
+    return;
+  }
+
+  // Ctrl+Enter or Cmd+Enter - save and exit
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    exitEditMode(noteElement, true);
+    return;
+  }
+
+  // Tab for indentation (basic markdown support)
+  if (event.key === "Tab") {
+    event.preventDefault();
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const value = textarea.value;
+
+    if (event.shiftKey) {
+      // Shift+Tab - remove indentation
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      const lineContent = value.substring(lineStart, start);
+      if (lineContent.match(/^\s{1,2}/)) {
+        textarea.value = value.substring(0, lineStart) +
+                        lineContent.replace(/^\s{1,2}/, "") +
+                        value.substring(start);
+        // eslint-disable-next-line max-len
+        textarea.setSelectionRange(start - Math.min(2, lineContent.match(/^\s*/)[0].length), end - Math.min(2, lineContent.match(/^\s*/)[0].length));
+      }
+    } else {
+      // Tab - add indentation
+      textarea.value = value.substring(0, start) + "  " + value.substring(end);
+      textarea.setSelectionRange(start + 2, end + 2);
+    }
+
+    // Trigger auto-resize
+    textarea.dispatchEvent(new Event("input"));
+  }
+
+  // Ctrl+B for bold (basic markdown shortcut)
+  if ((event.ctrlKey || event.metaKey) && event.key === "b") {
+    event.preventDefault();
+    insertMarkdownSyntax(textarea, "**", "**");
+  }
+
+  // Ctrl+I for italic (basic markdown shortcut)
+  if ((event.ctrlKey || event.metaKey) && event.key === "i") {
+    event.preventDefault();
+    insertMarkdownSyntax(textarea, "*", "*");
+  }
+}
+
+/**
+ * Insert markdown syntax around selected text
+ * @param {Element} textarea - The textarea element
+ * @param {string} before - Text to insert before selection
+ * @param {string} after - Text to insert after selection
+ */
+function insertMarkdownSyntax(textarea, before, after) {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selectedText = textarea.value.substring(start, end);
+  const replacement = before + selectedText + after;
+
+  textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+
+  // Position cursor
+  if (selectedText) {
+    textarea.setSelectionRange(start, start + replacement.length);
+  } else {
+    textarea.setSelectionRange(start + before.length, start + before.length);
+  }
+
+  // Trigger auto-resize and change events
+  textarea.dispatchEvent(new Event("input"));
+  textarea.focus();
+}
+
+/**
+ * Auto-save note during editing
+ * @param {Element} noteElement - The note DOM element
+ * @param {Object} noteData - The note data object
+ * @param {string} content - The current content
+ */
+function autoSaveNote(noteElement, noteData, content) {
+  const updatedData = NoteDataUtils.createNoteData(noteData, content);
+  // CRITICAL: Update the DOM element's data to ensure consistency for next edit
+  noteElement.noteData = updatedData;
+
+  updateNote(window.location.href, noteData.id, updatedData).then(success => {
+    if (success) {
+      console.log(`[Web Notes] Auto-saved note ${noteData.id}`);
+    } else {
+      console.error(`[Web Notes] Auto-save failed for note ${noteData.id}`);
+    }
+  });
+}
+
+/**
  * Display a note on the page with optimized DOM queries
  * @param {Object} noteData - The note data object
  */
@@ -552,8 +881,8 @@ function displayNote(noteData) {
     note.style.cssText = `
       position: absolute;
       background: ${isAnchored ?
-        'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)' :
-        'linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%)'};
+    "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)" :
+    "linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%)"};
       color: #2c3e50;
       padding: 10px 14px;
       border-radius: 8px;
@@ -565,7 +894,7 @@ function displayNote(noteData) {
       box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
       z-index: 10000;
       cursor: move;
-      border: 1px solid ${isAnchored ? 'rgba(33, 150, 243, 0.2)' : 'rgba(233, 30, 99, 0.2)'};
+      border: 1px solid ${isAnchored ? "rgba(33, 150, 243, 0.2)" : "rgba(233, 30, 99, 0.2)"};
       min-width: 85px;
       max-width: 220px;
       word-wrap: break-word;
@@ -576,8 +905,18 @@ function displayNote(noteData) {
       -webkit-backdrop-filter: blur(8px);
     `;
 
-    // Set note text
-    note.textContent = noteData.text;
+    // Get display content (note should already be migrated)
+    const displayContent = NoteDataUtils.getDisplayContent(noteData);
+
+    // Set note content (HTML for markdown, escaped HTML for plain text)
+    if (displayContent.isMarkdown) {
+      note.innerHTML = displayContent.html;
+    } else {
+      note.innerHTML = displayContent.html; // Already escaped by getDisplayContent
+    }
+
+    // Store the full note data on the element for editing
+    note.noteData = noteData;
 
     // Add to page temporarily to get accurate dimensions for positioning
     note.style.visibility = "hidden"; // Hide during positioning
@@ -597,6 +936,9 @@ function displayNote(noteData) {
     // Make the note draggable
     makeDraggable(note, noteData, targetElement);
 
+    // Add double-click editing functionality
+    addEditingCapability(note, noteData);
+
     // Animate in with a slight delay for smooth appearance
     requestAnimationFrame(() => {
       note.style.opacity = "1";
@@ -614,7 +956,7 @@ function displayNote(noteData) {
     console.log(
       `[Web Notes] Displaying draggable note ${finalPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
       `${noteData.elementSelector || noteData.elementXPath || "absolute coordinates"} ` +
-      `with offset (${offsetX}, ${offsetY}) at position (${finalPosition.x}, ${finalPosition.y})`
+      `with offset (${offsetX}, ${offsetY}) at position (${finalPosition.x}, ${finalPosition.y})`,
     );
   } catch (error) {
     console.error("[Web Notes] Error displaying note:", error);
@@ -660,7 +1002,7 @@ function startUrlMonitoring() {
 startUrlMonitoring();
 
 // Add window resize handling with debouncing
-window.addEventListener('resize', debounce(handleWindowResize, TIMING.RESIZE_DEBOUNCE));
+window.addEventListener("resize", debounce(handleWindowResize, TIMING.RESIZE_DEBOUNCE));
 
 // Note: Scroll handling removed to prevent repositioning during normal scrolling
 // Notes should only be repositioned when truly inaccessible (outside page bounds)
@@ -671,6 +1013,15 @@ window.addEventListener("beforeunload", () => {
     clearInterval(urlCheckInterval);
     urlCheckInterval = null;
   }
+
+  // Clean up editing state
+  if (EditingState.currentlyEditingNote) {
+    exitEditMode(EditingState.currentlyEditingNote, true); // Save on page unload
+  }
+
+  // Clear all auto-save timeouts
+  EditingState.autosaveTimeouts.forEach(timeout => clearTimeout(timeout));
+  EditingState.autosaveTimeouts.clear();
 
   // Clean up any remaining note elements
   document.querySelectorAll(".web-note").forEach(note => note.remove());
@@ -745,10 +1096,9 @@ function createNoteAtCoords(noteNumber, coords) {
       posTop = fallbackPosition.y - 30;
     }
 
-    // Store note data
-    const noteData = {
+    // Create enhanced note data with markdown support
+    const baseData = {
       id: noteId,
-      text: noteText,
       url: window.location.href,
       elementSelector: elementSelector,
       elementXPath: elementXPath,
@@ -761,6 +1111,8 @@ function createNoteAtCoords(noteNumber, coords) {
       timestamp: Date.now(),
       isVisible: true,
     };
+
+    const noteData = NoteDataUtils.createNoteData(baseData, noteText);
     displayNote(noteData);
 
     // Store in chrome storage using shared constants
