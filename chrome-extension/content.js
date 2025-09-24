@@ -8,7 +8,8 @@ const TIMING = {
   DOM_UPDATE_DELAY: 100,        // Time to allow DOM updates to complete
   FADE_ANIMATION_DELAY: 250,    // Time for fade-in animation to complete
   RESIZE_DEBOUNCE: 300,         // Debounce delay for resize events
-  SCROLL_DEBOUNCE: 200          // Debounce delay for scroll events (if needed)
+  SCROLL_DEBOUNCE: 200,         // Debounce delay for scroll events (if needed)
+  URL_MONITOR_INTERVAL: 2000    // Interval for URL change monitoring (2 seconds)
 };
 
 console.log("Web Notes - Content script loaded!");
@@ -140,7 +141,7 @@ function ensureNoteVisibility(noteElement, noteData) {
     // Update stored offset based on note type
     if (noteData.elementSelector || noteData.elementXPath) {
       // For anchored notes, calculate new offset from target element
-      const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector}-${noteData.elementXPath}`);
+      const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`);
       const targetElement = selectorResults.element;
 
       if (targetElement) {
@@ -202,7 +203,7 @@ function repositionAllNotes() {
       // Find target element if note is anchored
       let targetElement = null;
       if (noteData.elementSelector || noteData.elementXPath) {
-        const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector}-${noteData.elementXPath}`);
+        const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`);
         targetElement = selectorResults.element;
       }
 
@@ -516,7 +517,7 @@ function displayNote(noteData) {
     }
 
     let targetElement = null;
-    const cacheKey = `${noteData.elementSelector}-${noteData.elementXPath}`;
+    const cacheKey = `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`;
 
     // Check cache first
     if (elementCache.has(cacheKey)) {
@@ -646,17 +647,13 @@ function startUrlMonitoring() {
       // Clear element cache for new page
       elementCache.clear();
 
-      // Remove existing notes and handles
+      // Remove existing notes
       document.querySelectorAll(".web-note").forEach(note => note.remove());
-      offCanvasHandles.forEach((handle, noteId) => {
-        handle.remove();
-      });
-      offCanvasHandles.clear();
 
       // Load notes for new URL with debouncing
-      setTimeout(loadExistingNotes, 100);
+      setTimeout(loadExistingNotes, TIMING.DOM_UPDATE_DELAY);
     }
-  }, 2000); // Reduced frequency to 2 seconds
+  }, TIMING.URL_MONITOR_INTERVAL);
 }
 
 // Start monitoring
@@ -687,12 +684,8 @@ if ("navigation" in window) {
       // Clear element cache for new page
       elementCache.clear();
 
-      // Remove existing notes and handles
+      // Remove existing notes
       document.querySelectorAll(".web-note").forEach(note => note.remove());
-      offCanvasHandles.forEach((handle, noteId) => {
-        handle.remove();
-      });
-      offCanvasHandles.clear();
 
       // Load notes for new URL
       loadExistingNotes();
