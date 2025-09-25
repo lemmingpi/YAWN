@@ -43,7 +43,35 @@ This ensures complete context for the current session and maintains consistency 
 - No build process or bundling (not needed for current scope)
 - ~~Code duplication between background.js and popup.js~~ ✅ **RESOLVED** - Created shared-utils.js
 
-## Latest Session Summary (2024-09-24) - Markdown Editing Implementation
+## Latest Session Summary (2025-01-24) - Enhanced URL Matching & Drag-Edit Improvements
+
+### Major Accomplishments - Session 5
+1. **Enhanced URL Matching System** - Implemented URL normalization that ignores anchor fragments (#) while preserving query parameters for better note visibility across page navigation
+2. **Drag-Edit Interaction Improvements** - Resolved conflicts between drag operations and text editing by disabling drag during edit mode
+3. **Backward-Compatible Migration** - Created automatic migration system for existing notes to work with enhanced URL matching
+4. **Production-Ready PR** - Created and updated PR #9 with comprehensive feedback resolution and testing plan
+
+### Technical Implementation Highlights - Session 5
+- **URL Normalization**: Smart URL processing that strips anchors but preserves query parameters for dynamic page functionality
+- **Cross-Anchor Visibility**: Notes created on `example.com/page` now appear on `example.com/page#section1` and `example.com/page#section2`
+- **Drag Prevention Logic**: Dynamic cursor management and event handling prevents drag interference during text editing
+- **Migration System**: Automatic consolidation of URL variations with cleanup to prevent storage bloat
+- **Error Handling**: Comprehensive fallback mechanisms and input validation throughout
+
+### Critical Issues Resolved - Session 5
+- **URL Fragment Navigation**: Fixed notes disappearing when users navigate using anchor links within pages
+- **Drag-Edit Conflicts**: Resolved interference between drag operations and text selection during note editing
+- **PR Code Quality**: Addressed all Copilot feedback including unreachable code, documentation clarity, and migration explanations
+- **Storage Optimization**: Implemented deduplication and cleanup logic for efficient note storage
+- **Cursor Management**: Enhanced visual feedback with proper cursor states (text/move/grabbing) based on interaction context
+
+### Pull Request Status - Session 5
+- **PR #9**: `feat(extension): enhanced URL matching and drag-edit interaction improvements`
+- **Status**: Ready for review/merge with all feedback addressed (6 total commits)
+- **Features**: Two major UX improvements with zero breaking changes
+- **Testing**: Comprehensive manual testing plan with edge cases covered
+
+## Previous Session Summary (2024-09-24) - Markdown Editing Implementation
 
 ### Major Accomplishments - Session 4
 1. **Complete Markdown Editing System** - Implemented in-place note editing with markdown support, security hardening, and XSS protection
@@ -211,12 +239,16 @@ Refactor documentation and add comprehensive JavaScript/HTML formatting and lint
 #### Previous Session Goal
 Implement comprehensive note offset positioning and drag functionality with 50px visibility system ✅
 
-#### Current Session Goal ✅
+#### Previous Session Goal ✅
 Implement note editing functionality with markdown support and fix critical editing bugs
+
+#### Current Session Goal ✅
+Implement enhanced URL matching and resolve drag-edit interaction conflicts
 
 #### Next Session Should
 - Review and merge PR #7 (note offset and drag functionality)
 - Review and merge PR #8 (markdown editing with migration system)
+- Review and merge PR #9 (enhanced URL matching and drag-edit improvements)
 - Add note deletion capability (right-click context menu or keyboard shortcut)
 - Implement rich text markdown toolbar for enhanced editing experience
 - Begin automated testing framework for chrome extension
