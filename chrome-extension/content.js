@@ -91,7 +91,8 @@ async function loadExistingNotes() {
       }
 
       // Save all migrated notes in bulk if any were migrated
-      // Note: This will consolidate notes under the normalized URL during migration
+      // Note: This will move all notes from URL variations (with different anchors)
+      // under a single normalized URL and clean up the old entries to avoid duplicates.
       if (needsBulkSave) {
         const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
         notes[normalizedUrl] = migratedNotes;

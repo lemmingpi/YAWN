@@ -123,7 +123,7 @@ async function setNotes(notes) {
 }
 
 /**
- * Update a single note in storage with enhanced URL matching
+ * Update a single note in storage, searching across URL variations that match when normalized (ignoring anchor fragments)
  * @param {string} url - The URL where the note exists
  * @param {string} noteId - The note ID to update
  * @param {Object} noteData - The updated note data
@@ -146,14 +146,8 @@ async function updateNote(url, noteId, noteData) {
       }
     }
 
-    // If not found in existing URLs, try adding to normalized URL
-    const normalizedUrl = normalizeUrlForNoteStorage(url);
-    if (!matchingUrls.includes(normalizedUrl)) {
-      logError("Note not found for update", { url, noteId, searchedUrls: matchingUrls });
-      return false;
-    }
-
-    logError("Note not found for update", { url, noteId });
+    // Note not found in any matching URL variations
+    logError("Note not found for update", { url, noteId, searchedUrls: matchingUrls });
     return false;
   } catch (error) {
     logError("Error updating note", error);
