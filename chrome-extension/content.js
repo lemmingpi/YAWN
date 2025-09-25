@@ -1,7 +1,7 @@
 // Web Notes - Content script
 // Loads and displays existing notes for the current page with markdown editing support
 
-/* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote, normalizeUrlForNoteStorage */
+/* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote, deleteNote, normalizeUrlForNoteStorage */
 /* global getNotesForUrl, findMatchingUrlsInStorage */
 
 // Timing constants for better maintainability
@@ -657,9 +657,71 @@ function enterEditMode(noteElement, noteData) {
   // Store original content for cancellation
   textarea.originalContent = content;
 
-  // Clear note content and add textarea
+  // Create container for toolbar, textarea and delete button
+  const editContainer = document.createElement("div");
+  editContainer.style.cssText = `
+    position: relative;
+    width: 100%;
+    height: 100%;
+  `;
+
+  // Create markdown toolbar
+  const toolbar = createMarkdownToolbar(textarea);
+  toolbar.className += " edit-toolbar";
+
+  // Create delete button
+  const deleteButton = document.createElement("button");
+  deleteButton.className = "note-delete-button";
+  deleteButton.innerHTML = "&times;";
+  deleteButton.style.cssText = `
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 10002;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+    line-height: 1;
+    padding: 0;
+  `;
+
+  // Add hover effects to delete button
+  deleteButton.addEventListener("mouseenter", () => {
+    deleteButton.style.background = "#d32f2f";
+    deleteButton.style.transform = "scale(1.1)";
+    deleteButton.style.boxShadow = "0 3px 6px rgba(0, 0, 0, 0.3)";
+  });
+
+  deleteButton.addEventListener("mouseleave", () => {
+    deleteButton.style.background = "#f44336";
+    deleteButton.style.transform = "scale(1)";
+    deleteButton.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.2)";
+  });
+
+  // Add delete button click handler
+  deleteButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handleNoteDelete(noteElement, currentNoteData);
+  });
+
+  // Clear note content and add edit container
   noteElement.innerHTML = "";
-  noteElement.appendChild(textarea);
+  editContainer.appendChild(toolbar);
+  editContainer.appendChild(textarea);
+  editContainer.appendChild(deleteButton);
+  noteElement.appendChild(editContainer);
 
   // Focus and select content
   textarea.focus();
@@ -839,6 +901,164 @@ function handleEditKeydown(event, noteElement, noteData, textarea) {
 }
 
 /**
+ * Create a markdown toolbar for the editing interface
+ * @param {Element} textarea - The textarea element to control
+ * @returns {Element} The toolbar element
+ */
+function createMarkdownToolbar(textarea) {
+  const toolbar = document.createElement("div");
+  toolbar.className = "markdown-toolbar";
+  toolbar.style.cssText = `
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding: 4px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 4px;
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    margin-bottom: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    width: max-content;
+  `;
+
+  // Define toolbar buttons with their configurations
+  const toolbarButtons = [
+    {
+      title: "Bold",
+      icon: "B",
+      style: "font-weight: bold;",
+      action: () => insertMarkdownSyntax(textarea, "**", "**"),
+    },
+    {
+      title: "Italic",
+      icon: "I",
+      style: "font-style: italic;",
+      action: () => insertMarkdownSyntax(textarea, "*", "*"),
+    },
+    {
+      title: "Header 1",
+      icon: "H1",
+      style: "font-size: 12px; font-weight: bold;",
+      action: () => insertLinePrefix(textarea, "# "),
+    },
+    {
+      title: "Header 2",
+      icon: "H2",
+      style: "font-size: 11px; font-weight: bold;",
+      action: () => insertLinePrefix(textarea, "## "),
+    },
+    {
+      title: "Header 3",
+      icon: "H3",
+      style: "font-size: 10px; font-weight: bold;",
+      action: () => insertLinePrefix(textarea, "### "),
+    },
+    {
+      title: "Link",
+      icon: "🔗",
+      style: "",
+      action: () => insertMarkdownLink(textarea),
+    },
+    {
+      title: "Unordered List",
+      icon: "•",
+      style: "font-weight: bold;",
+      action: () => insertLinePrefix(textarea, "- "),
+    },
+    {
+      title: "Ordered List",
+      icon: "1.",
+      style: "font-size: 11px; font-weight: bold;",
+      action: () => insertOrderedListItem(textarea),
+    },
+    {
+      title: "Inline Code",
+      icon: "<>",
+      style: "font-family: monospace; font-size: 11px;",
+      action: () => insertMarkdownSyntax(textarea, "`", "`"),
+    },
+    {
+      title: "Quote",
+      icon: "\"",
+      style: "font-weight: bold; font-size: 14px;",
+      action: () => insertLinePrefix(textarea, "> "),
+    },
+    {
+      title: "Strikethrough",
+      icon: "S",
+      style: "text-decoration: line-through;",
+      action: () => insertMarkdownSyntax(textarea, "~~", "~~"),
+    },
+  ];
+
+  // Create buttons
+  toolbarButtons.forEach(buttonConfig => {
+    const button = document.createElement("button");
+    button.className = "toolbar-button";
+    button.title = buttonConfig.title;
+    button.innerHTML = buttonConfig.icon;
+
+    button.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border: 0.5px solid rgba(0, 0, 0, 0.12);
+      background: linear-gradient(135deg, #ffffff 0%, #f0f2f5 100%);
+      color: #333;
+      border-radius: 2px;
+      cursor: pointer;
+      font-size: 8px;
+      padding: 0;
+      transition: all 0.2s ease;
+      user-select: none;
+      ${buttonConfig.style}
+    `;
+
+    // Add hover and active effects
+    button.addEventListener("mouseenter", () => {
+      button.style.background = "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)";
+      button.style.borderColor = "#2196F3";
+      button.style.transform = "translateY(-1px)";
+      button.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.15)";
+    });
+
+    button.addEventListener("mouseleave", () => {
+      button.style.background = "linear-gradient(135deg, #ffffff 0%, #f0f2f5 100%)";
+      button.style.borderColor = "rgba(0, 0, 0, 0.15)";
+      button.style.transform = "translateY(0)";
+      button.style.boxShadow = "none";
+    });
+
+    button.addEventListener("mousedown", () => {
+      button.style.transform = "translateY(1px)";
+    });
+
+    button.addEventListener("mouseup", () => {
+      button.style.transform = "translateY(-1px)";
+    });
+
+    // Add click handler
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      buttonConfig.action();
+
+      // Maintain focus on textarea
+      setTimeout(() => {
+        textarea.focus();
+      }, 0);
+    });
+
+    toolbar.appendChild(button);
+  });
+
+  return toolbar;
+}
+
+/**
  * Insert markdown syntax around selected text
  * @param {Element} textarea - The textarea element
  * @param {string} before - Text to insert before selection
@@ -858,6 +1078,120 @@ function insertMarkdownSyntax(textarea, before, after) {
   } else {
     textarea.setSelectionRange(start + before.length, start + before.length);
   }
+
+  // Trigger auto-resize and change events
+  textarea.dispatchEvent(new Event("input"));
+  textarea.focus();
+}
+
+/**
+ * Insert prefix at the beginning of the current line
+ * @param {Element} textarea - The textarea element
+ * @param {string} prefix - The prefix to insert
+ */
+function insertLinePrefix(textarea, prefix) {
+  const start = textarea.selectionStart;
+  const value = textarea.value;
+
+  // Find the beginning of the current line
+  const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+  const lineEnd = value.indexOf("\n", start);
+  const actualLineEnd = lineEnd === -1 ? value.length : lineEnd;
+  const currentLine = value.substring(lineStart, actualLineEnd);
+
+  // Check if the line already has this prefix
+  if (currentLine.startsWith(prefix)) {
+    // Remove the prefix
+    const newLine = currentLine.substring(prefix.length);
+    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.setSelectionRange(start - prefix.length, start - prefix.length);
+  } else {
+    // Add the prefix
+    const newLine = prefix + currentLine;
+    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.setSelectionRange(start + prefix.length, start + prefix.length);
+  }
+
+  // Trigger auto-resize and change events
+  textarea.dispatchEvent(new Event("input"));
+  textarea.focus();
+}
+
+/**
+ * Insert an ordered list item with proper numbering
+ * @param {Element} textarea - The textarea element
+ */
+function insertOrderedListItem(textarea) {
+  const start = textarea.selectionStart;
+  const value = textarea.value;
+
+  // Find the beginning of the current line
+  const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+  const lineEnd = value.indexOf("\n", start);
+  const actualLineEnd = lineEnd === -1 ? value.length : lineEnd;
+  const currentLine = value.substring(lineStart, actualLineEnd);
+
+  // Check if there's already a numbered list item
+  const listItemMatch = currentLine.match(/^(\d+)\.\s/);
+  if (listItemMatch) {
+    // Remove the numbering
+    const newLine = currentLine.substring(listItemMatch[0].length);
+    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.setSelectionRange(start - listItemMatch[0].length, start - listItemMatch[0].length);
+  } else {
+    // Look for the previous line to determine the number
+    let number = 1;
+    const prevLineEnd = lineStart - 1;
+    if (prevLineEnd > 0) {
+      const prevLineStart = value.lastIndexOf("\n", prevLineEnd - 1) + 1;
+      const prevLine = value.substring(prevLineStart, prevLineEnd);
+      const prevMatch = prevLine.match(/^(\d+)\.\s/);
+      if (prevMatch) {
+        number = parseInt(prevMatch[1]) + 1;
+      }
+    }
+
+    // Add the numbered prefix
+    const prefix = `${number}. `;
+    const newLine = prefix + currentLine;
+    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.setSelectionRange(start + prefix.length, start + prefix.length);
+  }
+
+  // Trigger auto-resize and change events
+  textarea.dispatchEvent(new Event("input"));
+  textarea.focus();
+}
+
+/**
+ * Insert a markdown link with placeholder text
+ * @param {Element} textarea - The textarea element
+ */
+function insertMarkdownLink(textarea) {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selectedText = textarea.value.substring(start, end);
+
+  let linkText, linkUrl, replacement;
+
+  if (selectedText) {
+    // If text is selected, use it as the link text
+    linkText = selectedText;
+    linkUrl = "url";
+    replacement = `[${linkText}](${linkUrl})`;
+  } else {
+    // No selection, insert template
+    linkText = "link text";
+    linkUrl = "url";
+    replacement = `[${linkText}](${linkUrl})`;
+  }
+
+  textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+
+  // Select the URL part for easy editing
+  const urlStart = start + linkText.length + 3; // [link text](
+  const urlEnd = urlStart + linkUrl.length;
+  textarea.setSelectionRange(urlStart, urlEnd);
 
   // Trigger auto-resize and change events
   textarea.dispatchEvent(new Event("input"));
@@ -1528,5 +1862,304 @@ function generateXPath(element) {
   } catch (error) {
     console.error("[Web Notes] Error generating XPath:", error);
     return null;
+  }
+}
+
+/**
+ * Handle note deletion with confirmation dialog
+ * @param {Element} noteElement - The note DOM element
+ * @param {Object} noteData - The note data object
+ */
+async function handleNoteDelete(noteElement, noteData) {
+  try {
+    // Create custom confirmation dialog to maintain consistency with extension styling
+    const confirmed = await createCustomConfirmDialog(
+      "Delete Note",
+      "Are you sure you want to delete this note? This action cannot be undone.",
+      "Delete",
+      "Cancel",
+    );
+
+    if (!confirmed) {
+      console.log(`[Web Notes] Note deletion cancelled by user: ${noteData.id}`);
+      return;
+    }
+
+    // Exit edit mode without saving
+    exitEditMode(noteElement, false);
+
+    // Remove note from DOM with animation
+    noteElement.style.transition = "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)";
+    noteElement.style.opacity = "0";
+    noteElement.style.transform = "scale(0.8)";
+
+    setTimeout(() => {
+      if (noteElement.parentNode) {
+        noteElement.remove();
+        console.log(`[Web Notes] Note ${noteData.id} removed from DOM`);
+      }
+    }, 300);
+
+    // Delete from storage
+    const success = await deleteNote(window.location.href, noteData.id);
+
+    if (success) {
+      console.log(`[Web Notes] Successfully deleted note ${noteData.id}`);
+
+      // Clear editing state if this was the currently editing note
+      if (EditingState.currentlyEditingNote === noteElement) {
+        EditingState.currentlyEditingNote = null;
+      }
+
+      // Clear any pending auto-save timeouts
+      if (EditingState.autosaveTimeouts.has(noteData.id)) {
+        clearTimeout(EditingState.autosaveTimeouts.get(noteData.id));
+        EditingState.autosaveTimeouts.delete(noteData.id);
+      }
+    } else {
+      console.error(`[Web Notes] Failed to delete note ${noteData.id} from storage`);
+      // Show error message to user (note is already removed from DOM, but this indicates a storage issue)
+      showTemporaryMessage("Failed to delete note from storage. The note may reappear on page reload.", "error");
+    }
+  } catch (error) {
+    console.error("[Web Notes] Error during note deletion:", error);
+    showTemporaryMessage("Error occurred while deleting note", "error");
+  }
+}
+
+/**
+ * Create a custom styled confirmation dialog
+ * @param {string} title - Dialog title
+ * @param {string} message - Dialog message
+ * @param {string} confirmText - Confirm button text
+ * @param {string} cancelText - Cancel button text
+ * @returns {Promise<boolean>} Promise resolving to user choice
+ */
+function createCustomConfirmDialog(title, message, confirmText, cancelText) {
+  return new Promise((resolve) => {
+    // Create overlay
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10002;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    `;
+
+    // Create dialog
+    const dialog = document.createElement("div");
+    dialog.style.cssText = `
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      min-width: 320px;
+      max-width: 400px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      transform: scale(0.8);
+      transition: transform 0.2s ease;
+    `;
+
+    // Create title
+    const titleElement = document.createElement("h3");
+    titleElement.textContent = title;
+    titleElement.style.cssText = `
+      margin: 0 0 12px 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+    `;
+
+    // Create message
+    const messageElement = document.createElement("p");
+    messageElement.textContent = message;
+    messageElement.style.cssText = `
+      margin: 0 0 24px 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #666;
+    `;
+
+    // Create button container
+    const buttonContainer = document.createElement("div");
+    buttonContainer.style.cssText = `
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    `;
+
+    // Create cancel button
+    const cancelButton = document.createElement("button");
+    cancelButton.textContent = cancelText;
+    cancelButton.style.cssText = `
+      padding: 10px 20px;
+      border: 1px solid #ddd;
+      background: white;
+      color: #666;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+
+    // Create confirm button
+    const confirmButton = document.createElement("button");
+    confirmButton.textContent = confirmText;
+    confirmButton.style.cssText = `
+      padding: 10px 20px;
+      border: none;
+      background: #f44336;
+      color: white;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+
+    // Add hover effects
+    cancelButton.addEventListener("mouseenter", () => {
+      cancelButton.style.background = "#f5f5f5";
+      cancelButton.style.borderColor = "#ccc";
+    });
+
+    cancelButton.addEventListener("mouseleave", () => {
+      cancelButton.style.background = "white";
+      cancelButton.style.borderColor = "#ddd";
+    });
+
+    confirmButton.addEventListener("mouseenter", () => {
+      confirmButton.style.background = "#d32f2f";
+    });
+
+    confirmButton.addEventListener("mouseleave", () => {
+      confirmButton.style.background = "#f44336";
+    });
+
+    // Handle responses
+    function handleResponse(result) {
+      overlay.style.opacity = "0";
+      dialog.style.transform = "scale(0.8)";
+
+      setTimeout(() => {
+        if (overlay.parentNode) {
+          overlay.remove();
+        }
+        resolve(result);
+      }, 200);
+    }
+
+    cancelButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleResponse(false);
+    });
+
+    confirmButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleResponse(true);
+    });
+
+    // Handle overlay click (cancel)
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        handleResponse(false);
+      }
+    });
+
+    // Handle escape key
+    function handleEscapeKey(e) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        document.removeEventListener("keydown", handleEscapeKey);
+        handleResponse(false);
+      }
+    }
+    document.addEventListener("keydown", handleEscapeKey);
+
+    // Assemble dialog
+    buttonContainer.appendChild(cancelButton);
+    buttonContainer.appendChild(confirmButton);
+    dialog.appendChild(titleElement);
+    dialog.appendChild(messageElement);
+    dialog.appendChild(buttonContainer);
+    overlay.appendChild(dialog);
+
+    // Add to page and animate in
+    document.body.appendChild(overlay);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      overlay.style.opacity = "1";
+      dialog.style.transform = "scale(1)";
+    });
+
+    // Focus confirm button for accessibility
+    setTimeout(() => {
+      confirmButton.focus();
+    }, 100);
+  });
+}
+
+/**
+ * Show a temporary message to the user
+ * @param {string} message - Message to show
+ * @param {string} type - Message type ('error', 'success', 'info')
+ */
+function showTemporaryMessage(message, type = "info") {
+  try {
+    const messageElement = document.createElement("div");
+    messageElement.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: ${type === "error" ? "#f44336" : type === "success" ? "#4caf50" : "#2196f3"};
+      color: white;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 10003;
+      max-width: 300px;
+      opacity: 0;
+      transform: translateX(100%);
+      transition: all 0.3s ease;
+    `;
+
+    messageElement.textContent = message;
+    document.body.appendChild(messageElement);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      messageElement.style.opacity = "1";
+      messageElement.style.transform = "translateX(0)";
+    });
+
+    // Remove after 4 seconds
+    setTimeout(() => {
+      messageElement.style.opacity = "0";
+      messageElement.style.transform = "translateX(100%)";
+      setTimeout(() => {
+        if (messageElement.parentNode) {
+          messageElement.remove();
+        }
+      }, 300);
+    }, 4000);
+  } catch (error) {
+    console.error("[Web Notes] Error showing temporary message:", error);
+    // Fallback to alert if custom message fails
+    alert(message);
   }
 }
