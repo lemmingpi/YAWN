@@ -1,7 +1,8 @@
 // Web Notes - Content script
 // Loads and displays existing notes for the current page with markdown editing support
 
-/* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote, normalizeUrlForNoteStorage, getNotesForUrl, findMatchingUrlsInStorage */
+/* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote, normalizeUrlForNoteStorage */
+/* global getNotesForUrl, findMatchingUrlsInStorage */
 
 // Timing constants for better maintainability
 const TIMING = {
@@ -390,6 +391,20 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
 }
 
 /**
+ * Update note cursor based on current state (edit mode vs drag mode)
+ * @param {Element} noteElement - The note DOM element
+ */
+function updateNoteCursor(noteElement) {
+  if (noteElement.classList.contains("editing")) {
+    noteElement.style.cursor = "text";
+  } else if (noteElement.classList.contains("dragging")) {
+    noteElement.style.cursor = "grabbing";
+  } else {
+    noteElement.style.cursor = "move";
+  }
+}
+
+/**
  * Add interactive hover and focus effects to a note element
  * @param {Element} noteElement - The note DOM element
  * @param {boolean} isAnchored - Whether the note is anchored to a DOM element
@@ -397,7 +412,7 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
 function addInteractiveEffects(noteElement, isAnchored) {
   // Hover effects
   noteElement.addEventListener("mouseenter", () => {
-    if (!noteElement.classList.contains("dragging")) {
+    if (!noteElement.classList.contains("dragging") && !noteElement.classList.contains("editing")) {
       noteElement.style.transform = "scale(1.02) translateZ(0)";
       noteElement.style.boxShadow = "0 5px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1)";
       noteElement.style.borderColor = isAnchored ? "rgba(33, 150, 243, 0.4)" : "rgba(233, 30, 99, 0.4)";
@@ -405,7 +420,7 @@ function addInteractiveEffects(noteElement, isAnchored) {
   });
 
   noteElement.addEventListener("mouseleave", () => {
-    if (!noteElement.classList.contains("dragging")) {
+    if (!noteElement.classList.contains("dragging") && !noteElement.classList.contains("editing")) {
       noteElement.style.transform = "scale(1) translateZ(0)";
       noteElement.style.boxShadow = "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
       noteElement.style.borderColor = isAnchored ? "rgba(33, 150, 243, 0.2)" : "rgba(233, 30, 99, 0.2)";
@@ -442,6 +457,11 @@ function makeDraggable(noteElement, noteData, targetElement) {
   let startOffsetY = noteData.offsetY || 0;
 
   function handleDragStart(e) {
+    // CRITICAL: Prevent drag operations when note is in edit mode
+    if (noteElement.classList.contains("editing")) {
+      return; // Allow normal text selection and cursor behavior in edit mode
+    }
+
     // Prevent default drag behavior and text selection
     e.preventDefault();
     e.stopPropagation();
@@ -454,7 +474,7 @@ function makeDraggable(noteElement, noteData, targetElement) {
 
     // Enhanced drag visual feedback
     noteElement.classList.add("dragging");
-    noteElement.style.cursor = "grabbing";
+    updateNoteCursor(noteElement);
     noteElement.style.transform = "scale(1.05) rotateZ(2deg) translateZ(0)";
     noteElement.style.boxShadow = "0 8px 32px rgba(0, 0, 0, 0.24), 0 4px 8px rgba(0, 0, 0, 0.12)";
     noteElement.style.zIndex = "10001";
@@ -508,7 +528,7 @@ function makeDraggable(noteElement, noteData, targetElement) {
 
     // Restore normal styling with smooth transition
     noteElement.classList.remove("dragging");
-    noteElement.style.cursor = "move";
+    updateNoteCursor(noteElement);
     noteElement.style.transform = "scale(1) rotateZ(0deg) translateZ(0)";
     noteElement.style.boxShadow = "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
     noteElement.style.zIndex = "10000";
@@ -533,8 +553,12 @@ function makeDraggable(noteElement, noteData, targetElement) {
   // Add mousedown event listener to start dragging
   noteElement.addEventListener("mousedown", handleDragStart);
 
-  // Prevent text selection during potential drag
-  noteElement.addEventListener("selectstart", e => e.preventDefault());
+  // Prevent text selection during potential drag (but allow it in edit mode)
+  noteElement.addEventListener("selectstart", e => {
+    if (!noteElement.classList.contains("editing")) {
+      e.preventDefault();
+    }
+  });
 }
 
 /**
@@ -640,8 +664,8 @@ function enterEditMode(noteElement, noteData) {
   textarea.focus();
   textarea.select();
 
-  // Disable dragging during edit
-  noteElement.style.cursor = "text";
+  // Update cursor for edit mode
+  updateNoteCursor(noteElement);
 
   // Add visual indicator for edit mode
   noteElement.style.borderColor = "#2196F3";
@@ -739,7 +763,7 @@ function exitEditMode(noteElement, save = true) {
 
   // Restore styling
   noteElement.classList.remove("editing");
-  noteElement.style.cursor = "move";
+  updateNoteCursor(noteElement);
   noteElement.style.borderColor = "";
   noteElement.style.borderWidth = "";
   noteElement.style.borderStyle = "";
