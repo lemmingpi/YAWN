@@ -4,7 +4,7 @@
  * Uses shared utilities from shared-utils.js
  */
 
-/* global EXTENSION_CONSTANTS, logError, getNotes, getConfig, setConfig, isTabValid */
+/* global EXTENSION_CONSTANTS, logError, getStats, setStats, isTabValid, showHelloWorldBanner, hideHelloWorldBanner */
 
 // Use shared constants and functions
 // EXTENSION_CONSTANTS, logError, getStats, setStats, isTabValid are imported

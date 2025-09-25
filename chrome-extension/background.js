@@ -87,18 +87,14 @@ async function createNoteWithCoordinates(tabId, noteNumber) {
         reject(new Error("Message timeout"));
       }, EXTENSION_CONSTANTS.SCRIPT_INJECTION_TIMEOUT);
 
-      chrome.tabs.sendMessage(
-        tabId,
-        { action: "getLastClickCoords" },
-        result => {
-          clearTimeout(timeout);
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve(result);
-          }
-        },
-      );
+      chrome.tabs.sendMessage(tabId, { action: "getLastClickCoords" }, result => {
+        clearTimeout(timeout);
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(result);
+        }
+      });
     });
 
     if (!response || !response.success) {
@@ -195,4 +191,3 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 chrome.runtime.onStartup.addListener(() => {
   console.log("[Web Notes Extension] Extension startup");
 });
-

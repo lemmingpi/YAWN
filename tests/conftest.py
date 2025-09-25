@@ -36,13 +36,10 @@ def sample_note_data() -> dict:
         "anchor": {
             "selector": "#main-content",
             "xpath": "/html/body/main",
-            "text_fragment": "example text"
+            "text_fragment": "example text",
         },
         "category": "test",
-        "metadata": {
-            "created_by": "test_user",
-            "tags": ["test", "example"]
-        }
+        "metadata": {"created_by": "test_user", "tags": ["test", "example"]},
     }
 
 
@@ -57,5 +54,5 @@ def mock_chrome_extension_headers() -> dict:
     return {
         "Origin": "chrome-extension://abcdefghijklmnopqrstuvwxyz123456",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }

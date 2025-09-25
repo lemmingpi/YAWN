@@ -6,13 +6,13 @@
 
 // Timing constants for better maintainability
 const TIMING = {
-  DOM_UPDATE_DELAY: 100,        // Time to allow DOM updates to complete
-  FADE_ANIMATION_DELAY: 250,    // Time for fade-in animation to complete
-  RESIZE_DEBOUNCE: 300,         // Debounce delay for resize events
-  SCROLL_DEBOUNCE: 200,         // Debounce delay for scroll events (if needed)
-  URL_MONITOR_INTERVAL: 2000,   // Interval for URL change monitoring (2 seconds)
-  AUTOSAVE_DELAY: 1000,         // Auto-save delay during editing (1 second)
-  DOUBLE_CLICK_DELAY: 300,       // Max time between clicks for double-click (300ms)
+  DOM_UPDATE_DELAY: 100, // Time to allow DOM updates to complete
+  FADE_ANIMATION_DELAY: 250, // Time for fade-in animation to complete
+  RESIZE_DEBOUNCE: 300, // Debounce delay for resize events
+  SCROLL_DEBOUNCE: 200, // Debounce delay for scroll events (if needed)
+  URL_MONITOR_INTERVAL: 2000, // Interval for URL change monitoring (2 seconds)
+  AUTOSAVE_DELAY: 1000, // Auto-save delay during editing (1 second)
+  DOUBLE_CLICK_DELAY: 300, // Max time between clicks for double-click (300ms)
 };
 
 // Editing state management
@@ -71,7 +71,9 @@ async function loadExistingNotes() {
       // Use enhanced URL matching to find all notes that match the current URL
       const urlNotes = getNotesForUrl(window.location.href, notes);
 
-      console.log(`[Web Notes] Found ${urlNotes.length} notes for current URL (including anchor variations)`);
+      console.log(
+        `[Web Notes] Found ${urlNotes.length} notes for current URL (including anchor variations)`,
+      );
 
       // Migrate and display notes, saving if migration occurred
       let needsBulkSave = false;
@@ -106,13 +108,21 @@ async function loadExistingNotes() {
           }
         }
 
-        chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, function () {
-          if (chrome.runtime.lastError) {
-            console.error("[Web Notes] Failed to save migrated notes:", chrome.runtime.lastError);
-          } else {
-            console.log("[Web Notes] Successfully saved migrated notes and cleaned up URL variations");
-          }
-        });
+        chrome.storage.local.set(
+          { [EXTENSION_CONSTANTS.NOTES_KEY]: notes },
+          function () {
+            if (chrome.runtime.lastError) {
+              console.error(
+                "[Web Notes] Failed to save migrated notes:",
+                chrome.runtime.lastError,
+              );
+            } else {
+              console.log(
+                "[Web Notes] Successfully saved migrated notes and cleaned up URL variations",
+              );
+            }
+          },
+        );
       }
     });
   } catch (error) {
@@ -122,7 +132,6 @@ async function loadExistingNotes() {
 
 // Cache for DOM queries to improve performance
 const elementCache = new Map();
-
 
 /**
  * Debounce utility to limit function execution frequency
@@ -190,7 +199,10 @@ function ensureNoteVisibility(noteElement, noteData) {
     // Update stored offset based on note type
     if (noteData.elementSelector || noteData.elementXPath) {
       // For anchored notes, calculate new offset from target element
-      const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`);
+      const selectorResults = tryBothSelectors(
+        noteData,
+        `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`,
+      );
       const targetElement = selectorResults.element;
 
       if (targetElement) {
@@ -211,12 +223,13 @@ function ensureNoteVisibility(noteElement, noteData) {
       noteData.fallbackPosition.y = newY;
     }
 
-    console.log(`[Web Notes] Repositioned note ${noteData.id} from outside page bounds to (${newX}, ${newY})`);
+    console.log(
+      `[Web Notes] Repositioned note ${noteData.id} from outside page bounds to (${newX}, ${newY})`,
+    );
   }
 
   return wasRepositioned;
 }
-
 
 /**
  * Reposition all existing notes after window resize
@@ -232,7 +245,10 @@ function repositionAllNotes() {
   // Batch storage operation - fetch all notes once
   chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
     if (chrome.runtime.lastError) {
-      console.error("[Web Notes] Failed to get notes for repositioning:", chrome.runtime.lastError);
+      console.error(
+        "[Web Notes] Failed to get notes for repositioning:",
+        chrome.runtime.lastError,
+      );
       return;
     }
 
@@ -252,7 +268,10 @@ function repositionAllNotes() {
       // Find target element if note is anchored
       let targetElement = null;
       if (noteData.elementSelector || noteData.elementXPath) {
-        const selectorResults = tryBothSelectors(noteData, `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`);
+        const selectorResults = tryBothSelectors(
+          noteData,
+          `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`,
+        );
         targetElement = selectorResults.element;
       }
 
@@ -263,7 +282,9 @@ function repositionAllNotes() {
       noteElement.style.left = `${newPosition.x}px`;
       noteElement.style.top = `${newPosition.y}px`;
 
-      console.log(`[Web Notes] Repositioned note ${noteId} to (${newPosition.x}, ${newPosition.y})`);
+      console.log(
+        `[Web Notes] Repositioned note ${noteId} to (${newPosition.x}, ${newPosition.y})`,
+      );
     });
 
     // Ensure all notes have minimum visibility after repositioning
@@ -281,7 +302,6 @@ function handleWindowResize() {
   repositionAllNotes();
 }
 
-
 /**
  * Batched version of ensureAllNotesVisible that uses pre-fetched data
  * @param {Object} allNotes - All notes from storage
@@ -292,7 +312,9 @@ function ensureAllNotesVisibleBatched(allNotes, urlNotes) {
   let notesRepositioned = 0;
 
   notes.forEach((noteElement, index) => {
-    console.log(`[Web Notes] Checking note ${index + 1}/${notes.length}: ${noteElement.id}`);
+    console.log(
+      `[Web Notes] Checking note ${index + 1}/${notes.length}: ${noteElement.id}`,
+    );
 
     const noteData = urlNotes.find(note => note.id === noteElement.id);
 
@@ -308,7 +330,9 @@ function ensureAllNotesVisibleBatched(allNotes, urlNotes) {
   });
 
   // eslint-disable-next-line max-len
-  console.log(`[Web Notes] Completed visibility check - processed ${notes.length} notes, repositioned ${notesRepositioned}`);
+  console.log(
+    `[Web Notes] Completed visibility check - processed ${notes.length} notes, repositioned ${notesRepositioned}`,
+  );
 }
 
 /**
@@ -340,7 +364,6 @@ function calculateNotePosition(noteData, targetElement) {
   }
 }
 
-
 /**
  * Update note offset in storage with enhanced URL matching
  * @param {string} noteId - The note ID
@@ -351,7 +374,10 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
   try {
     chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
       if (chrome.runtime.lastError) {
-        console.error("[Web Notes] Failed to get notes for offset update:", chrome.runtime.lastError);
+        console.error(
+          "[Web Notes] Failed to get notes for offset update:",
+          chrome.runtime.lastError,
+        );
         return;
       }
 
@@ -370,13 +396,21 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
 
           // Save back to storage
           notes[matchingUrl] = urlNotes;
-          chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, function () {
-            if (chrome.runtime.lastError) {
-              console.error("[Web Notes] Failed to save note offset:", chrome.runtime.lastError);
-            } else {
-              console.log(`[Web Notes] Updated note ${noteId} offset to (${newOffsetX}, ${newOffsetY})`);
-            }
-          });
+          chrome.storage.local.set(
+            { [EXTENSION_CONSTANTS.NOTES_KEY]: notes },
+            function () {
+              if (chrome.runtime.lastError) {
+                console.error(
+                  "[Web Notes] Failed to save note offset:",
+                  chrome.runtime.lastError,
+                );
+              } else {
+                console.log(
+                  `[Web Notes] Updated note ${noteId} offset to (${newOffsetX}, ${newOffsetY})`,
+                );
+              }
+            },
+          );
           noteFound = true;
           break;
         }
@@ -413,18 +447,30 @@ function updateNoteCursor(noteElement) {
 function addInteractiveEffects(noteElement, isAnchored) {
   // Hover effects
   noteElement.addEventListener("mouseenter", () => {
-    if (!noteElement.classList.contains("dragging") && !noteElement.classList.contains("editing")) {
+    if (
+      !noteElement.classList.contains("dragging") &&
+      !noteElement.classList.contains("editing")
+    ) {
       noteElement.style.transform = "scale(1.02) translateZ(0)";
-      noteElement.style.boxShadow = "0 5px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1)";
-      noteElement.style.borderColor = isAnchored ? "rgba(33, 150, 243, 0.4)" : "rgba(233, 30, 99, 0.4)";
+      noteElement.style.boxShadow =
+        "0 5px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1)";
+      noteElement.style.borderColor = isAnchored
+        ? "rgba(33, 150, 243, 0.4)"
+        : "rgba(233, 30, 99, 0.4)";
     }
   });
 
   noteElement.addEventListener("mouseleave", () => {
-    if (!noteElement.classList.contains("dragging") && !noteElement.classList.contains("editing")) {
+    if (
+      !noteElement.classList.contains("dragging") &&
+      !noteElement.classList.contains("editing")
+    ) {
       noteElement.style.transform = "scale(1) translateZ(0)";
-      noteElement.style.boxShadow = "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
-      noteElement.style.borderColor = isAnchored ? "rgba(33, 150, 243, 0.2)" : "rgba(233, 30, 99, 0.2)";
+      noteElement.style.boxShadow =
+        "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
+      noteElement.style.borderColor = isAnchored
+        ? "rgba(33, 150, 243, 0.2)"
+        : "rgba(233, 30, 99, 0.2)";
     }
   });
 
@@ -477,7 +523,8 @@ function makeDraggable(noteElement, noteData, targetElement) {
     noteElement.classList.add("dragging");
     updateNoteCursor(noteElement);
     noteElement.style.transform = "scale(1.05) rotateZ(2deg) translateZ(0)";
-    noteElement.style.boxShadow = "0 8px 32px rgba(0, 0, 0, 0.24), 0 4px 8px rgba(0, 0, 0, 0.12)";
+    noteElement.style.boxShadow =
+      "0 8px 32px rgba(0, 0, 0, 0.24), 0 4px 8px rgba(0, 0, 0, 0.12)";
     noteElement.style.zIndex = "10001";
     noteElement.style.opacity = "0.9";
     noteElement.style.transition = "none"; // Disable transitions during drag
@@ -531,7 +578,8 @@ function makeDraggable(noteElement, noteData, targetElement) {
     noteElement.classList.remove("dragging");
     updateNoteCursor(noteElement);
     noteElement.style.transform = "scale(1) rotateZ(0deg) translateZ(0)";
-    noteElement.style.boxShadow = "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
+    noteElement.style.boxShadow =
+      "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
     noteElement.style.zIndex = "10000";
     noteElement.style.opacity = "1";
     noteElement.style.transition = "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"; // Re-enable transitions
@@ -548,7 +596,10 @@ function makeDraggable(noteElement, noteData, targetElement) {
     }, TIMING.DOM_UPDATE_DELAY);
 
     // eslint-disable-next-line max-len
-    console.log(`[Web Notes] Finished dragging note ${noteData.id} to offset (${noteData.offsetX || 0}, ${noteData.offsetY || 0})`);
+    console.log(
+      `[Web Notes] Finished dragging note ${noteData.id} to offset ` +
+      `(${noteData.offsetX || 0}, ${noteData.offsetY || 0})`,
+    );
   }
 
   // Add mousedown event listener to start dragging
@@ -582,7 +633,10 @@ function addEditingCapability(noteElement, noteData) {
     const now = Date.now();
     const timeDiff = now - EditingState.lastClickTime;
 
-    if (EditingState.lastClickedNote === noteElement && timeDiff < TIMING.DOUBLE_CLICK_DELAY) {
+    if (
+      EditingState.lastClickedNote === noteElement &&
+      timeDiff < TIMING.DOUBLE_CLICK_DELAY
+    ) {
       // Double-click detected - always use current data from element
       clearTimeout(clickTimeout);
       const currentNoteData = noteElement.noteData || noteData;
@@ -603,7 +657,7 @@ function addEditingCapability(noteElement, noteData) {
   noteElement.addEventListener("click", handleNoteClick);
 
   // Prevent text selection during potential double-click
-  noteElement.addEventListener("selectstart", (e) => {
+  noteElement.addEventListener("selectstart", e => {
     if (!noteElement.classList.contains("editing")) {
       e.preventDefault();
     }
@@ -617,7 +671,10 @@ function addEditingCapability(noteElement, noteData) {
  */
 function enterEditMode(noteElement, noteData) {
   // Exit any currently editing note
-  if (EditingState.currentlyEditingNote && EditingState.currentlyEditingNote !== noteElement) {
+  if (
+    EditingState.currentlyEditingNote &&
+    EditingState.currentlyEditingNote !== noteElement
+  ) {
     exitEditMode(EditingState.currentlyEditingNote, false);
   }
 
@@ -710,7 +767,7 @@ function enterEditMode(noteElement, noteData) {
   });
 
   // Add delete button click handler
-  deleteButton.addEventListener("click", (event) => {
+  deleteButton.addEventListener("click", event => {
     event.preventDefault();
     event.stopPropagation();
     handleNoteDelete(noteElement, currentNoteData);
@@ -745,7 +802,7 @@ function enterEditMode(noteElement, noteData) {
   autoResize(); // Initial resize
 
   // Add keyboard shortcuts
-  textarea.addEventListener("keydown", (event) => {
+  textarea.addEventListener("keydown", event => {
     handleEditKeydown(event, noteElement, currentNoteData, textarea);
   });
 
@@ -871,11 +928,15 @@ function handleEditKeydown(event, noteElement, noteData, textarea) {
       const lineStart = value.lastIndexOf("\n", start - 1) + 1;
       const lineContent = value.substring(lineStart, start);
       if (lineContent.match(/^\s{1,2}/)) {
-        textarea.value = value.substring(0, lineStart) +
-                        lineContent.replace(/^\s{1,2}/, "") +
-                        value.substring(start);
+        textarea.value =
+          value.substring(0, lineStart) +
+          lineContent.replace(/^\s{1,2}/, "") +
+          value.substring(start);
         // eslint-disable-next-line max-len
-        textarea.setSelectionRange(start - Math.min(2, lineContent.match(/^\s*/)[0].length), end - Math.min(2, lineContent.match(/^\s*/)[0].length));
+        textarea.setSelectionRange(
+          start - Math.min(2, lineContent.match(/^\s*/)[0].length),
+          end - Math.min(2, lineContent.match(/^\s*/)[0].length),
+        );
       }
     } else {
       // Tab - add indentation
@@ -1041,7 +1102,7 @@ function createMarkdownToolbar(textarea) {
     });
 
     // Add click handler
-    button.addEventListener("click", (event) => {
+    button.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
       buttonConfig.action();
@@ -1070,7 +1131,8 @@ function insertMarkdownSyntax(textarea, before, after) {
   const selectedText = textarea.value.substring(start, end);
   const replacement = before + selectedText + after;
 
-  textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+  textarea.value =
+    textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
 
   // Position cursor
   if (selectedText) {
@@ -1103,12 +1165,14 @@ function insertLinePrefix(textarea, prefix) {
   if (currentLine.startsWith(prefix)) {
     // Remove the prefix
     const newLine = currentLine.substring(prefix.length);
-    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.value =
+      value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
     textarea.setSelectionRange(start - prefix.length, start - prefix.length);
   } else {
     // Add the prefix
     const newLine = prefix + currentLine;
-    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.value =
+      value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
     textarea.setSelectionRange(start + prefix.length, start + prefix.length);
   }
 
@@ -1136,8 +1200,12 @@ function insertOrderedListItem(textarea) {
   if (listItemMatch) {
     // Remove the numbering
     const newLine = currentLine.substring(listItemMatch[0].length);
-    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
-    textarea.setSelectionRange(start - listItemMatch[0].length, start - listItemMatch[0].length);
+    textarea.value =
+      value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.setSelectionRange(
+      start - listItemMatch[0].length,
+      start - listItemMatch[0].length,
+    );
   } else {
     // Look for the previous line to determine the number
     let number = 1;
@@ -1154,7 +1222,8 @@ function insertOrderedListItem(textarea) {
     // Add the numbered prefix
     const prefix = `${number}. `;
     const newLine = prefix + currentLine;
-    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.value =
+      value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
     textarea.setSelectionRange(start + prefix.length, start + prefix.length);
   }
 
@@ -1186,7 +1255,8 @@ function insertMarkdownLink(textarea) {
     replacement = `[${linkText}](${linkUrl})`;
   }
 
-  textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+  textarea.value =
+    textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
 
   // Select the URL part for easy editing
   const urlStart = start + linkText.length + 3; // [link text](
@@ -1264,9 +1334,11 @@ function displayNote(noteData) {
     const isAnchored = targetElement !== null;
     note.style.cssText = `
       position: absolute;
-      background: ${isAnchored ?
-    "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)" :
-    "linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%)"};
+      background: ${
+  isAnchored
+    ? "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)"
+    : "linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%)"
+};
       color: #2c3e50;
       padding: 10px 14px;
       border-radius: 8px;
@@ -1339,8 +1411,8 @@ function displayNote(noteData) {
     const offsetY = noteData.offsetY || 0;
     console.log(
       `[Web Notes] Displaying draggable note ${finalPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
-      `${noteData.elementSelector || noteData.elementXPath || "absolute coordinates"} ` +
-      `with offset (${offsetX}, ${offsetY}) at position (${finalPosition.x}, ${finalPosition.y})`,
+        `${noteData.elementSelector || noteData.elementXPath || "absolute coordinates"} ` +
+        `with offset (${offsetX}, ${offsetY}) at position (${finalPosition.x}, ${finalPosition.y})`,
     );
   } catch (error) {
     console.error("[Web Notes] Error displaying note:", error);
@@ -1919,7 +1991,10 @@ async function handleNoteDelete(noteElement, noteData) {
     } else {
       console.error(`[Web Notes] Failed to delete note ${noteData.id} from storage`);
       // Show error message to user (note is already removed from DOM, but this indicates a storage issue)
-      showTemporaryMessage("Failed to delete note from storage. The note may reappear on page reload.", "error");
+      showTemporaryMessage(
+        "Failed to delete note from storage. The note may reappear on page reload.",
+        "error",
+      );
     }
   } catch (error) {
     console.error("[Web Notes] Error during note deletion:", error);
@@ -1936,7 +2011,7 @@ async function handleNoteDelete(noteElement, noteData) {
  * @returns {Promise<boolean>} Promise resolving to user choice
  */
 function createCustomConfirmDialog(title, message, confirmText, cancelText) {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     // Create overlay
     const overlay = document.createElement("div");
     overlay.style.cssText = `
@@ -2058,20 +2133,20 @@ function createCustomConfirmDialog(title, message, confirmText, cancelText) {
       }, 200);
     }
 
-    cancelButton.addEventListener("click", (e) => {
+    cancelButton.addEventListener("click", e => {
       e.preventDefault();
       e.stopPropagation();
       handleResponse(false);
     });
 
-    confirmButton.addEventListener("click", (e) => {
+    confirmButton.addEventListener("click", e => {
       e.preventDefault();
       e.stopPropagation();
       handleResponse(true);
     });
 
     // Handle overlay click (cancel)
-    overlay.addEventListener("click", (e) => {
+    overlay.addEventListener("click", e => {
       if (e.target === overlay) {
         handleResponse(false);
       }

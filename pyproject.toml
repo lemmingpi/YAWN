@@ -60,7 +60,7 @@ exclude = ["tests*", ".venv*", "chrome-extension*"]
 
 [tool.black]
 line-length = 88
-target-version = ["py313"]
+target-version = ["py312"]
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -85,7 +85,7 @@ known_first_party = ["backend"]
 skip = [".venv"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

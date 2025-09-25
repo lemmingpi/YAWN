@@ -26,11 +26,11 @@ class MarkdownRenderer {
     if (typeof marked !== "undefined" && !this.isInitialized) {
       // Configure marked for security and performance
       marked.setOptions({
-        breaks: true,        // Convert \n to <br>
-        gfm: true,          // GitHub Flavored Markdown
-        sanitize: false,    // We'll use DOMPurify instead
+        breaks: true, // Convert \n to <br>
+        gfm: true, // GitHub Flavored Markdown
+        sanitize: false, // We'll use DOMPurify instead
         smartypants: false, // Disable smart quotes for simplicity
-        xhtml: false,        // HTML5 output
+        xhtml: false, // HTML5 output
       });
 
       // Custom renderer for additional security
@@ -105,10 +105,28 @@ class MarkdownRenderer {
       if (typeof DOMPurify !== "undefined") {
         html = DOMPurify.sanitize(html, {
           ALLOWED_TAGS: [
-            "p", "br", "strong", "b", "em", "i", "u",
-            "ul", "ol", "li", "blockquote", "pre", "code",
-            "h1", "h2", "h3", "h4", "h5", "h6",
-            "a", "del", "ins",
+            "p",
+            "br",
+            "strong",
+            "b",
+            "em",
+            "i",
+            "u",
+            "ul",
+            "ol",
+            "li",
+            "blockquote",
+            "pre",
+            "code",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "a",
+            "del",
+            "ins",
           ],
           ALLOWED_ATTR: ["href", "title", "target", "rel", "style"],
           ALLOW_DATA_ATTR: false,
@@ -155,26 +173,28 @@ class MarkdownRenderer {
       // Define compact, readable styles that override page CSS
       const styles = {
         // Headers with clear hierarchy and compact spacing
-        "h1": "font-size: 16px !important; font-weight: bold !important; margin: 4px 0 2px 0 !important; padding: 0 !important; line-height: 1.2 !important; color: #2c3e50 !important; border: none !important; background: none !important; text-decoration: none !important; display: block !important;",
-        "h2": "font-size: 15px !important; font-weight: bold !important; margin: 3px 0 2px 0 !important; padding: 0 !important; line-height: 1.2 !important; color: #34495e !important; border: none !important; background: none !important; text-decoration: none !important; display: block !important;",
-        "h3": "font-size: 14px !important; font-weight: bold !important; margin: 3px 0 1px 0 !important; padding: 0 !important; line-height: 1.2 !important; color: #34495e !important; border: none !important; background: none !important; text-decoration: none !important; display: block !important;",
+        h1: "font-size: 16px !important; font-weight: bold !important; margin: 4px 0 2px 0 !important; padding: 0 !important; line-height: 1.2 !important; color: #2c3e50 !important; border: none !important; background: none !important; text-decoration: none !important; display: block !important;",
+        h2: "font-size: 15px !important; font-weight: bold !important; margin: 3px 0 2px 0 !important; padding: 0 !important; line-height: 1.2 !important; color: #34495e !important; border: none !important; background: none !important; text-decoration: none !important; display: block !important;",
+        h3: "font-size: 14px !important; font-weight: bold !important; margin: 3px 0 1px 0 !important; padding: 0 !important; line-height: 1.2 !important; color: #34495e !important; border: none !important; background: none !important; text-decoration: none !important; display: block !important;",
 
         // Lists with proper indentation and compact spacing
-        "ul": "margin: 2px 0 2px 16px !important; padding: 0 !important; list-style-type: disc !important; background: none !important; border: none !important;",
-        "ol": "margin: 2px 0 2px 16px !important; padding: 0 !important; list-style-type: decimal !important; background: none !important; border: none !important;",
-        "li": "margin: 1px 0 !important; padding: 0 0 0 2px !important; line-height: 1.3 !important; background: none !important; border: none !important; display: list-item !important;",
+        ul: "margin: 2px 0 2px 16px !important; padding: 0 !important; list-style-type: disc !important; background: none !important; border: none !important;",
+        ol: "margin: 2px 0 2px 16px !important; padding: 0 !important; list-style-type: decimal !important; background: none !important; border: none !important;",
+        li: "margin: 1px 0 !important; padding: 0 0 0 2px !important; line-height: 1.3 !important; background: none !important; border: none !important; display: list-item !important;",
 
         // Links with clear distinction and hover effects
-        "a": "color: #3498db !important; text-decoration: underline !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important; font-weight: normal !important; cursor: pointer !important;",
+        a: "color: #3498db !important; text-decoration: underline !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important; font-weight: normal !important; cursor: pointer !important;",
 
         // Paragraphs and basic text formatting
-        "p": "margin: 2px 0 !important; padding: 0 !important; line-height: 1.4 !important; background: none !important; border: none !important; display: block !important;",
-        "strong": "font-weight: bold !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
-        "b": "font-weight: bold !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
-        "em": "font-style: italic !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
-        "i": "font-style: italic !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
-        "code": "font-family: monospace !important; background: rgba(0,0,0,0.05) !important; padding: 1px 3px !important; border-radius: 2px !important; font-size: 12px !important; border: none !important; margin: 0 !important;",
-        "blockquote": "border-left: 2px solid #bdc3c7 !important; margin: 2px 0 !important; padding: 2px 0 2px 8px !important; background: rgba(0,0,0,0.02) !important; font-style: italic !important; color: #7f8c8d !important;",
+        p: "margin: 2px 0 !important; padding: 0 !important; line-height: 1.4 !important; background: none !important; border: none !important; display: block !important;",
+        strong:
+          "font-weight: bold !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
+        b: "font-weight: bold !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
+        em: "font-style: italic !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
+        i: "font-style: italic !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
+        code: "font-family: monospace !important; background: rgba(0,0,0,0.05) !important; padding: 1px 3px !important; border-radius: 2px !important; font-size: 12px !important; border: none !important; margin: 0 !important;",
+        blockquote:
+          "border-left: 2px solid #bdc3c7 !important; margin: 2px 0 !important; padding: 2px 0 2px 8px !important; background: rgba(0,0,0,0.02) !important; font-style: italic !important; color: #7f8c8d !important;",
       };
 
       // Apply styles to each element type
@@ -204,15 +224,15 @@ class MarkdownRenderer {
 
     // Simple heuristics to detect markdown
     const markdownIndicators = [
-      /^\s*#{1,6}\s+/m,           // Headers
-      /\*\*.*?\*\*/,              // Bold
-      /\*.*?\*/,                  // Italic
-      /^\s*[-*+]\s+/m,         // Unordered lists
-      /^\s*\d+\.\s+/m,            // Ordered lists
-      /^\s*>\s+/m,                // Blockquotes
-      /`.*?`/,                    // Inline code
-      /```[\s\S]*?```/,           // Code blocks
-      /\[.*?\]\(.*?\)/,            // Links
+      /^\s*#{1,6}\s+/m, // Headers
+      /\*\*.*?\*\*/, // Bold
+      /\*.*?\*/, // Italic
+      /^\s*[-*+]\s+/m, // Unordered lists
+      /^\s*\d+\.\s+/m, // Ordered lists
+      /^\s*>\s+/m, // Blockquotes
+      /`.*?`/, // Inline code
+      /```[\s\S]*?```/, // Code blocks
+      /\[.*?\]\(.*?\)/, // Links
     ];
 
     return markdownIndicators.some(pattern => pattern.test(content));
@@ -275,7 +295,9 @@ const NoteDataUtils = {
     const content = noteData.text || `Note #${noteData.id.split("-").pop()}`;
 
     // eslint-disable-next-line max-len
-    console.log(`[Web Notes] Migrating note ${noteData.id}: "${noteData.text}" -> "${content}"`);
+    console.log(
+      `[Web Notes] Migrating note ${noteData.id}: "${noteData.text}" -> "${content}"`,
+    );
 
     // Create migrated note data
     const migratedNote = this.createNoteData(noteData, content);
@@ -287,12 +309,19 @@ const NoteDataUtils = {
     if (saveIfMigrated && typeof updateNote === "function") {
       try {
         // eslint-disable-next-line max-len
-        await updateNote(noteData.url || window.location.href, noteData.id, migratedNote);
+        await updateNote(
+          noteData.url || window.location.href,
+          noteData.id,
+          migratedNote,
+        );
         // eslint-disable-next-line max-len
         console.log(`[Web Notes] Migrated and saved note ${noteData.id}`);
       } catch (error) {
         // eslint-disable-next-line max-len
-        console.error(`[Web Notes] Failed to save migrated note ${noteData.id}:`, error);
+        console.error(
+          `[Web Notes] Failed to save migrated note ${noteData.id}:`,
+          error,
+        );
       }
     }
 
