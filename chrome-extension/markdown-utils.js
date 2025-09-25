@@ -40,21 +40,21 @@ class MarkdownRenderer {
       renderer.html = () => ""; // Block raw HTML
 
       // Customize link rendering for security
-      renderer.link = (href, title, text) => {
+      renderer.link = (linkRef) => {
         // Only allow safe protocols
         const safeProtocols = ["http:", "https:", "mailto:"];
         try {
-          const url = new URL(href);
+          const url = new URL(linkRef.href);
           if (!safeProtocols.includes(url.protocol)) {
-            return text; // Return text only for unsafe links
+            return linkRef.text; // Return text only for unsafe links
           }
         } catch {
-          return text; // Invalid URL, return text only
+          return linkRef.text; // Invalid URL, return text only
         }
 
-        const titleAttr = title ? ` title="${this.escapeHtml(title)}"` : "";
+        const titleAttr = linkRef.title ? ` title="${this.escapeHtml(linkRef.title)}"` : "";
         // eslint-disable-next-line max-len
-        return `<a href="${this.escapeHtml(href)}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+        return `<a href="${this.escapeHtml(linkRef.href)}"${titleAttr} target="_blank" rel="noopener noreferrer">${linkRef.text}</a>`;
       };
 
       marked.use({ renderer });
