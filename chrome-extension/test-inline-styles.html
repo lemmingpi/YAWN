@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Inline Markdown Styles</title>
+    <style>
+        /* Simulate page CSS that interferes with markdown display */
+        h1, h2, h3 {
+            color: red !important;
+            font-size: 10px !important;
+            margin: 20px !important;
+            text-decoration: underline;
+        }
+        ul, ol {
+            margin: 30px !important;
+            list-style: none !important;
+        }
+        li {
+            color: purple !important;
+            margin: 10px !important;
+        }
+        a {
+            color: green !important;
+            text-decoration: none !important;
+        }
+        p {
+            color: orange !important;
+            margin: 25px !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>Testing Markdown Inline Styles</h1>
+
+    <div id="test-container" style="border: 2px solid #ccc; padding: 20px; margin: 20px;">
+        <h2>Test Results Will Appear Here</h2>
+        <div id="markdown-output"></div>
+    </div>
+
+    <script src="libs/marked.min.js"></script>
+    <script src="libs/dompurify.min.js"></script>
+    <script src="markdown-utils.js"></script>
+
+    <script>
+        // Test markdown content
+        const testMarkdown = `# Header 1
+## Header 2
+### Header 3
+
+This is a **bold text** and *italic text* example.
+
+- Unordered list item 1
+- Unordered list item 2
+- Unordered list item 3
+
+1. Ordered list item 1
+2. Ordered list item 2
+3. Ordered list item 3
+
+Here is a [link to Google](https://www.google.com) for testing.
+
+> This is a blockquote example
+
+\`inline code\` example
+
+Regular paragraph text to test basic styling.`;
+
+        // Wait for DOM to load
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                // Test the markdown renderer
+                const renderer = new MarkdownRenderer();
+                const renderedHTML = renderer.renderMarkdown(testMarkdown);
+
+                document.getElementById('markdown-output').innerHTML = renderedHTML;
+
+                console.log('Markdown rendered successfully!');
+                console.log('Rendered HTML:', renderedHTML);
+            } catch (error) {
+                console.error('Error testing markdown renderer:', error);
+                document.getElementById('markdown-output').innerHTML =
+                    '<p style="color: red;">Error rendering markdown: ' + error.message + '</p>';
+            }
+        });
+    </script>
+</body>
+</html>
