@@ -267,6 +267,53 @@ async function addNote(url, noteData) {
 }
 
 /**
+ * Delete a note from storage, searching across URL variations that match when normalized
+ * @param {string} url - The URL where the note exists
+ * @param {string} noteId - The note ID to delete
+ * @returns {Promise<boolean>} Promise resolving to success status
+ */
+async function deleteNote(url, noteId) {
+  try {
+    const notes = await getNotes();
+    const matchingUrls = findMatchingUrlsInStorage(url, notes);
+    let noteFound = false;
+
+    // Try to find and delete the note from any of the matching URL variations
+    for (const matchingUrl of matchingUrls) {
+      const urlNotes = notes[matchingUrl] || [];
+      const noteIndex = urlNotes.findIndex(note => note.id === noteId);
+
+      if (noteIndex !== -1) {
+        // Remove the note from the array
+        urlNotes.splice(noteIndex, 1);
+
+        // Update storage
+        if (urlNotes.length === 0) {
+          // Remove the URL key entirely if no notes remain
+          delete notes[matchingUrl];
+        } else {
+          notes[matchingUrl] = urlNotes;
+        }
+
+        noteFound = true;
+        console.log(`[Web Notes] Deleted note ${noteId} from URL: ${matchingUrl}`);
+        break;
+      }
+    }
+
+    if (!noteFound) {
+      logError("Note not found for deletion", { url, noteId, searchedUrls: matchingUrls });
+      return false;
+    }
+
+    return await setNotes(notes);
+  } catch (error) {
+    logError("Error deleting note", error);
+    return false;
+  }
+}
+
+/**
  * Validates tab before script injection
  * @param {Object} tab - Chrome tab object
  * @returns {boolean} Whether tab is valid for injection
@@ -324,6 +371,7 @@ if (typeof module !== "undefined" && module.exports) {
     setNotes,
     updateNote,
     addNote,
+    deleteNote,
     normalizeUrlForNoteStorage,
     findMatchingUrlsInStorage,
     getNotesForUrl,
