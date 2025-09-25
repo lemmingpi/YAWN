@@ -10,7 +10,10 @@ notes/
 │   ├── manifest.json           # Extension configuration and permissions
 │   ├── background.js           # Service worker - context menu & stats
 │   ├── popup.js/html           # Extension popup interface
-│   ├── content.js              # Minimal page presence
+│   ├── content.js              # Main functionality - notes, editing, drag & drop
+│   ├── color-utils.js          # Centralized color management system
+│   ├── color-dropdown.js       # Color dropdown component for edit toolbar
+│   ├── markdown-utils.js       # Markdown parsing and rendering utilities
 │   ├── shared-utils.js         # Constants and utilities
 │   └── README.md               # Installation guide
 ├── 📂 backend/                  # FastAPI backend source code
@@ -43,6 +46,19 @@ notes/
 - `EXTENSION_ID: 'show-web-notes-banner'`
 - `MENU_TITLE: '🗒️ Show Web Notes Banner'`
 - `DEFAULT_STATS` - Statistics object structure
+
+### Extension Color-utils.js
+- `NoteColorUtils.getColorOptions()` - Returns array of available colors
+- `NoteColorUtils.getColorValue(colorName)` - Get hex value from color name
+- `NoteColorUtils.isValidColor(colorName)` - Validate color name
+- `NoteColorUtils.getDefaultColor()` - Returns default color name
+- **8 Colors**: light-yellow, light-blue, light-green, light-red, light-purple, light-orange, light-gray, teal
+
+### Extension Color-dropdown.js
+- `createColorDropdown(textarea)` - Creates color dropdown component
+- `handleColorSelection(colorName, textarea)` - Processes color selection
+- `toggleColorDropdown(menu)` - Shows/hides color dropdown
+- Integrated into edit mode toolbar for background color selection
 
 ### Backend API (main.py)
 - `GET /` - Hello world endpoint
