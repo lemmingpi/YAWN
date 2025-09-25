@@ -2,7 +2,7 @@
 # Cross-platform development workflow automation
 # Works on Windows (Git Bash), Unix, Linux, and Mac
 
-.PHONY: help setup dev test lint format clean install-dev check-env lint-js format-js install-js lint-all format-all
+.PHONY: help setup dev test lint format clean install-dev check-env lint-js format-js install-js lint-all format-all all install-npm check-npm clean-npm
 .DEFAULT_GOAL := help
 
 # Colors for output (works in most terminals)
@@ -20,12 +20,22 @@ ifeq ($(OS),Windows_NT)
     VENV_BIN := ${MAKEFILE_DIR}/.venv/Scripts
     PYTHON := $(VENV_BIN)/python.exe
     PIP := $(VENV_BIN)/pip.exe
+    # npm/node detection for Windows - use simple command names since they're in PATH
+    NODE := node
+    NPM := npm
 else
     DETECTED_OS := $(UNAME_S)
     VENV_BIN := .venv/bin
     PYTHON := $(VENV_BIN)/python
     PIP := $(VENV_BIN)/pip
+    # npm/node detection for Unix-like systems
+    NODE := $(shell command -v node 2>/dev/null || echo "node")
+    NPM := $(shell command -v npm 2>/dev/null || echo "npm")
 endif
+
+# Project paths
+EXTENSION_DIR := chrome-extension
+BACKEND_DIR := backend
 
 help: ## Show this help message
 	@echo "$(BLUE)Web Notes API - Development Commands$(NC)"
@@ -42,7 +52,26 @@ help: ## Show this help message
 	@echo ""
 	@echo "$(BLUE)Platform detected: $(DETECTED_OS)$(NC)"
 
-setup: ## Complete development environment setup
+all: ## Complete project setup (Python + Node.js environments)
+	@echo "$(BLUE)Setting up complete Web Notes development environment...$(NC)"
+	@echo "$(YELLOW)Phase 1: Python Environment Setup$(NC)"
+	@$(MAKE) setup
+	@echo ""
+	@echo "$(YELLOW)Phase 2: Node.js/npm Environment Setup$(NC)"
+	@$(MAKE) install-npm
+	@echo ""
+	@echo "$(GREEN)✓ Complete development environment setup finished!$(NC)"
+	@echo ""
+	@echo "$(BLUE)Quick validation:$(NC)"
+	@$(MAKE) check-env
+	@$(MAKE) check-npm
+	@echo ""
+	@echo "$(BLUE)Ready to develop! Next steps:$(NC)"
+	@echo "  make dev       - Start Python backend server"
+	@echo "  make lint-all  - Run all code quality checks"
+	@echo "  make test      - Run Python test suite"
+
+setup: ## Complete Python development environment setup
 	@echo "$(BLUE)Setting up Web Notes development environment...$(NC)"
 	@echo "$(YELLOW)Creating virtual environment...$(NC)"
 	python -m venv .venv
@@ -102,29 +131,68 @@ format: check-env ## Auto-format code with black and isort
 	$(PYTHON) -m isort backend/ tests/
 	@echo "$(GREEN)✓ Code formatting completed$(NC)"
 
-install-js: ## Install JavaScript dependencies (Node.js and npm required)
-	@echo "$(BLUE)Installing JavaScript dependencies...$(NC)"
-	@command -v node >/dev/null 2>&1 || { echo "$(RED)✗ Node.js not found. Please install Node.js first$(NC)"; exit 1; }
-	@command -v npm >/dev/null 2>&1 || { echo "$(RED)✗ npm not found. Please install npm first$(NC)"; exit 1; }
-	npm install
-	@echo "$(GREEN)✓ JavaScript dependencies installed$(NC)"
+install-js: install-npm ## Alias for install-npm (backwards compatibility)
 
-lint-js: ## Run ESLint on JavaScript files
+install-npm: check-npm ## Install npm dependencies for Chrome extension development
+	@echo "$(BLUE)Installing npm dependencies for Chrome extension...$(NC)"
+	@echo "$(YELLOW)Node.js version: $(NC)"
+	@$(NODE) --version
+	@echo "$(YELLOW)npm version: $(NC)"
+	@$(NPM) --version
+	@echo "$(YELLOW)Installing packages from package.json...$(NC)"
+	$(NPM) install
+	@echo "$(GREEN)✓ npm dependencies installed successfully$(NC)"
+	@echo "$(YELLOW)Installed packages:$(NC)"
+	@$(NPM) list --depth=0 2>/dev/null || echo "  (Package list unavailable)"
+
+check-npm: ## Verify Node.js and npm are available
+	@echo "$(BLUE)Checking Node.js and npm environment...$(NC)"
+	@if ! command -v $(NODE) >/dev/null 2>&1; then \
+		echo "$(RED)✗ Node.js not found$(NC)"; \
+		echo "$(YELLOW)Please install Node.js from: https://nodejs.org$(NC)"; \
+		echo "$(YELLOW)Required version: >= 18.0.0$(NC)"; \
+		exit 1; \
+	fi
+	@if ! command -v $(NPM) >/dev/null 2>&1; then \
+		echo "$(RED)✗ npm not found$(NC)"; \
+		echo "$(YELLOW)Please install npm (usually comes with Node.js)$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)✓ Node.js found: $(NC)$$($(NODE) --version)"
+	@echo "$(GREEN)✓ npm found: $(NC)$$($(NPM) --version)"
+	@if [ ! -f "package.json" ]; then \
+		echo "$(RED)✗ package.json not found in current directory$(NC)"; \
+		exit 1; \
+	fi
+	@if [ ! -d "node_modules" ]; then \
+		echo "$(YELLOW)⚠ node_modules not found. Run 'make install-npm' to install dependencies$(NC)"; \
+	else \
+		echo "$(GREEN)✓ node_modules directory exists$(NC)"; \
+	fi
+
+lint-js: check-npm ## Run ESLint on JavaScript files
 	@echo "$(BLUE)Running ESLint on JavaScript files...$(NC)"
-	@command -v node >/dev/null 2>&1 || { echo "$(RED)✗ Node.js not found. Run 'make install-js' first$(NC)"; exit 1; }
-	@test -d node_modules || { echo "$(RED)✗ Dependencies not installed. Run 'make install-js' first$(NC)"; exit 1; }
-	-npm run lint
+	@if [ ! -d "node_modules" ]; then \
+		echo "$(RED)✗ Dependencies not installed. Run 'make install-npm' first$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Linting Chrome extension JavaScript files...$(NC)"
+	$(NPM) run lint
 	@echo "$(GREEN)✓ JavaScript linting completed$(NC)"
 
-format-js: ## Format JavaScript and HTML files with Prettier
+format-js: check-npm ## Format JavaScript and HTML files with Prettier
 	@echo "$(BLUE)Formatting JavaScript and HTML files...$(NC)"
-	@command -v node >/dev/null 2>&1 || { echo "$(RED)✗ Node.js not found. Run 'make install-js' first$(NC)"; exit 1; }
-	@test -d node_modules || { echo "$(RED)✗ Dependencies not installed. Run 'make install-js' first$(NC)"; exit 1; }
-	npm run format
+	@if [ ! -d "node_modules" ]; then \
+		echo "$(RED)✗ Dependencies not installed. Run 'make install-npm' first$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Formatting Chrome extension files...$(NC)"
+	$(NPM) run format
 	@echo "$(GREEN)✓ JavaScript/HTML formatting completed$(NC)"
 
-lint-all: check-env ## Run all linting (Python and JavaScript)
+lint-all: check-env check-npm ## Run all linting (Python and JavaScript)
 	@echo "$(BLUE)Running all code quality checks...$(NC)"
+	@echo "$(YELLOW)Phase 1: Python Code Quality Checks$(NC)"
 	@echo "$(YELLOW)Checking Python code formatting with black...$(NC)"
 	$(PYTHON) -m black --check backend/ tests/
 	@echo "$(YELLOW)Checking Python import sorting with isort...$(NC)"
@@ -133,19 +201,32 @@ lint-all: check-env ## Run all linting (Python and JavaScript)
 	$(PYTHON) -m flake8 backend/ tests/
 	@echo "$(YELLOW)Running Python type checking with mypy...$(NC)"
 	$(PYTHON) -m mypy backend/
+	@echo ""
+	@echo "$(YELLOW)Phase 2: JavaScript Code Quality Checks$(NC)"
+	@if [ ! -d "node_modules" ]; then \
+		echo "$(RED)✗ npm dependencies not installed. Run 'make install-npm' first$(NC)"; \
+		exit 1; \
+	fi
 	@echo "$(YELLOW)Running JavaScript linting with ESLint...$(NC)"
-	@command -v node >/dev/null 2>&1 || { echo "$(RED)✗ Node.js not found. Run 'make install-js' first$(NC)"; exit 1; }
-	@test -d node_modules || { echo "$(RED)✗ Dependencies not installed. Run 'make install-js' first$(NC)"; exit 1; }
-	-npm run lint
-	@echo "$(GREEN)✓ All code quality checks completed$(NC)"
+	$(NPM) run lint
+	@echo "$(GREEN)✓ All code quality checks completed successfully$(NC)"
 
-format-all: check-env format-js ## Auto-format all code (Python and JavaScript)
+format-all: check-env check-npm ## Auto-format all code (Python and JavaScript)
 	@echo "$(BLUE)Formatting all code...$(NC)"
+	@echo "$(YELLOW)Phase 1: Python Code Formatting$(NC)"
 	@echo "$(YELLOW)Formatting Python with black...$(NC)"
 	$(PYTHON) -m black backend/ tests/
 	@echo "$(YELLOW)Sorting Python imports with isort...$(NC)"
 	$(PYTHON) -m isort backend/ tests/
-	@echo "$(GREEN)✓ All code formatting completed$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Phase 2: JavaScript/HTML Code Formatting$(NC)"
+	@if [ ! -d "node_modules" ]; then \
+		echo "$(RED)✗ npm dependencies not installed. Run 'make install-npm' first$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Formatting Chrome extension files with Prettier...$(NC)"
+	$(NPM) run format
+	@echo "$(GREEN)✓ All code formatting completed successfully$(NC)"
 
 lock: check-env ## Generate locked requirements file
 	@echo "$(BLUE)Generating locked requirements...$(NC)"
@@ -164,8 +245,25 @@ check-env: ## Check if virtual environment is activated
 		exit 1; \
 	fi
 
-clean: ## Clean up development environment
-	@echo "$(BLUE)Cleaning development environment...$(NC)"
+clean-npm: ## Clean npm dependencies and cache
+	@echo "$(BLUE)Cleaning npm environment...$(NC)"
+	@if [ -d "node_modules" ]; then \
+		echo "$(YELLOW)Removing node_modules directory...$(NC)"; \
+		rm -rf node_modules; \
+	fi
+	@if [ -f "package-lock.json" ]; then \
+		echo "$(YELLOW)Removing package-lock.json...$(NC)"; \
+		rm -f package-lock.json; \
+	fi
+	@if command -v $(NPM) >/dev/null 2>&1; then \
+		echo "$(YELLOW)Clearing npm cache...$(NC)"; \
+		$(NPM) cache clean --force 2>/dev/null || true; \
+	fi
+	@echo "$(GREEN)✓ npm cleanup completed$(NC)"
+
+clean: ## Clean up development environment (Python + npm)
+	@echo "$(BLUE)Cleaning complete development environment...$(NC)"
+	@echo "$(YELLOW)Phase 1: Python Environment Cleanup$(NC)"
 	@if [ -d ".venv" ]; then \
 		echo "$(YELLOW)Removing virtual environment...$(NC)"; \
 		rm -rf .venv; \
@@ -184,7 +282,21 @@ clean: ## Clean up development environment
 	fi
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	@echo "$(GREEN)✓ Cleanup completed$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Phase 2: npm Environment Cleanup$(NC)"
+	@if [ -d "node_modules" ]; then \
+		echo "$(YELLOW)Removing node_modules directory...$(NC)"; \
+		rm -rf node_modules; \
+	fi
+	@if [ -f "package-lock.json" ]; then \
+		echo "$(YELLOW)Removing package-lock.json...$(NC)"; \
+		rm -f package-lock.json; \
+	fi
+	@if command -v $(NPM) >/dev/null 2>&1; then \
+		echo "$(YELLOW)Clearing npm cache...$(NC)"; \
+		$(NPM) cache clean --force 2>/dev/null || true; \
+	fi
+	@echo "$(GREEN)✓ Complete environment cleanup finished$(NC)"
 
 # Development convenience commands
 run: dev ## Alias for 'make dev'

@@ -78,13 +78,64 @@ async function setStats(stats) {
 }
 
 /**
- * Gets notes from storage with error handling
+ * Gets configuration from chrome.storage.sync
+ * @returns {Promise<Object>} Promise resolving to config object
+ */
+async function getConfig() {
+  try {
+    return new Promise(resolve => {
+      chrome.storage.sync.get(["syncServerUrl", "useChromeSync"], result => {
+        if (chrome.runtime.lastError) {
+          logError("Failed to get config", chrome.runtime.lastError);
+          resolve({ syncServerUrl: "", useChromeSync: false });
+        } else {
+          resolve({
+            syncServerUrl: result.syncServerUrl || "",
+            useChromeSync: result.useChromeSync || false,
+          });
+        }
+      });
+    });
+  } catch (error) {
+    logError("Error in getConfig", error);
+    return { syncServerUrl: "", useChromeSync: false };
+  }
+}
+
+/**
+ * Saves configuration to chrome.storage.sync
+ * @param {Object} config - Configuration object
+ * @returns {Promise<boolean>} Promise resolving to success status
+ */
+async function setConfig(config) {
+  try {
+    return new Promise(resolve => {
+      chrome.storage.sync.set(config, () => {
+        if (chrome.runtime.lastError) {
+          logError("Failed to set config", chrome.runtime.lastError);
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      });
+    });
+  } catch (error) {
+    logError("Error in setConfig", error);
+    return false;
+  }
+}
+
+/**
+ * Gets notes from appropriate storage based on configuration
  * @returns {Promise<Object>} Promise resolving to notes object organized by URL
  */
 async function getNotes() {
   try {
+    const config = await getConfig();
+    const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+
     return new Promise(resolve => {
-      chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], result => {
+      storage.get([EXTENSION_CONSTANTS.NOTES_KEY], result => {
         if (chrome.runtime.lastError) {
           logError("Failed to get notes", chrome.runtime.lastError);
           resolve({});
@@ -100,14 +151,17 @@ async function getNotes() {
 }
 
 /**
- * Save notes to storage with error handling
+ * Save notes to appropriate storage based on configuration
  * @param {Object} notes - Notes object organized by URL
  * @returns {Promise<boolean>} Promise resolving to success status
  */
 async function setNotes(notes) {
   try {
+    const config = await getConfig();
+    const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+
     return new Promise(resolve => {
-      chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, () => {
+      storage.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, () => {
         if (chrome.runtime.lastError) {
           logError("Failed to set notes", chrome.runtime.lastError);
           resolve(false);
@@ -123,7 +177,8 @@ async function setNotes(notes) {
 }
 
 /**
- * Update a single note in storage, searching across URL variations that match when normalized (ignoring anchor fragments)
+ * Update a single note in storage, searching across URL variations that match
+ * when normalized (ignoring anchor fragments)
  * @param {string} url - The URL where the note exists
  * @param {string} noteId - The note ID to update
  * @param {Object} noteData - The updated note data
@@ -140,7 +195,11 @@ async function updateNote(url, noteId, noteData) {
       const noteIndex = urlNotes.findIndex(note => note.id === noteId);
 
       if (noteIndex !== -1) {
-        urlNotes[noteIndex] = { ...urlNotes[noteIndex], ...noteData, lastEdited: Date.now() };
+        urlNotes[noteIndex] = {
+          ...urlNotes[noteIndex],
+          ...noteData,
+          lastEdited: Date.now(),
+        };
         notes[matchingUrl] = urlNotes;
         return await setNotes(notes);
       }
@@ -163,14 +222,14 @@ async function updateNote(url, noteId, noteData) {
  */
 function normalizeUrlForNoteStorage(url) {
   try {
-    if (!url || typeof url !== 'string') {
+    if (!url || typeof url !== "string") {
       logError("Invalid URL for normalization", url);
-      return url || '';
+      return url || "";
     }
 
     const urlObj = new URL(url);
     // Remove the hash/fragment (everything after #)
-    urlObj.hash = '';
+    urlObj.hash = "";
 
     // Keep query parameters as they're important for dynamic page content
     return urlObj.toString();
@@ -178,7 +237,7 @@ function normalizeUrlForNoteStorage(url) {
     // If URL parsing fails, try simple string manipulation as fallback
     logError("URL parsing failed, using string fallback", error);
 
-    const hashIndex = url.indexOf('#');
+    const hashIndex = url.indexOf("#");
     if (hashIndex !== -1) {
       return url.substring(0, hashIndex);
     }
@@ -302,7 +361,11 @@ async function deleteNote(url, noteId) {
     }
 
     if (!noteFound) {
-      logError("Note not found for deletion", { url, noteId, searchedUrls: matchingUrls });
+      logError("Note not found for deletion", {
+        url,
+        noteId,
+        searchedUrls: matchingUrls,
+      });
       return false;
     }
 
@@ -367,6 +430,8 @@ if (typeof module !== "undefined" && module.exports) {
     logError,
     getStats,
     setStats,
+    getConfig,
+    setConfig,
     getNotes,
     setNotes,
     updateNote,

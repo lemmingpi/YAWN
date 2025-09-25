@@ -2,16 +2,14 @@
 # Flake8 configuration for Web Notes API
 max-line-length = 88
 extend-ignore =
-    # Black compatibility
-    E203,  # whitespace before ':'
-    W503,  # line break before binary operator
-    # Docstring requirements (adjust as needed)
-    D100,  # Missing docstring in public module
-    D101,  # Missing docstring in public class
-    D102,  # Missing docstring in public method
-    D103,  # Missing docstring in public function
-    D104,  # Missing docstring in public package
-    D105,  # Missing docstring in magic method
+    E203,
+    W503,
+    D100,
+    D101,
+    D102,
+    D103,
+    D104,
+    D105
 
 exclude =
     .git,
@@ -31,10 +29,10 @@ per-file-ignores =
 
 # Specific error codes we care about
 select =
-    E,  # pycodestyle errors
-    W,  # pycodestyle warnings
-    F,  # pyflakes
-    B,  # flake8-bugbear
+    E,
+    W,
+    F,
+    B
 
 max-complexity = 10
 doctests = True
