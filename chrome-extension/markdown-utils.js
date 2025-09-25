@@ -169,8 +169,10 @@ class MarkdownRenderer {
 
         // Paragraphs and basic text formatting
         "p": "margin: 2px 0 !important; padding: 0 !important; line-height: 1.4 !important; background: none !important; border: none !important; display: block !important;",
-        "strong, b": "font-weight: bold !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
-        "em, i": "font-style: italic !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
+        "strong": "font-weight: bold !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
+        "b": "font-weight: bold !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
+        "em": "font-style: italic !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
+        "i": "font-style: italic !important; background: none !important; border: none !important; padding: 0 !important; margin: 0 !important;",
         "code": "font-family: monospace !important; background: rgba(0,0,0,0.05) !important; padding: 1px 3px !important; border-radius: 2px !important; font-size: 12px !important; border: none !important; margin: 0 !important;",
         "blockquote": "border-left: 2px solid #bdc3c7 !important; margin: 2px 0 !important; padding: 2px 0 2px 8px !important; background: rgba(0,0,0,0.02) !important; font-style: italic !important; color: #7f8c8d !important;",
       };

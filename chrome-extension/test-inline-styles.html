@@ -77,6 +77,41 @@ Regular paragraph text to test basic styling.`;
 
                 console.log('Markdown rendered successfully!');
                 console.log('Rendered HTML:', renderedHTML);
+
+                // Verify that inline styles are applied
+                setTimeout(() => {
+                    const hasInlineStyles = renderedHTML.includes('!important');
+                    const statusDiv = document.createElement('div');
+                    statusDiv.style.cssText = 'margin-top: 20px; padding: 10px; border-radius: 5px;';
+
+                    if (hasInlineStyles) {
+                        statusDiv.style.background = '#d4edda';
+                        statusDiv.style.color = '#155724';
+                        statusDiv.style.border = '1px solid #c3e6cb';
+                        statusDiv.innerHTML = '✅ SUCCESS: Inline styles are being applied with !important declarations';
+                    } else {
+                        statusDiv.style.background = '#f8d7da';
+                        statusDiv.style.color = '#721c24';
+                        statusDiv.style.border = '1px solid #f5c6cb';
+                        statusDiv.innerHTML = '❌ ERROR: Inline styles are NOT being applied';
+                    }
+
+                    document.getElementById('test-container').appendChild(statusDiv);
+
+                    // Additional verification
+                    const verificationDiv = document.createElement('div');
+                    verificationDiv.style.cssText = 'margin-top: 10px; padding: 10px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;';
+
+                    let verificationResults = [];
+                    verificationResults.push(`Contains h1 styles: ${renderedHTML.includes('h1') && renderedHTML.includes('font-size: 16px !important')}`);
+                    verificationResults.push(`Contains ul styles: ${renderedHTML.includes('ul') && renderedHTML.includes('list-style-type: disc !important')}`);
+                    verificationResults.push(`Contains a styles: ${renderedHTML.includes('<a') && renderedHTML.includes('color: #3498db !important')}`);
+                    verificationResults.push(`Contains strong styles: ${renderedHTML.includes('<strong') && renderedHTML.includes('font-weight: bold !important')}`);
+
+                    verificationDiv.innerHTML = '<strong>Style Verification:</strong><br>' + verificationResults.join('<br>');
+                    document.getElementById('test-container').appendChild(verificationDiv);
+                }, 100);
+
             } catch (error) {
                 console.error('Error testing markdown renderer:', error);
                 document.getElementById('markdown-output').innerHTML =
