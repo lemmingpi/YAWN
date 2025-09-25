@@ -1,7 +1,8 @@
 // Web Notes - Content script
 // Loads and displays existing notes for the current page with markdown editing support
 
-/* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote */
+/* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote, normalizeUrlForNoteStorage */
+/* global getNotesForUrl, findMatchingUrlsInStorage */
 
 // Timing constants for better maintainability
 const TIMING = {
@@ -55,7 +56,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Load and display existing notes for the current URL
+ * Load and display existing notes for the current URL with enhanced URL matching
  */
 async function loadExistingNotes() {
   try {
@@ -66,9 +67,11 @@ async function loadExistingNotes() {
       }
 
       const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
-      const urlNotes = notes[window.location.href] || [];
 
-      console.log(`[Web Notes] Found ${urlNotes.length} notes for current URL`);
+      // Use enhanced URL matching to find all notes that match the current URL
+      const urlNotes = getNotesForUrl(window.location.href, notes);
+
+      console.log(`[Web Notes] Found ${urlNotes.length} notes for current URL (including anchor variations)`);
 
       // Migrate and display notes, saving if migration occurred
       let needsBulkSave = false;
@@ -88,13 +91,26 @@ async function loadExistingNotes() {
       }
 
       // Save all migrated notes in bulk if any were migrated
+      // Note: This will move all notes from URL variations (with different anchors)
+      // under a single normalized URL and clean up the old entries to avoid duplicates.
       if (needsBulkSave) {
-        notes[window.location.href] = migratedNotes;
+        const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
+        notes[normalizedUrl] = migratedNotes;
+
+        // Clean up old URL variations to avoid duplicates after migration
+        const matchingUrls = findMatchingUrlsInStorage(window.location.href, notes);
+        for (const oldUrl of matchingUrls) {
+          if (oldUrl !== normalizedUrl && notes[oldUrl]) {
+            console.log(`[Web Notes] Cleaning up old URL variation: ${oldUrl}`);
+            delete notes[oldUrl];
+          }
+        }
+
         chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, function () {
           if (chrome.runtime.lastError) {
             console.error("[Web Notes] Failed to save migrated notes:", chrome.runtime.lastError);
           } else {
-            console.log("[Web Notes] Successfully saved migrated notes");
+            console.log("[Web Notes] Successfully saved migrated notes and cleaned up URL variations");
           }
         });
       }
@@ -221,7 +237,7 @@ function repositionAllNotes() {
     }
 
     const allNotes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
-    const urlNotes = allNotes[window.location.href] || [];
+    const urlNotes = getNotesForUrl(window.location.href, allNotes);
 
     notes.forEach(noteElement => {
       const noteId = noteElement.id;
@@ -326,7 +342,7 @@ function calculateNotePosition(noteData, targetElement) {
 
 
 /**
- * Update note offset in storage
+ * Update note offset in storage with enhanced URL matching
  * @param {string} noteId - The note ID
  * @param {number} newOffsetX - New X offset
  * @param {number} newOffsetY - New Y offset
@@ -340,29 +356,52 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
       }
 
       const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
-      const urlNotes = notes[window.location.href] || [];
+      const matchingUrls = findMatchingUrlsInStorage(window.location.href, notes);
+      let noteFound = false;
 
-      // Find and update the specific note
-      const noteIndex = urlNotes.findIndex(note => note.id === noteId);
-      if (noteIndex !== -1) {
-        urlNotes[noteIndex].offsetX = newOffsetX;
-        urlNotes[noteIndex].offsetY = newOffsetY;
+      // Find and update the specific note in any of the matching URLs
+      for (const matchingUrl of matchingUrls) {
+        const urlNotes = notes[matchingUrl] || [];
+        const noteIndex = urlNotes.findIndex(note => note.id === noteId);
 
-        // Save back to storage
-        notes[window.location.href] = urlNotes;
-        chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, function () {
-          if (chrome.runtime.lastError) {
-            console.error("[Web Notes] Failed to save note offset:", chrome.runtime.lastError);
-          } else {
-            console.log(`[Web Notes] Updated note ${noteId} offset to (${newOffsetX}, ${newOffsetY})`);
-          }
-        });
-      } else {
+        if (noteIndex !== -1) {
+          urlNotes[noteIndex].offsetX = newOffsetX;
+          urlNotes[noteIndex].offsetY = newOffsetY;
+
+          // Save back to storage
+          notes[matchingUrl] = urlNotes;
+          chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, function () {
+            if (chrome.runtime.lastError) {
+              console.error("[Web Notes] Failed to save note offset:", chrome.runtime.lastError);
+            } else {
+              console.log(`[Web Notes] Updated note ${noteId} offset to (${newOffsetX}, ${newOffsetY})`);
+            }
+          });
+          noteFound = true;
+          break;
+        }
+      }
+
+      if (!noteFound) {
         console.warn(`[Web Notes] Note ${noteId} not found for offset update`);
       }
     });
   } catch (error) {
     console.error("[Web Notes] Error updating note offset:", error);
+  }
+}
+
+/**
+ * Update note cursor based on current state (edit mode vs drag mode)
+ * @param {Element} noteElement - The note DOM element
+ */
+function updateNoteCursor(noteElement) {
+  if (noteElement.classList.contains("editing")) {
+    noteElement.style.cursor = "text";
+  } else if (noteElement.classList.contains("dragging")) {
+    noteElement.style.cursor = "grabbing";
+  } else {
+    noteElement.style.cursor = "move";
   }
 }
 
@@ -374,7 +413,7 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
 function addInteractiveEffects(noteElement, isAnchored) {
   // Hover effects
   noteElement.addEventListener("mouseenter", () => {
-    if (!noteElement.classList.contains("dragging")) {
+    if (!noteElement.classList.contains("dragging") && !noteElement.classList.contains("editing")) {
       noteElement.style.transform = "scale(1.02) translateZ(0)";
       noteElement.style.boxShadow = "0 5px 20px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1)";
       noteElement.style.borderColor = isAnchored ? "rgba(33, 150, 243, 0.4)" : "rgba(233, 30, 99, 0.4)";
@@ -382,7 +421,7 @@ function addInteractiveEffects(noteElement, isAnchored) {
   });
 
   noteElement.addEventListener("mouseleave", () => {
-    if (!noteElement.classList.contains("dragging")) {
+    if (!noteElement.classList.contains("dragging") && !noteElement.classList.contains("editing")) {
       noteElement.style.transform = "scale(1) translateZ(0)";
       noteElement.style.boxShadow = "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
       noteElement.style.borderColor = isAnchored ? "rgba(33, 150, 243, 0.2)" : "rgba(233, 30, 99, 0.2)";
@@ -419,6 +458,11 @@ function makeDraggable(noteElement, noteData, targetElement) {
   let startOffsetY = noteData.offsetY || 0;
 
   function handleDragStart(e) {
+    // CRITICAL: Prevent drag operations when note is in edit mode
+    if (noteElement.classList.contains("editing")) {
+      return; // Allow normal text selection and cursor behavior in edit mode
+    }
+
     // Prevent default drag behavior and text selection
     e.preventDefault();
     e.stopPropagation();
@@ -431,7 +475,7 @@ function makeDraggable(noteElement, noteData, targetElement) {
 
     // Enhanced drag visual feedback
     noteElement.classList.add("dragging");
-    noteElement.style.cursor = "grabbing";
+    updateNoteCursor(noteElement);
     noteElement.style.transform = "scale(1.05) rotateZ(2deg) translateZ(0)";
     noteElement.style.boxShadow = "0 8px 32px rgba(0, 0, 0, 0.24), 0 4px 8px rgba(0, 0, 0, 0.12)";
     noteElement.style.zIndex = "10001";
@@ -485,7 +529,7 @@ function makeDraggable(noteElement, noteData, targetElement) {
 
     // Restore normal styling with smooth transition
     noteElement.classList.remove("dragging");
-    noteElement.style.cursor = "move";
+    updateNoteCursor(noteElement);
     noteElement.style.transform = "scale(1) rotateZ(0deg) translateZ(0)";
     noteElement.style.boxShadow = "0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08)";
     noteElement.style.zIndex = "10000";
@@ -510,8 +554,12 @@ function makeDraggable(noteElement, noteData, targetElement) {
   // Add mousedown event listener to start dragging
   noteElement.addEventListener("mousedown", handleDragStart);
 
-  // Prevent text selection during potential drag
-  noteElement.addEventListener("selectstart", e => e.preventDefault());
+  // Prevent text selection during potential drag (but allow it in edit mode)
+  noteElement.addEventListener("selectstart", e => {
+    if (!noteElement.classList.contains("editing")) {
+      e.preventDefault();
+    }
+  });
 }
 
 /**
@@ -617,8 +665,8 @@ function enterEditMode(noteElement, noteData) {
   textarea.focus();
   textarea.select();
 
-  // Disable dragging during edit
-  noteElement.style.cursor = "text";
+  // Update cursor for edit mode
+  updateNoteCursor(noteElement);
 
   // Add visual indicator for edit mode
   noteElement.style.borderColor = "#2196F3";
@@ -716,7 +764,7 @@ function exitEditMode(noteElement, save = true) {
 
   // Restore styling
   noteElement.classList.remove("editing");
-  noteElement.style.cursor = "move";
+  updateNoteCursor(noteElement);
   noteElement.style.borderColor = "";
   noteElement.style.borderWidth = "";
   noteElement.style.borderStyle = "";
@@ -1117,18 +1165,19 @@ function createNoteAtCoords(noteNumber, coords) {
     const noteData = NoteDataUtils.createNoteData(baseData, noteText);
     displayNote(noteData);
 
-    // Store in chrome storage using shared constants
+    // Store in chrome storage using normalized URL
     chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
       const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
-      const urlNotes = notes[window.location.href] || [];
+      const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
+      const urlNotes = notes[normalizedUrl] || [];
       urlNotes.push(noteData);
-      notes[window.location.href] = urlNotes;
+      notes[normalizedUrl] = urlNotes;
 
       chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, function () {
         if (chrome.runtime.lastError) {
           console.error("[Web Notes] Failed to save note:", chrome.runtime.lastError);
         } else {
-          console.log("[Web Notes] Note saved successfully");
+          console.log("[Web Notes] Note saved successfully to normalized URL");
         }
       });
     });

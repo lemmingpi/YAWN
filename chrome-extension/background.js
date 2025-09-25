@@ -4,7 +4,7 @@
  */
 
 /* global importScripts, EXTENSION_CONSTANTS, logError, safeApiCall */
-/* global getStats, setStats, getNotes, isTabValid */
+/* global getStats, setStats, getNotes, isTabValid, getNotesForUrl */
 
 // Import shared utilities
 importScripts("shared-utils.js");
@@ -168,9 +168,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       return;
     }
 
-    // Get next note number
+    // Get next note number using enhanced URL matching
     const notes = await getNotes();
-    const urlNotes = notes[tab.url] || [];
+    const urlNotes = getNotesForUrl(tab.url, notes);
     const noteNumber = urlNotes.length + 1;
 
     // Get click coordinates from content script and create note
