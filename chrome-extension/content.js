@@ -1,6 +1,7 @@
 // Web Notes - Content script
 // Loads and displays existing notes for the current page with markdown editing support
 
+
 /* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote, deleteNote, normalizeUrlForNoteStorage */
 /* global getNotesForUrl, findMatchingUrlsInStorage */
 
@@ -60,13 +61,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  */
 async function loadExistingNotes() {
   try {
-    chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], async function (result) {
+    getNotes().then( async function (result) {
       if (chrome.runtime.lastError) {
         console.error("[Web Notes] Failed to load notes:", chrome.runtime.lastError);
         return;
       }
 
-      const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+      const notes = result || {};
 
       // Use enhanced URL matching to find all notes that match the current URL
       const urlNotes = getNotesForUrl(window.location.href, notes);
@@ -108,9 +109,8 @@ async function loadExistingNotes() {
           }
         }
 
-        chrome.storage.local.set(
-          { [EXTENSION_CONSTANTS.NOTES_KEY]: notes },
-          function () {
+        setNotes(notes).then(
+          function (result) {
             if (chrome.runtime.lastError) {
               console.error(
                 "[Web Notes] Failed to save migrated notes:",
@@ -243,7 +243,7 @@ function repositionAllNotes() {
   }
 
   // Batch storage operation - fetch all notes once
-  chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+  getNotes().then(function (result) {
     if (chrome.runtime.lastError) {
       console.error(
         "[Web Notes] Failed to get notes for repositioning:",
@@ -252,7 +252,7 @@ function repositionAllNotes() {
       return;
     }
 
-    const allNotes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+    const allNotes = result || {};
     const urlNotes = getNotesForUrl(window.location.href, allNotes);
 
     notes.forEach(noteElement => {
@@ -372,7 +372,7 @@ function calculateNotePosition(noteData, targetElement) {
  */
 function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
   try {
-    chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
+    getNotes().then( function (result) {
       if (chrome.runtime.lastError) {
         console.error(
           "[Web Notes] Failed to get notes for offset update:",
@@ -381,7 +381,7 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
         return;
       }
 
-      const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+      const notes = result || {};
       const matchingUrls = findMatchingUrlsInStorage(window.location.href, notes);
       let noteFound = false;
 
@@ -396,8 +396,7 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
 
           // Save back to storage
           notes[matchingUrl] = urlNotes;
-          chrome.storage.local.set(
-            { [EXTENSION_CONSTANTS.NOTES_KEY]: notes },
+          setNotes(notes).then(
             function () {
               if (chrome.runtime.lastError) {
                 console.error(
@@ -1572,14 +1571,14 @@ function createNoteAtCoords(noteNumber, coords) {
     displayNote(noteData);
 
     // Store in chrome storage using normalized URL
-    chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], function (result) {
-      const notes = result[EXTENSION_CONSTANTS.NOTES_KEY] || {};
+    getNotes().then(function (result) {
+      const notes = result || {};
       const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
       const urlNotes = notes[normalizedUrl] || [];
       urlNotes.push(noteData);
       notes[normalizedUrl] = urlNotes;
 
-      chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, function () {
+      setNotes(notes).then(function () {
         if (chrome.runtime.lastError) {
           console.error("[Web Notes] Failed to save note:", chrome.runtime.lastError);
         } else {

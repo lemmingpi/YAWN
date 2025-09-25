@@ -81,7 +81,7 @@ async function setStats(stats) {
  * Gets configuration from chrome.storage.sync
  * @returns {Promise<Object>} Promise resolving to config object
  */
-async function getConfig() {
+async function getWNConfig() {
   try {
     return new Promise(resolve => {
       chrome.storage.sync.get(["syncServerUrl", "useChromeSync"], result => {
@@ -107,7 +107,7 @@ async function getConfig() {
  * @param {Object} config - Configuration object
  * @returns {Promise<boolean>} Promise resolving to success status
  */
-async function setConfig(config) {
+async function setWNConfig(config) {
   try {
     return new Promise(resolve => {
       chrome.storage.sync.set(config, () => {
@@ -129,9 +129,33 @@ async function setConfig(config) {
  * Gets notes from appropriate storage based on configuration
  * @returns {Promise<Object>} Promise resolving to notes object organized by URL
  */
+async function getBytesUsed() {
+  try {
+    const config = await getWNConfig();
+    const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+    return new Promise(resolve => {
+      storage.getBytesInUse(null, bytes => {
+        if (chrome.runtime.lastError) {
+          logError("Failed to get bytes used", chrome.runtime.lastError);
+          resolve(-1);
+        } else {
+          resolve(bytes);
+        }
+      });
+    });
+  } catch (error) {
+    logError("Error in getBytesUsed", error);
+    return -1;
+  }
+}
+
+/**
+ * Gets notes from appropriate storage based on configuration
+ * @returns {Promise<Object>} Promise resolving to notes object organized by URL
+ */
 async function getNotes() {
   try {
-    const config = await getConfig();
+    const config = await getWNConfig();
     const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
 
     return new Promise(resolve => {
@@ -157,9 +181,8 @@ async function getNotes() {
  */
 async function setNotes(notes) {
   try {
-    const config = await getConfig();
+    const config = await getWNConfig();
     const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
-
     return new Promise(resolve => {
       storage.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, () => {
         if (chrome.runtime.lastError) {
@@ -430,8 +453,9 @@ if (typeof module !== "undefined" && module.exports) {
     logError,
     getStats,
     setStats,
-    getConfig,
-    setConfig,
+    getWNConfig,
+    setWNConfig,
+    getBytesUsed,
     getNotes,
     setNotes,
     updateNote,

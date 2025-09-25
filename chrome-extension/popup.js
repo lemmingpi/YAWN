@@ -17,12 +17,23 @@
 async function updateStatsDisplay() {
   try {
     const statsContentElement = document.getElementById("stats-content");
+
+    const useChromeSyncCheckbox = document.getElementById("use-chrome-sync");
+    const syncServerUrlInput = document.getElementById("sync-server-url");
+
     if (!statsContentElement) {
       logError("Stats display update failed", "stats-content element not found");
       return;
     }
 
     const stats = await getStats();
+    const config = await getWNConfig();
+    if (useChromeSyncCheckbox && config) {
+      useChromeSyncCheckbox.checked = !!config.useChromeSync;
+    }
+    if (syncServerUrlInput && config) {
+      syncServerUrlInput.value = config.syncServerUrl || "";
+    }
 
     const installDate = new Date(stats.installDate).toLocaleDateString();
     const lastSeen = new Date(stats.lastSeen).toLocaleString();
@@ -35,13 +46,12 @@ async function updateStatsDisplay() {
     // Create stats display safely using DOM methods
     const statsDiv = document.createElement("div");
     statsDiv.style.cssText = "font-size: 11px; line-height: 1.4;";
+    const bytesUsed = await getBytesUsed()/1024; // Convert to KB
 
     const statsData = [
       `• Installed: ${installDate}`,
-      `• Banner shows: ${stats.bannerShows}`,
-      `• Context menu clicks: ${stats.contextMenuClicks}`,
-      `• Popup opens: ${stats.popupOpens}`,
       `• Last seen: ${lastSeen}`,
+      `• Storage Used: ${bytesUsed} KB`
     ];
 
     statsData.forEach(statText => {
@@ -65,26 +75,6 @@ async function updateStatsDisplay() {
   }
 }
 
-/**
- * Increments popup open counter
- */
-async function incrementPopupCount() {
-  try {
-    const stats = await getStats();
-    const updatedStats = {
-      ...stats,
-      popupOpens: stats.popupOpens + 1,
-      lastSeen: Date.now(),
-    };
-
-    const success = await setStats(updatedStats);
-    if (success) {
-      await updateStatsDisplay();
-    }
-  } catch (error) {
-    logError("Error incrementing popup count", error);
-  }
-}
 
 /**
  * Gets current active tab with error handling
@@ -195,75 +185,16 @@ function showUserError(message) {
 document.addEventListener("DOMContentLoaded", async function () {
   try {
     // Get DOM elements with validation
-    const showBannerBtn = document.getElementById("show-banner");
-    const hideBannerBtn = document.getElementById("hide-banner");
-    const clearStatsBtn = document.getElementById("clear-stats");
 
-    if (!showBannerBtn || !hideBannerBtn || !clearStatsBtn) {
+    const clearStatsBtn = document.getElementById("clear-stats");
+    const useChromeSyncCheckbox = document.getElementById("use-chrome-sync");
+    const syncServerUrlInput = document.getElementById("sync-server-url");
+
+
+    if (!clearStatsBtn) {
       logError("DOM initialization failed", "Required buttons not found");
       return;
     }
-
-    // Show Banner Button
-    showBannerBtn.addEventListener("click", async function () {
-      try {
-        const tab = await getCurrentTab();
-
-        if (!tab) {
-          showUserError("Cannot access current tab");
-          return;
-        }
-
-        if (!isTabValid(tab)) {
-          showUserError("Cannot show banner on this page type");
-          return;
-        }
-
-        const success = await executeScriptInTab(tab.id, showHelloWorldBanner);
-
-        if (success) {
-          // Update stats
-          const stats = await getStats();
-          await setStats({
-            ...stats,
-            bannerShows: stats.bannerShows + 1,
-            lastSeen: Date.now(),
-          });
-          await updateStatsDisplay();
-        } else {
-          showUserError("Failed to show banner");
-        }
-      } catch (error) {
-        logError("Error in show banner click handler", error);
-        showUserError("Unexpected error occurred");
-      }
-    });
-
-    // Hide Banner Button
-    hideBannerBtn.addEventListener("click", async function () {
-      try {
-        const tab = await getCurrentTab();
-
-        if (!tab) {
-          showUserError("Cannot access current tab");
-          return;
-        }
-
-        if (!isTabValid(tab)) {
-          showUserError("Cannot hide banner on this page type");
-          return;
-        }
-
-        const success = await executeScriptInTab(tab.id, hideHelloWorldBanner);
-
-        if (!success) {
-          showUserError("Failed to hide banner");
-        }
-      } catch (error) {
-        logError("Error in hide banner click handler", error);
-        showUserError("Unexpected error occurred");
-      }
-    });
 
     // Clear Stats Button
     clearStatsBtn.addEventListener("click", async function () {
@@ -290,8 +221,40 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
     });
 
+    useChromeSyncCheckbox.addEventListener("change", async function () {
+      try {
+        const newValue = useChromeSyncCheckbox.checked;
+        let cfg = await getWNConfig();
+        if(cfg.useChromeSync != newValue) {
+          let notes = await getNotes();
+          cfg.useChromeSync = newValue;
+          await setWNConfig(cfg);
+          await setNotes(notes);
+        }
+    } catch (error) {
+        logError("Error in settings click handler", error);
+        showUserError("Failed to update settings");
+      }
+    });
+
+    syncServerUrlInput.addEventListener("change", async function () {
+      try {
+        const newValue = syncServerUrlInput.value.trim();
+        await new Promise((resolve, reject) => {
+          let cfg = getWNConfig().then(cfg => {
+            cfg.syncServerUrl = newValue;
+            setWNConfig(cfg);
+            resolve();
+          }).catch(reject);
+        });
+      } catch (error) {
+        logError("Error in settings input handler", error);
+        showUserError("Failed to update settings");
+      }
+    });
+
     // Initialize popup
-    await incrementPopupCount();
+    await updateStatsDisplay();
   } catch (error) {
     logError("Error during popup initialization", error);
   }
