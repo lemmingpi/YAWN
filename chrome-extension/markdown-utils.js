@@ -266,6 +266,7 @@ const NoteDataUtils = {
       ...baseData,
       content: content,
       contentType: isMarkdown ? "markdown" : "plain",
+      backgroundColor: baseData.backgroundColor || "light-yellow", // Default background color
       lastEdited: Date.now(),
       // Keep existing fields
       timestamp: baseData.timestamp || Date.now(),

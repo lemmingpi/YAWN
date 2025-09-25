@@ -26,7 +26,8 @@
       "Bash(node:*)",
       "Bash(npx eslint chrome-extension/markdown-utils.js)",
       "Bash(npx eslint:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": [],

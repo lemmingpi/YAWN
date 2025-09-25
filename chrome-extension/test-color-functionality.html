@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web Notes Color Functionality Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .color-demo {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .color-sample {
+            width: 100px;
+            height: 60px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            text-align: center;
+            padding: 5px;
+        }
+        .test-note {
+            background: #fff3cd;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+            width: 200px;
+            min-height: 50px;
+        }
+        .toolbar {
+            background: #f8f9fa;
+            padding: 5px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Web Notes Color Functionality Test</h1>
+        <p>This page tests the color dropdown functionality for the Web Notes Chrome extension.</p>
+
+        <h2>Available Colors</h2>
+        <div class="color-demo" id="colorDemo"></div>
+
+        <h2>Test Note with Toolbar</h2>
+        <div class="toolbar" id="testToolbar">
+            <span>Toolbar: </span>
+            <!-- Color dropdown will be added here by JS -->
+        </div>
+        <div class="test-note" id="testNote">
+            This is a test note. The color dropdown should change this note's background color.
+        </div>
+
+        <h2>Test Results</h2>
+        <div id="testResults">
+            <p>Loading color utilities...</p>
+        </div>
+    </div>
+
+    <!-- Load the extension scripts -->
+    <script src="color-utils.js"></script>
+    <script src="color-dropdown.js"></script>
+
+    <script>
+        // Test the color utilities
+        function testColorUtilities() {
+            const results = document.getElementById('testResults');
+            const colorDemo = document.getElementById('colorDemo');
+            let testsPassed = 0;
+            let testsTotal = 0;
+
+            try {
+                // Test 1: Check if NoteColorUtils exists
+                testsTotal++;
+                if (typeof NoteColorUtils !== 'undefined') {
+                    testsPassed++;
+                    results.innerHTML += '<p>✅ NoteColorUtils loaded successfully</p>';
+                } else {
+                    results.innerHTML += '<p>❌ NoteColorUtils not found</p>';
+                    return;
+                }
+
+                // Test 2: Check color options
+                testsTotal++;
+                const colorOptions = NoteColorUtils.getColorOptions();
+                if (colorOptions && colorOptions.length === 8) {
+                    testsPassed++;
+                    results.innerHTML += `<p>✅ Found ${colorOptions.length} color options</p>`;
+
+                    // Display color samples
+                    colorOptions.forEach(option => {
+                        const sample = document.createElement('div');
+                        sample.className = 'color-sample';
+                        sample.style.background = option.value;
+                        sample.textContent = option.displayName;
+                        colorDemo.appendChild(sample);
+                    });
+                } else {
+                    results.innerHTML += '<p>❌ Incorrect number of color options</p>';
+                }
+
+                // Test 3: Check color value retrieval
+                testsTotal++;
+                const yellowValue = NoteColorUtils.getColorValue('light-yellow');
+                if (yellowValue === '#fff3cd') {
+                    testsPassed++;
+                    results.innerHTML += '<p>✅ Color value retrieval works</p>';
+                } else {
+                    results.innerHTML += `<p>❌ Expected #fff3cd, got ${yellowValue}</p>`;
+                }
+
+                // Test 4: Check if createColorDropdown function exists
+                testsTotal++;
+                if (typeof createColorDropdown === 'function') {
+                    testsPassed++;
+                    results.innerHTML += '<p>✅ createColorDropdown function available</p>';
+
+                    // Create a mock textarea for testing
+                    const mockTextarea = document.createElement('textarea');
+                    mockTextarea.style.display = 'none';
+                    document.body.appendChild(mockTextarea);
+
+                    // Test 5: Create color dropdown
+                    testsTotal++;
+                    try {
+                        const dropdown = createColorDropdown(mockTextarea);
+                        if (dropdown && dropdown.className.includes('color-dropdown-container')) {
+                            testsPassed++;
+                            results.innerHTML += '<p>✅ Color dropdown created successfully</p>';
+
+                            // Add it to the test toolbar
+                            document.getElementById('testToolbar').appendChild(dropdown);
+                        } else {
+                            results.innerHTML += '<p>❌ Color dropdown creation failed</p>';
+                        }
+                    } catch (error) {
+                        results.innerHTML += `<p>❌ Color dropdown error: ${error.message}</p>';
+                    }
+                } else {
+                    results.innerHTML += '<p>❌ createColorDropdown function not found</p>';
+                }
+
+                // Final results
+                results.innerHTML += `<h3>Test Summary: ${testsPassed}/${testsTotal} tests passed</h3>`;
+
+                if (testsPassed === testsTotal) {
+                    results.innerHTML += '<p style="color: green; font-weight: bold;">🎉 All tests passed! Color functionality is working correctly.</p>';
+                } else {
+                    results.innerHTML += '<p style="color: red; font-weight: bold;">⚠️ Some tests failed. Please check the implementation.</p>';
+                }
+
+            } catch (error) {
+                results.innerHTML += `<p style="color: red;">❌ Test error: ${error.message}</p>`;
+            }
+        }
+
+        // Run tests when page loads
+        window.addEventListener('load', testColorUtilities);
+    </script>
+</body>
+</html>
