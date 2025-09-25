@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Web Notes Hello World</title>
+    <title>Sticky Notes for Web Pages</title>
     <style>
       body {
         width: 320px;
@@ -79,20 +79,53 @@
         opacity: 0.9;
       }
 
-      .feature-list {
+      .config-section {
         text-align: left;
+        margin-top: 16px;
+        font-size: 12px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 12px;
+      }
+
+      .config-item {
+        margin: 12px 0;
+      }
+
+      .config-item label {
+        display: block;
+        margin-bottom: 4px;
+        font-weight: 500;
+      }
+
+      .config-item input[type="text"] {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        font-size: 12px;
+        box-sizing: border-box;
+      }
+
+      .config-item input[type="text"]::placeholder {
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .config-item input[type="checkbox"] {
+        margin-right: 8px;
+      }
+
+      .feature-list {
+        text-align: center;
         margin-top: 16px;
         font-size: 12px;
         opacity: 0.8;
       }
 
-      .feature-list ul {
-        margin: 8px 0;
-        padding-left: 16px;
-      }
-
-      .feature-list li {
-        margin: 4px 0;
+      .feature-list .button {
+        margin-top: 8px;
       }
     </style>
   </head>
@@ -100,14 +133,12 @@
     <div class="header">
       <div class="logo">🗒️</div>
       <h1>Web Notes</h1>
-      <div class="subtitle">Hello World Extension</div>
+      <div class="subtitle">Sticky notes for web pages</div>
     </div>
 
     <div class="content">
       <div class="version">Version 1.0.0</div>
 
-      <button class="button" id="show-banner">Show Banner</button>
-      <button class="button" id="hide-banner">Hide Banner</button>
       <button class="button" id="clear-stats">Clear Stats</button>
 
       <div class="status">
@@ -116,19 +147,27 @@
       </div>
 
       <div class="status" id="storage-stats">
-        <strong>Local Storage Stats:</strong>
+        <strong>Storage Stats:</strong>
         <div id="stats-content">Loading...</div>
       </div>
 
+      <div class="config-section">
+        <strong>Configuration:</strong>
+        <div class="config-item">
+          <label for="sync-server-url">Sync Server URL:</label>
+          <input type="text" id="sync-server-url" placeholder="https://your-server.com/api" />
+        </div>
+        <div class="config-item">
+          <label>
+            <input type="checkbox" id="use-chrome-sync" />
+            Use Chrome Sync
+          </label>
+        </div>
+      </div>
+
       <div class="feature-list">
-        <strong>Coming Soon:</strong>
-        <ul>
-          <li>Sticky notes on web pages</li>
-          <li>Rich text editing</li>
-          <li>Cross-device sync</li>
-          <li>Note categories</li>
-          <li>Text highlighting</li>
-        </ul>
+        <strong>GitHub:</strong>
+        <a href="https://github.com/gpalumbo/notes" class="button" id="github-link" target="_blank">Web Notes</a>
       </div>
     </div>
 

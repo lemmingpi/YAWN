@@ -78,13 +78,64 @@ async function setStats(stats) {
 }
 
 /**
- * Gets notes from storage with error handling
+ * Gets configuration from chrome.storage.sync
+ * @returns {Promise<Object>} Promise resolving to config object
+ */
+async function getConfig() {
+  try {
+    return new Promise(resolve => {
+      chrome.storage.sync.get(['syncServerUrl', 'useChromeSync'], result => {
+        if (chrome.runtime.lastError) {
+          logError("Failed to get config", chrome.runtime.lastError);
+          resolve({ syncServerUrl: '', useChromeSync: false });
+        } else {
+          resolve({
+            syncServerUrl: result.syncServerUrl || '',
+            useChromeSync: result.useChromeSync || false
+          });
+        }
+      });
+    });
+  } catch (error) {
+    logError("Error in getConfig", error);
+    return { syncServerUrl: '', useChromeSync: false };
+  }
+}
+
+/**
+ * Saves configuration to chrome.storage.sync
+ * @param {Object} config - Configuration object
+ * @returns {Promise<boolean>} Promise resolving to success status
+ */
+async function setConfig(config) {
+  try {
+    return new Promise(resolve => {
+      chrome.storage.sync.set(config, () => {
+        if (chrome.runtime.lastError) {
+          logError("Failed to set config", chrome.runtime.lastError);
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      });
+    });
+  } catch (error) {
+    logError("Error in setConfig", error);
+    return false;
+  }
+}
+
+/**
+ * Gets notes from appropriate storage based on configuration
  * @returns {Promise<Object>} Promise resolving to notes object organized by URL
  */
 async function getNotes() {
   try {
+    const config = await getConfig();
+    const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+
     return new Promise(resolve => {
-      chrome.storage.local.get([EXTENSION_CONSTANTS.NOTES_KEY], result => {
+      storage.get([EXTENSION_CONSTANTS.NOTES_KEY], result => {
         if (chrome.runtime.lastError) {
           logError("Failed to get notes", chrome.runtime.lastError);
           resolve({});
@@ -100,14 +151,17 @@ async function getNotes() {
 }
 
 /**
- * Save notes to storage with error handling
+ * Save notes to appropriate storage based on configuration
  * @param {Object} notes - Notes object organized by URL
  * @returns {Promise<boolean>} Promise resolving to success status
  */
 async function setNotes(notes) {
   try {
+    const config = await getConfig();
+    const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+
     return new Promise(resolve => {
-      chrome.storage.local.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, () => {
+      storage.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, () => {
         if (chrome.runtime.lastError) {
           logError("Failed to set notes", chrome.runtime.lastError);
           resolve(false);
@@ -367,6 +421,8 @@ if (typeof module !== "undefined" && module.exports) {
     logError,
     getStats,
     setStats,
+    getConfig,
+    setConfig,
     getNotes,
     setNotes,
     updateNote,
