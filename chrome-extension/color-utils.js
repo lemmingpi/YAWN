@@ -3,20 +3,22 @@
  * Centralized color management system
  */
 
+/* global module */
+
 /**
  * Centralized color mapping system for note background colors
  */
 const NoteColorUtils = {
   // Light colors mapped to user-friendly names
   colors: {
-    'light-yellow': '#fff3cd',
-    'light-blue': '#d1ecf1',
-    'light-green': '#d4edda',
-    'light-red': '#f8d7da',
-    'light-purple': '#e2e3f3',
-    'light-orange': '#ffeaa7',
-    'light-gray': '#e9ecef',
-    'teal': '#a7f3d0'
+    "light-yellow": "#fff3cd",
+    "light-blue": "#d1ecf1",
+    "light-green": "#d4edda",
+    "light-red": "#f8d7da",
+    "light-purple": "#e2e3f3",
+    "light-orange": "#ffeaa7",
+    "light-gray": "#e9ecef",
+    "teal": "#a7f3d0",
   },
 
   /**
@@ -27,7 +29,7 @@ const NoteColorUtils = {
     return Object.entries(this.colors).map(([name, value]) => ({
       name,
       value,
-      displayName: name.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
+      displayName: name.replace("-", " ").replace(/\b\w/g, l => l.toUpperCase()),
     }));
   },
 
@@ -37,7 +39,7 @@ const NoteColorUtils = {
    * @returns {string} Hex color value or default
    */
   getColorValue(colorName) {
-    return this.colors[colorName] || this.colors['light-yellow']; // Default to light yellow
+    return this.colors[colorName] || this.colors["light-yellow"]; // Default to light yellow
   },
 
   /**
@@ -54,8 +56,8 @@ const NoteColorUtils = {
    * @returns {string} Default color name
    */
   getDefaultColor() {
-    return 'light-yellow';
-  }
+    return "light-yellow";
+  },
 };
 
 // Export for use in other scripts

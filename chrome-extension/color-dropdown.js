@@ -3,6 +3,8 @@
  * Creates and manages the color selection dropdown in the edit toolbar
  */
 
+/* global NoteColorUtils, updateNote */
+
 /**
  * Create a color dropdown button for the toolbar
  * @param {Element} textarea - The textarea element (for focusing after color selection)
@@ -259,7 +261,7 @@ function handleColorSelection(colorName, textarea) {
     // Update the note's background color in data
     const updatedNoteData = {
       ...noteData,
-      backgroundColor: colorName
+      backgroundColor: colorName,
     };
 
     // Update the DOM element's data
