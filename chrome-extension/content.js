@@ -910,15 +910,16 @@ function createMarkdownToolbar(textarea) {
   toolbar.className = "markdown-toolbar";
   toolbar.style.cssText = `
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 8px;
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding: 4px;
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    border-radius: 6px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    margin-bottom: 6px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    margin-bottom: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    width: max-content;
   `;
 
   // Define toolbar buttons with their configurations
@@ -927,68 +928,68 @@ function createMarkdownToolbar(textarea) {
       title: "Bold",
       icon: "B",
       style: "font-weight: bold;",
-      action: () => insertMarkdownSyntax(textarea, "**", "**")
+      action: () => insertMarkdownSyntax(textarea, "**", "**"),
     },
     {
       title: "Italic",
       icon: "I",
       style: "font-style: italic;",
-      action: () => insertMarkdownSyntax(textarea, "*", "*")
+      action: () => insertMarkdownSyntax(textarea, "*", "*"),
     },
     {
       title: "Header 1",
       icon: "H1",
       style: "font-size: 12px; font-weight: bold;",
-      action: () => insertLinePrefix(textarea, "# ")
+      action: () => insertLinePrefix(textarea, "# "),
     },
     {
       title: "Header 2",
       icon: "H2",
       style: "font-size: 11px; font-weight: bold;",
-      action: () => insertLinePrefix(textarea, "## ")
+      action: () => insertLinePrefix(textarea, "## "),
     },
     {
       title: "Header 3",
       icon: "H3",
       style: "font-size: 10px; font-weight: bold;",
-      action: () => insertLinePrefix(textarea, "### ")
+      action: () => insertLinePrefix(textarea, "### "),
     },
     {
       title: "Link",
       icon: "🔗",
       style: "",
-      action: () => insertMarkdownLink(textarea)
+      action: () => insertMarkdownLink(textarea),
     },
     {
       title: "Unordered List",
       icon: "•",
       style: "font-weight: bold;",
-      action: () => insertLinePrefix(textarea, "- ")
+      action: () => insertLinePrefix(textarea, "- "),
     },
     {
       title: "Ordered List",
       icon: "1.",
       style: "font-size: 11px; font-weight: bold;",
-      action: () => insertOrderedListItem(textarea)
+      action: () => insertOrderedListItem(textarea),
     },
     {
       title: "Inline Code",
       icon: "<>",
       style: "font-family: monospace; font-size: 11px;",
-      action: () => insertMarkdownSyntax(textarea, "`", "`")
+      action: () => insertMarkdownSyntax(textarea, "`", "`"),
     },
     {
       title: "Quote",
-      icon: '"',
+      icon: "\"",
       style: "font-weight: bold; font-size: 14px;",
-      action: () => insertLinePrefix(textarea, "> ")
+      action: () => insertLinePrefix(textarea, "> "),
     },
     {
       title: "Strikethrough",
       icon: "S",
       style: "text-decoration: line-through;",
-      action: () => insertMarkdownSyntax(textarea, "~~", "~~")
-    }
+      action: () => insertMarkdownSyntax(textarea, "~~", "~~"),
+    },
   ];
 
   // Create buttons
@@ -1002,14 +1003,15 @@ function createMarkdownToolbar(textarea) {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 28px;
-      height: 28px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      width: 14px;
+      height: 14px;
+      border: 0.5px solid rgba(0, 0, 0, 0.12);
       background: linear-gradient(135deg, #ffffff 0%, #f0f2f5 100%);
       color: #333;
-      border-radius: 4px;
+      border-radius: 2px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 8px;
+      padding: 0;
       transition: all 0.2s ease;
       user-select: none;
       ${buttonConfig.style}
@@ -1875,7 +1877,7 @@ async function handleNoteDelete(noteElement, noteData) {
       "Delete Note",
       "Are you sure you want to delete this note? This action cannot be undone.",
       "Delete",
-      "Cancel"
+      "Cancel",
     );
 
     if (!confirmed) {
@@ -2114,14 +2116,14 @@ function createCustomConfirmDialog(title, message, confirmText, cancelText) {
  * @param {string} message - Message to show
  * @param {string} type - Message type ('error', 'success', 'info')
  */
-function showTemporaryMessage(message, type = 'info') {
+function showTemporaryMessage(message, type = "info") {
   try {
-    const messageElement = document.createElement('div');
+    const messageElement = document.createElement("div");
     messageElement.style.cssText = `
       position: fixed;
       top: 20px;
       right: 20px;
-      background: ${type === 'error' ? '#f44336' : type === 'success' ? '#4caf50' : '#2196f3'};
+      background: ${type === "error" ? "#f44336" : type === "success" ? "#4caf50" : "#2196f3"};
       color: white;
       padding: 12px 16px;
       border-radius: 6px;
@@ -2141,14 +2143,14 @@ function showTemporaryMessage(message, type = 'info') {
 
     // Animate in
     requestAnimationFrame(() => {
-      messageElement.style.opacity = '1';
-      messageElement.style.transform = 'translateX(0)';
+      messageElement.style.opacity = "1";
+      messageElement.style.transform = "translateX(0)";
     });
 
     // Remove after 4 seconds
     setTimeout(() => {
-      messageElement.style.opacity = '0';
-      messageElement.style.transform = 'translateX(100%)';
+      messageElement.style.opacity = "0";
+      messageElement.style.transform = "translateX(100%)";
       setTimeout(() => {
         if (messageElement.parentNode) {
           messageElement.remove();
@@ -2156,7 +2158,7 @@ function showTemporaryMessage(message, type = 'info') {
       }, 300);
     }, 4000);
   } catch (error) {
-    console.error('[Web Notes] Error showing temporary message:', error);
+    console.error("[Web Notes] Error showing temporary message:", error);
     // Fallback to alert if custom message fails
     alert(message);
   }
