@@ -657,13 +657,17 @@ function enterEditMode(noteElement, noteData) {
   // Store original content for cancellation
   textarea.originalContent = content;
 
-  // Create container for textarea and delete button
+  // Create container for toolbar, textarea and delete button
   const editContainer = document.createElement("div");
   editContainer.style.cssText = `
     position: relative;
     width: 100%;
     height: 100%;
   `;
+
+  // Create markdown toolbar
+  const toolbar = createMarkdownToolbar(textarea);
+  toolbar.className += " edit-toolbar";
 
   // Create delete button
   const deleteButton = document.createElement("button");
@@ -682,7 +686,7 @@ function enterEditMode(noteElement, noteData) {
     font-size: 14px;
     font-weight: bold;
     cursor: pointer;
-    z-index: 10001;
+    z-index: 10002;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -714,6 +718,7 @@ function enterEditMode(noteElement, noteData) {
 
   // Clear note content and add edit container
   noteElement.innerHTML = "";
+  editContainer.appendChild(toolbar);
   editContainer.appendChild(textarea);
   editContainer.appendChild(deleteButton);
   noteElement.appendChild(editContainer);
@@ -896,6 +901,162 @@ function handleEditKeydown(event, noteElement, noteData, textarea) {
 }
 
 /**
+ * Create a markdown toolbar for the editing interface
+ * @param {Element} textarea - The textarea element to control
+ * @returns {Element} The toolbar element
+ */
+function createMarkdownToolbar(textarea) {
+  const toolbar = document.createElement("div");
+  toolbar.className = "markdown-toolbar";
+  toolbar.style.cssText = `
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    margin-bottom: 6px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+
+  // Define toolbar buttons with their configurations
+  const toolbarButtons = [
+    {
+      title: "Bold",
+      icon: "B",
+      style: "font-weight: bold;",
+      action: () => insertMarkdownSyntax(textarea, "**", "**")
+    },
+    {
+      title: "Italic",
+      icon: "I",
+      style: "font-style: italic;",
+      action: () => insertMarkdownSyntax(textarea, "*", "*")
+    },
+    {
+      title: "Header 1",
+      icon: "H1",
+      style: "font-size: 12px; font-weight: bold;",
+      action: () => insertLinePrefix(textarea, "# ")
+    },
+    {
+      title: "Header 2",
+      icon: "H2",
+      style: "font-size: 11px; font-weight: bold;",
+      action: () => insertLinePrefix(textarea, "## ")
+    },
+    {
+      title: "Header 3",
+      icon: "H3",
+      style: "font-size: 10px; font-weight: bold;",
+      action: () => insertLinePrefix(textarea, "### ")
+    },
+    {
+      title: "Link",
+      icon: "🔗",
+      style: "",
+      action: () => insertMarkdownLink(textarea)
+    },
+    {
+      title: "Unordered List",
+      icon: "•",
+      style: "font-weight: bold;",
+      action: () => insertLinePrefix(textarea, "- ")
+    },
+    {
+      title: "Ordered List",
+      icon: "1.",
+      style: "font-size: 11px; font-weight: bold;",
+      action: () => insertOrderedListItem(textarea)
+    },
+    {
+      title: "Inline Code",
+      icon: "<>",
+      style: "font-family: monospace; font-size: 11px;",
+      action: () => insertMarkdownSyntax(textarea, "`", "`")
+    },
+    {
+      title: "Quote",
+      icon: '"',
+      style: "font-weight: bold; font-size: 14px;",
+      action: () => insertLinePrefix(textarea, "> ")
+    },
+    {
+      title: "Strikethrough",
+      icon: "S",
+      style: "text-decoration: line-through;",
+      action: () => insertMarkdownSyntax(textarea, "~~", "~~")
+    }
+  ];
+
+  // Create buttons
+  toolbarButtons.forEach(buttonConfig => {
+    const button = document.createElement("button");
+    button.className = "toolbar-button";
+    button.title = buttonConfig.title;
+    button.innerHTML = buttonConfig.icon;
+
+    button.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      background: linear-gradient(135deg, #ffffff 0%, #f0f2f5 100%);
+      color: #333;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s ease;
+      user-select: none;
+      ${buttonConfig.style}
+    `;
+
+    // Add hover and active effects
+    button.addEventListener("mouseenter", () => {
+      button.style.background = "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)";
+      button.style.borderColor = "#2196F3";
+      button.style.transform = "translateY(-1px)";
+      button.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.15)";
+    });
+
+    button.addEventListener("mouseleave", () => {
+      button.style.background = "linear-gradient(135deg, #ffffff 0%, #f0f2f5 100%)";
+      button.style.borderColor = "rgba(0, 0, 0, 0.15)";
+      button.style.transform = "translateY(0)";
+      button.style.boxShadow = "none";
+    });
+
+    button.addEventListener("mousedown", () => {
+      button.style.transform = "translateY(1px)";
+    });
+
+    button.addEventListener("mouseup", () => {
+      button.style.transform = "translateY(-1px)";
+    });
+
+    // Add click handler
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      buttonConfig.action();
+
+      // Maintain focus on textarea
+      setTimeout(() => {
+        textarea.focus();
+      }, 0);
+    });
+
+    toolbar.appendChild(button);
+  });
+
+  return toolbar;
+}
+
+/**
  * Insert markdown syntax around selected text
  * @param {Element} textarea - The textarea element
  * @param {string} before - Text to insert before selection
@@ -915,6 +1076,120 @@ function insertMarkdownSyntax(textarea, before, after) {
   } else {
     textarea.setSelectionRange(start + before.length, start + before.length);
   }
+
+  // Trigger auto-resize and change events
+  textarea.dispatchEvent(new Event("input"));
+  textarea.focus();
+}
+
+/**
+ * Insert prefix at the beginning of the current line
+ * @param {Element} textarea - The textarea element
+ * @param {string} prefix - The prefix to insert
+ */
+function insertLinePrefix(textarea, prefix) {
+  const start = textarea.selectionStart;
+  const value = textarea.value;
+
+  // Find the beginning of the current line
+  const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+  const lineEnd = value.indexOf("\n", start);
+  const actualLineEnd = lineEnd === -1 ? value.length : lineEnd;
+  const currentLine = value.substring(lineStart, actualLineEnd);
+
+  // Check if the line already has this prefix
+  if (currentLine.startsWith(prefix)) {
+    // Remove the prefix
+    const newLine = currentLine.substring(prefix.length);
+    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.setSelectionRange(start - prefix.length, start - prefix.length);
+  } else {
+    // Add the prefix
+    const newLine = prefix + currentLine;
+    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.setSelectionRange(start + prefix.length, start + prefix.length);
+  }
+
+  // Trigger auto-resize and change events
+  textarea.dispatchEvent(new Event("input"));
+  textarea.focus();
+}
+
+/**
+ * Insert an ordered list item with proper numbering
+ * @param {Element} textarea - The textarea element
+ */
+function insertOrderedListItem(textarea) {
+  const start = textarea.selectionStart;
+  const value = textarea.value;
+
+  // Find the beginning of the current line
+  const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+  const lineEnd = value.indexOf("\n", start);
+  const actualLineEnd = lineEnd === -1 ? value.length : lineEnd;
+  const currentLine = value.substring(lineStart, actualLineEnd);
+
+  // Check if there's already a numbered list item
+  const listItemMatch = currentLine.match(/^(\d+)\.\s/);
+  if (listItemMatch) {
+    // Remove the numbering
+    const newLine = currentLine.substring(listItemMatch[0].length);
+    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.setSelectionRange(start - listItemMatch[0].length, start - listItemMatch[0].length);
+  } else {
+    // Look for the previous line to determine the number
+    let number = 1;
+    const prevLineEnd = lineStart - 1;
+    if (prevLineEnd > 0) {
+      const prevLineStart = value.lastIndexOf("\n", prevLineEnd - 1) + 1;
+      const prevLine = value.substring(prevLineStart, prevLineEnd);
+      const prevMatch = prevLine.match(/^(\d+)\.\s/);
+      if (prevMatch) {
+        number = parseInt(prevMatch[1]) + 1;
+      }
+    }
+
+    // Add the numbered prefix
+    const prefix = `${number}. `;
+    const newLine = prefix + currentLine;
+    textarea.value = value.substring(0, lineStart) + newLine + value.substring(actualLineEnd);
+    textarea.setSelectionRange(start + prefix.length, start + prefix.length);
+  }
+
+  // Trigger auto-resize and change events
+  textarea.dispatchEvent(new Event("input"));
+  textarea.focus();
+}
+
+/**
+ * Insert a markdown link with placeholder text
+ * @param {Element} textarea - The textarea element
+ */
+function insertMarkdownLink(textarea) {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selectedText = textarea.value.substring(start, end);
+
+  let linkText, linkUrl, replacement;
+
+  if (selectedText) {
+    // If text is selected, use it as the link text
+    linkText = selectedText;
+    linkUrl = "url";
+    replacement = `[${linkText}](${linkUrl})`;
+  } else {
+    // No selection, insert template
+    linkText = "link text";
+    linkUrl = "url";
+    replacement = `[${linkText}](${linkUrl})`;
+  }
+
+  textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+
+  // Select the URL part for easy editing
+  const urlStart = start + linkText.length + 3; // [link text](
+  const urlEnd = urlStart + linkUrl.length;
+  textarea.setSelectionRange(urlStart, urlEnd);
 
   // Trigger auto-resize and change events
   textarea.dispatchEvent(new Event("input"));
