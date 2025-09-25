@@ -1115,6 +1115,16 @@ function createMarkdownToolbar(textarea) {
     toolbar.appendChild(button);
   });
 
+  // Add color dropdown if the function is available
+  if (typeof createColorDropdown === "function") {
+    try {
+      const colorDropdown = createColorDropdown(textarea);
+      toolbar.appendChild(colorDropdown);
+    } catch (error) {
+      console.error("[Web Notes] Error adding color dropdown to toolbar:", error);
+    }
+  }
+
   return toolbar;
 }
 
@@ -1333,11 +1343,7 @@ function displayNote(noteData) {
     const isAnchored = targetElement !== null;
     note.style.cssText = `
       position: absolute;
-      background: ${
-  isAnchored
-    ? "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)"
-    : "linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%)"
-};
+      background: ${NoteColorUtils.getColorValue(noteData.backgroundColor || 'light-yellow')};
       color: #2c3e50;
       padding: 10px 14px;
       border-radius: 8px;
@@ -1503,8 +1509,9 @@ if ("navigation" in window) {
  * Create a note at specific coordinates
  * @param {number} noteNumber - The note number
  * @param {Object} coords - Click coordinates with target element
+ * @param {string} [backgroundColor='light-yellow'] - Optional background color for the note
  */
-function createNoteAtCoords(noteNumber, coords) {
+function createNoteAtCoords(noteNumber, coords, backgroundColor = 'light-yellow') {
   try {
     // Generate unique note ID
     const noteId = `web-note-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -1565,6 +1572,7 @@ function createNoteAtCoords(noteNumber, coords) {
       offsetY: 0,
       timestamp: Date.now(),
       isVisible: true,
+      backgroundColor: backgroundColor,
     };
 
     const noteData = NoteDataUtils.createNoteData(baseData, noteText);
