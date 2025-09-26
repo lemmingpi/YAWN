@@ -26,11 +26,19 @@ const EditingState = {
 
 console.log("Web Notes - Content script loaded!");
 
+// Map to store highlighting elements by note ID
+const noteHighlights = new Map();
+const MAX_HIGHLIGHTS = 1000;
+const MAX_SELECTION_LENGTH = 50000;
+
 // Store the last right-click coordinates for note positioning
 let lastRightClickCoords = null;
 
-// Listen for right-click events to capture coordinates
+// Listen for right-click events to capture coordinates and selected text
 document.addEventListener("contextmenu", function (event) {
+  const selection = window.getSelection();
+  const selectedText = selection.toString().trim();
+
   lastRightClickCoords = {
     x: event.pageX,
     y: event.pageY,
@@ -38,8 +46,417 @@ document.addEventListener("contextmenu", function (event) {
     clientY: event.clientY,
     target: event.target,
     timestamp: Date.now(),
+    selectedText: selectedText,
+    selectionData: selectedText ? captureSelectionData(selection) : null,
   };
 });
+
+/**
+ * Validate and sanitize color values to prevent CSS injection
+ * @param {string} color - Color value to validate
+ * @returns {string} Safe color value or fallback
+ */
+function sanitizeColor(color) {
+  if (!color || typeof color !== 'string') {
+    return '#fff3cd'; // Default light yellow
+  }
+
+  // Allow hex colors (3 or 6 digits)
+  const hexPattern = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+  if (hexPattern.test(color)) {
+    return color;
+  }
+
+  // Allow rgb() values with basic validation
+  const rgbPattern = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/;
+  const rgbMatch = color.match(rgbPattern);
+  if (rgbMatch) {
+    const [, r, g, b] = rgbMatch;
+    // Validate RGB values are within 0-255 range
+    if (parseInt(r) <= 255 && parseInt(g) <= 255 && parseInt(b) <= 255) {
+      return color;
+    }
+  }
+
+  // Allow rgba() values with basic validation
+  const rgbaPattern = /^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*([01]?\.?\d*)\s*\)$/;
+  const rgbaMatch = color.match(rgbaPattern);
+  if (rgbaMatch) {
+    const [, r, g, b, a] = rgbaMatch;
+    // Validate RGB values are within 0-255 range and alpha is 0-1
+    if (parseInt(r) <= 255 && parseInt(g) <= 255 && parseInt(b) <= 255 && parseFloat(a) <= 1) {
+      return color;
+    }
+  }
+
+  // Allow named colors (basic set for security)
+  const namedColors = [
+    'transparent', 'white', 'black', 'red', 'green', 'blue', 'yellow', 'orange',
+    'purple', 'pink', 'gray', 'grey', 'brown', 'cyan', 'magenta', 'lime'
+  ];
+  if (namedColors.includes(color.toLowerCase())) {
+    return color.toLowerCase();
+  }
+
+  console.warn(`[Web Notes] Invalid color value: ${color}, using fallback`);
+  return '#fff3cd'; // Fallback to default
+}
+
+/**
+ * Validate XPath expressions to prevent injection attacks
+ * @param {string} xpath - XPath expression to validate
+ * @returns {boolean} True if XPath is safe to use
+ */
+function validateXPath(xpath) {
+  if (!xpath || typeof xpath !== 'string') {
+    return false;
+  }
+
+  // Basic XPath validation - only allow safe patterns
+  // This is a conservative approach that blocks potentially dangerous XPath
+  const safeXPathPattern = /^\/\/?\*?[\w\[\]@='"\s\d\-_\.\/\(\)]*$/;
+
+  // Check for dangerous XPath functions or patterns
+  const dangerousPatterns = [
+    /document\s*\(/,
+    /eval\s*\(/,
+    /script\s*\(/,
+    /javascript:/i,
+    /data:/i,
+    /<script/i,
+    /on\w+\s*=/i
+  ];
+
+  if (!safeXPathPattern.test(xpath)) {
+    return false;
+  }
+
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(xpath)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Clean up highlights map to prevent memory leaks
+ */
+function cleanupHighlights() {
+  if (noteHighlights.size > MAX_HIGHLIGHTS) {
+    const entries = Array.from(noteHighlights.entries());
+    const excessCount = noteHighlights.size - MAX_HIGHLIGHTS;
+
+    // Remove oldest entries (first entries in the map)
+    entries.slice(0, excessCount).forEach(([noteId]) => {
+      removeTextHighlight(noteId);
+    });
+
+    console.log(`[Web Notes] Cleaned up ${excessCount} excess highlights`);
+  }
+}
+
+/**
+ * Capture detailed selection data for text highlighting
+ * @param {Selection} selection - The current text selection
+ * @returns {Object|null} Selection data for highlighting, or null if invalid
+ */
+function captureSelectionData(selection) {
+  try {
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+
+    const range = selection.getRangeAt(0);
+
+    // Validate range integrity
+    if (!range.startContainer || !range.endContainer) {
+      console.warn("[Web Notes] Invalid range containers");
+      return null;
+    }
+
+    // Validate selection size
+    const selectedText = selection.toString().trim();
+    if (selectedText.length > MAX_SELECTION_LENGTH) {
+      console.warn(`[Web Notes] Selected text exceeds maximum length (${MAX_SELECTION_LENGTH} chars)`);
+      return null;
+    }
+
+    if (selectedText.length === 0) {
+      return null;
+    }
+
+    const startContainer = range.startContainer;
+    const endContainer = range.endContainer;
+
+    // Only support selections within element nodes or their text children
+    const startElement = startContainer.nodeType === Node.TEXT_NODE
+      ? startContainer.parentElement
+      : startContainer;
+    const endElement = endContainer.nodeType === Node.TEXT_NODE
+      ? endContainer.parentElement
+      : endContainer;
+
+    if (!startElement || !endElement) {
+      return null;
+    }
+
+    // Validate that range doesn't span critical elements
+    const commonAncestor = range.commonAncestorContainer;
+    const commonElement = commonAncestor.nodeType === Node.TEXT_NODE
+      ? commonAncestor.parentElement
+      : commonAncestor;
+
+    if (commonElement && commonElement.closest) {
+      const criticalElement = commonElement.closest('script, style, iframe, object, embed');
+      if (criticalElement) {
+        console.warn("[Web Notes] Cannot highlight within critical elements (script/style/iframe)");
+        return null;
+      }
+    }
+
+    // Generate selectors for the start and end elements
+    let startSelector, endSelector;
+
+    try {
+      startSelector = generateOptimalSelector(startElement);
+      endSelector = generateOptimalSelector(endElement);
+    } catch (error) {
+      console.error("[Web Notes] Error generating selectors:", error);
+      return null;
+    }
+
+    return {
+      selectedText: selection.toString().trim(),
+      startSelector: startSelector.cssSelector || startSelector.xpath,
+      endSelector: endSelector.cssSelector || endSelector.xpath,
+      startOffset: range.startOffset,
+      endOffset: range.endOffset,
+      startContainerType: startContainer.nodeType,
+      endContainerType: endContainer.nodeType,
+      // Store the range boundaries as text for verification
+      commonAncestorSelector: generateOptimalSelector(range.commonAncestorContainer.nodeType === Node.TEXT_NODE
+        ? range.commonAncestorContainer.parentElement
+        : range.commonAncestorContainer).cssSelector,
+    };
+  } catch (error) {
+    console.error("[Web Notes] Error capturing selection data:", error);
+    return null;
+  }
+}
+
+/**
+ * Create highlighting for selected text when a note is displayed
+ * @param {Object} noteData - Note data containing selection information
+ * @param {string} backgroundColor - Background color for the highlight
+ */
+function createTextHighlight(noteData, backgroundColor) {
+  try {
+    if (!noteData.selectionData || !noteData.selectionData.selectedText) {
+      return; // No selection data to highlight
+    }
+
+    // Validate and sanitize background color
+    const safeBackgroundColor = sanitizeColor(backgroundColor);
+
+    // Remove any existing highlight for this note
+    removeTextHighlight(noteData.id);
+
+    // Clean up highlights to prevent memory leaks
+    cleanupHighlights();
+
+    const selectionData = noteData.selectionData;
+
+    // Find the elements using the stored selectors
+    const startElement = findElementBySelector(selectionData.startSelector);
+    const endElement = findElementBySelector(selectionData.endSelector);
+
+    if (!startElement || !endElement) {
+      console.warn(`[Web Notes] Could not find elements for highlighting note ${noteData.id}`);
+      return;
+    }
+
+    // Reconstruct the range
+    const range = document.createRange();
+
+    try {
+      // Find the text nodes within the elements
+      const startTextNode = findTextNodeInElement(startElement, selectionData.startOffset, selectionData.startContainerType);
+      const endTextNode = findTextNodeInElement(endElement, selectionData.endOffset, selectionData.endContainerType);
+
+      if (!startTextNode || !endTextNode) {
+        console.warn(`[Web Notes] Could not find text nodes for highlighting note ${noteData.id}`);
+        return;
+      }
+
+      range.setStart(startTextNode, Math.min(selectionData.startOffset, startTextNode.textContent.length));
+      range.setEnd(endTextNode, Math.min(selectionData.endOffset, endTextNode.textContent.length));
+
+      // Validate range size before highlighting
+      const rangeText = range.toString();
+      if (rangeText.length > MAX_SELECTION_LENGTH) {
+        console.warn(`[Web Notes] Range text too large for highlighting: ${rangeText.length} chars`);
+        return;
+      }
+
+      // Create highlight span with sanitized color
+      const highlightSpan = document.createElement("span");
+      highlightSpan.className = `web-note-highlight web-note-highlight-${noteData.id}`;
+      highlightSpan.style.cssText = `
+        background-color: ${safeBackgroundColor} !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        transition: opacity 0.2s ease !important;
+      `;
+      highlightSpan.setAttribute("data-note-id", noteData.id);
+
+      // Wrap the selected content
+      try {
+        range.surroundContents(highlightSpan);
+        noteHighlights.set(noteData.id, highlightSpan);
+        console.log(`[Web Notes] Created highlight for note ${noteData.id}`);
+      } catch (error) {
+        // If surroundContents fails (e.g., range crosses element boundaries),
+        // try extracting and inserting instead
+        const contents = range.extractContents();
+        highlightSpan.appendChild(contents);
+        range.insertNode(highlightSpan);
+        noteHighlights.set(noteData.id, highlightSpan);
+        console.log(`[Web Notes] Created highlight for note ${noteData.id} using extraction method`);
+      }
+    } catch (rangeError) {
+      console.error(`[Web Notes] Error creating range for highlight: ${rangeError}`);
+    }
+  } catch (error) {
+    console.error(`[Web Notes] Error creating highlight for note ${noteData.id}:`, error);
+  }
+}
+
+/**
+ * Remove text highlighting for a note
+ * @param {string} noteId - The note ID
+ */
+function removeTextHighlight(noteId) {
+  try {
+    const highlight = noteHighlights.get(noteId);
+    if (highlight && highlight.parentNode) {
+      // Replace the highlight span with its text content
+      const textContent = highlight.textContent;
+      const textNode = document.createTextNode(textContent);
+      highlight.parentNode.replaceChild(textNode, highlight);
+      noteHighlights.delete(noteId);
+      console.log(`[Web Notes] Removed highlight for note ${noteId}`);
+    }
+
+    // Also remove any orphaned highlight elements
+    const orphanedHighlights = document.querySelectorAll(`.web-note-highlight-${noteId}`);
+    orphanedHighlights.forEach(element => {
+      if (element.parentNode) {
+        const textContent = element.textContent;
+        const textNode = document.createTextNode(textContent);
+        element.parentNode.replaceChild(textNode, element);
+      }
+    });
+  } catch (error) {
+    console.error(`[Web Notes] Error removing highlight for note ${noteId}:`, error);
+  }
+}
+
+/**
+ * Find an element using CSS selector or XPath
+ * @param {string} selector - CSS selector or XPath
+ * @returns {Element|null} Found element or null
+ */
+function findElementBySelector(selector) {
+  try {
+    if (!selector) return null;
+
+    // Try CSS selector first
+    if (!selector.startsWith('/')) {
+      try {
+        const element = document.querySelector(selector);
+        if (element) return element;
+      } catch (cssError) {
+        console.warn(`[Web Notes] Invalid CSS selector: ${selector}`);
+      }
+    }
+
+    // Validate XPath before using
+    if (!validateXPath(selector)) {
+      console.warn(`[Web Notes] Invalid or potentially dangerous XPath: ${selector}`);
+      return null;
+    }
+
+    // Try XPath with additional safety
+    try {
+      const xpathResult = document.evaluate(
+        selector,
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      return xpathResult.singleNodeValue;
+    } catch (xpathError) {
+      console.error(`[Web Notes] XPath evaluation failed: ${selector}`, xpathError);
+      return null;
+    }
+  } catch (error) {
+    console.error(`[Web Notes] Error finding element with selector ${selector}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Find a text node within an element at a specific offset
+ * @param {Element} element - The parent element
+ * @param {number} offset - Text offset
+ * @param {number} containerType - Original container node type
+ * @returns {Text|null} Found text node or null
+ */
+function findTextNodeInElement(element, offset, containerType) {
+  try {
+    if (containerType === Node.TEXT_NODE) {
+      // Original container was a text node, find the text node within the element
+      const walker = document.createTreeWalker(
+        element,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+      );
+
+      let currentOffset = 0;
+      let textNode;
+      while (textNode = walker.nextNode()) {
+        const nodeLength = textNode.textContent.length;
+        if (currentOffset + nodeLength >= offset) {
+          return textNode;
+        }
+        currentOffset += nodeLength;
+      }
+    } else {
+      // Original container was an element node
+      if (element.childNodes[offset] && element.childNodes[offset].nodeType === Node.TEXT_NODE) {
+        return element.childNodes[offset];
+      }
+      // Find first text node
+      const walker = document.createTreeWalker(
+        element,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+      );
+      return walker.nextNode();
+    }
+
+    return null;
+  } catch (error) {
+    console.error("[Web Notes] Error finding text node:", error);
+    return null;
+  }
+}
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -1400,6 +1817,12 @@ function displayNote(noteData) {
     // Add double-click editing functionality
     addEditingCapability(note, noteData);
 
+    // Create text highlighting if selection data exists
+    if (noteData.selectionData && noteData.selectionData.selectedText) {
+      const highlightColor = NoteColorUtils.getColorValue(noteData.backgroundColor || "light-yellow");
+      createTextHighlight(noteData, highlightColor);
+    }
+
     // Animate in with a slight delay for smooth appearance
     requestAnimationFrame(() => {
       note.style.opacity = "1";
@@ -1450,8 +1873,14 @@ function startUrlMonitoring() {
       // Clear element cache for new page
       elementCache.clear();
 
-      // Remove existing notes
+      // Remove existing notes and highlights
       document.querySelectorAll(".web-note").forEach(note => note.remove());
+
+      // Clear all highlights
+      noteHighlights.forEach((highlight, noteId) => {
+        removeTextHighlight(noteId);
+      });
+      noteHighlights.clear();
 
       // Load notes for new URL with debouncing
       setTimeout(loadExistingNotes, TIMING.DOM_UPDATE_DELAY);
@@ -1484,8 +1913,14 @@ window.addEventListener("beforeunload", () => {
   EditingState.autosaveTimeouts.forEach(timeout => clearTimeout(timeout));
   EditingState.autosaveTimeouts.clear();
 
-  // Clean up any remaining note elements
+  // Clean up any remaining note elements and highlights
   document.querySelectorAll(".web-note").forEach(note => note.remove());
+
+  // Clear all highlights
+  noteHighlights.forEach((highlight, noteId) => {
+    removeTextHighlight(noteId);
+  });
+  noteHighlights.clear();
 });
 
 // Also use modern navigation API if available
@@ -1496,8 +1931,14 @@ if ("navigation" in window) {
       // Clear element cache for new page
       elementCache.clear();
 
-      // Remove existing notes
+      // Remove existing notes and highlights
       document.querySelectorAll(".web-note").forEach(note => note.remove());
+
+      // Clear all highlights
+      noteHighlights.forEach((highlight, noteId) => {
+        removeTextHighlight(noteId);
+      });
+      noteHighlights.clear();
 
       // Load notes for new URL
       loadExistingNotes();
@@ -1515,7 +1956,14 @@ function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow"
   try {
     // Generate unique note ID
     const noteId = `web-note-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-    const noteText = `MY NOTE #${noteNumber}`;
+
+    // Use selected text if available, otherwise default note text
+    let noteText;
+    if (coords && coords.selectedText) {
+      noteText = coords.selectedText;
+    } else {
+      noteText = `MY NOTE #${noteNumber}`;
+    }
 
     let targetElement = null;
     let elementSelector = null;
@@ -1558,7 +2006,7 @@ function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow"
       posTop = fallbackPosition.y - 30;
     }
 
-    // Create enhanced note data with markdown support
+    // Create enhanced note data with markdown support and selection data
     const baseData = {
       id: noteId,
       url: window.location.href,
@@ -1573,6 +2021,8 @@ function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow"
       timestamp: Date.now(),
       isVisible: true,
       backgroundColor: backgroundColor,
+      // Include selection data if text was selected
+      selectionData: coords && coords.selectionData ? coords.selectionData : null,
     };
 
     const noteData = NoteDataUtils.createNoteData(baseData, noteText);
@@ -1966,6 +2416,9 @@ async function handleNoteDelete(noteElement, noteData) {
 
     // Exit edit mode without saving
     exitEditMode(noteElement, false);
+
+    // Remove text highlighting first
+    removeTextHighlight(noteData.id);
 
     // Remove note from DOM with animation
     noteElement.style.transition = "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)";
