@@ -1,0 +1,34 @@
+# Production-only dependencies for Web Notes API
+# These are additional dependencies needed only in production environments
+
+-r base.txt
+
+# Production WSGI/ASGI servers (if not using uvicorn)
+# gunicorn==21.2.0           # Alternative WSGI server for production
+
+# Monitoring and Observability
+# prometheus-client==0.19.0  # Metrics collection
+# sentry-sdk[fastapi]==1.40.0 # Error tracking and performance monitoring
+
+# Security and Authentication
+# authlib==1.3.0             # OAuth and OIDC support
+# passlib[bcrypt]==1.7.4     # Password hashing
+# python-jose[cryptography]==3.3.0 # JWT token handling
+
+# Caching
+# redis==5.0.1               # Redis client for caching and sessions
+
+# Cloud Provider Dependencies (uncomment as needed)
+# google-cloud-sql-connector==1.1.1  # Google Cloud SQL
+# google-auth==2.25.2               # Google Cloud authentication
+# boto3==1.34.0                     # AWS SDK
+# azure-identity==1.15.0            # Azure authentication
+
+# Database Connection Pooling
+# sqlalchemy-pool==2.0.23    # Advanced connection pooling
+
+# Production Configuration Management
+# pydantic-settings==2.1.0   # Enhanced settings management
+
+# Note: Most dependencies are commented out as they may not be needed yet.
+# Uncomment and adjust versions as your production requirements grow.

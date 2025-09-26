@@ -1,0 +1,6 @@
+# Main requirements file for Web Notes API
+# This file includes the core production dependencies
+# For development, use: pip install -r requirements/dev.txt
+# For production, use: pip install -r requirements/production.txt
+
+-r requirements/base.txt

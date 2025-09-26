@@ -4,7 +4,7 @@
 -r base.txt
 
 # Code formatting and linting
-black==23.12.1
+black==25.9.0               # Updated to latest version from pip freeze
 isort==5.13.2
 flake8==7.0.0
 mypy==1.8.0
@@ -13,13 +13,22 @@ mypy==1.8.0
 pytest==7.4.3
 pytest-asyncio==0.23.2
 pytest-cov==4.1.0
-httpx==0.25.2              # For testing FastAPI endpoints
+coverage==7.10.7            # Coverage reporting tool
 
 # Development workflow tools
-pre-commit==3.6.0          # Git hooks for code quality
-pip-tools==7.3.0           # Dependency management
-watchdog==3.0.0            # File watching for development
+pre-commit==3.6.0           # Git hooks for code quality
+pip-tools==7.3.0            # Dependency management
+watchdog==3.0.0             # File watching for development
+watchfiles==1.1.0           # File watching (uvicorn dependency)
 
-# Additional development utilities
-ipython==8.18.1            # Enhanced REPL
-jupyter==1.0.0             # Jupyter notebooks for experimentation
+# Development utilities
+ipython==8.18.1             # Enhanced REPL
+jupyter==1.0.0              # Jupyter notebooks for experimentation
+build==1.3.0                # Build tool for Python packages
+
+# Type checking extensions
+types-python-dateutil==2.9.0.20250822
+
+# Additional development dependencies found in environment
+requests==2.32.5            # HTTP library for development scripts
+beautifulsoup4==4.13.5      # HTML parsing (might be used for web scraping/testing)

@@ -1,12 +1,31 @@
 # Core production dependencies for Web Notes API
 # Pin exact versions for reproducible builds
 
+# Web Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
-# Future production dependencies will go here:
-# sqlalchemy==2.0.23        # Database ORM
-# alembic==1.12.1           # Database migrations
-# google-auth==2.25.2       # Google OAuth validation
-# google-cloud-sql==1.1.1   # Cloud SQL connector
+# Database ORM and Migrations
+sqlalchemy==2.0.43
+alembic==1.16.5
+asyncpg==0.30.0             # PostgreSQL async driver
+psycopg2-binary==2.9.10     # PostgreSQL sync driver (backup/admin tasks)
+
+# Data Validation and Serialization
+pydantic==2.11.9
+
+# Environment and Configuration
+python-dotenv==1.1.1        # Environment variable management
+
+# Template Engine (for web router)
+jinja2==3.1.6
+
+# Dependencies for static files and CORS
+starlette==0.27.0           # FastAPI dependency
+
+# HTTP Client (for LLM integrations)
+httpx==0.25.2
+
+# LLM Provider APIs
+anthropic==0.68.1           # Claude API client

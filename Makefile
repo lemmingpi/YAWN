@@ -2,7 +2,7 @@
 # Cross-platform development workflow automation
 # Works on Windows (Git Bash), Unix, Linux, and Mac
 
-.PHONY: help setup dev test lint format clean install-dev check-env lint-js format-js install-js lint-all format-all all install-npm check-npm clean-npm
+.PHONY: help setup dev test lint format clean install-dev check-env lint-js format-js install-js lint-all format-all all install-npm check-npm clean-npm lock requirements-check requirements-validate install-base install-prod upgrade-deps
 .DEFAULT_GOAL := help
 
 # Colors for output (works in most terminals)
@@ -233,8 +233,34 @@ format-all: check-env check-npm ## Auto-format all code (Python and JavaScript)
 
 lock: check-env ## Generate locked requirements file
 	@echo "$(BLUE)Generating locked requirements...$(NC)"
-	$(PIP) freeze > requirements/requirements.lock
-	@echo "$(GREEN)✓ Requirements locked to requirements/requirements.lock$(NC)"
+	$(PIP) freeze > requirements/lock.txt
+	@echo "$(GREEN)✓ Requirements locked to requirements/lock.txt$(NC)"
+
+requirements-check: check-env ## Check for missing dependencies in requirements files
+	@echo "$(BLUE)Checking for missing dependencies...$(NC)"
+	$(PYTHON) scripts/check_missing_deps.py
+	@echo "$(GREEN)✓ Dependency check completed$(NC)"
+
+requirements-validate: check-env ## Validate all requirements files can be installed
+	@echo "$(BLUE)Validating requirements files...$(NC)"
+	$(PYTHON) scripts/validate_requirements.py
+	@echo "$(GREEN)✓ Requirements validation completed$(NC)"
+
+install-base: check-env ## Install base production dependencies only
+	@echo "$(BLUE)Installing base production dependencies...$(NC)"
+	$(PIP) install -r requirements/base.txt
+	@echo "$(GREEN)✓ Base dependencies installed$(NC)"
+
+install-prod: check-env ## Install production dependencies
+	@echo "$(BLUE)Installing production dependencies...$(NC)"
+	$(PIP) install -r requirements/production.txt
+	@echo "$(GREEN)✓ Production dependencies installed$(NC)"
+
+upgrade-deps: check-env ## Upgrade all dependencies to latest versions
+	@echo "$(BLUE)Upgrading dependencies...$(NC)"
+	$(PIP) install --upgrade -r requirements/dev.txt
+	@echo "$(YELLOW)⚠ Remember to update version pins in requirements files$(NC)"
+	@echo "$(GREEN)✓ Dependencies upgraded$(NC)"
 
 pre-commit: check-env ## Run pre-commit hooks on all files
 	@echo "$(BLUE)Running pre-commit hooks...$(NC)"

@@ -34,7 +34,12 @@
       "Bash(alembic upgrade:*)",
       "Bash(source:*)",
       "Bash(git fetch:*)",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "Bash(pip freeze)",
+      "Bash(.venv/Scripts/activate)",
+      "Bash(pip-compile:*)",
+      "Bash(pip check)",
+      "Bash(pip show:*)"
     ],
     "deny": [],
     "ask": [],
