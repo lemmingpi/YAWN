@@ -47,6 +47,9 @@ help: ## Show this help message
 	@echo "$(YELLOW)Development Commands:$(NC)"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(GREEN)%-15s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST) | grep -E "(dev|test|lint|format)"
 	@echo ""
+	@echo "$(YELLOW)Extension Packaging:$(NC)"
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(GREEN)%-15s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST) | grep -E "(package|validate)"
+	@echo ""
 	@echo "$(YELLOW)Utility Commands:$(NC)"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(GREEN)%-15s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST) | grep -E "(clean|check|lock)"
 	@echo ""
@@ -297,6 +300,81 @@ clean: ## Clean up development environment (Python + npm)
 		$(NPM) cache clean --force 2>/dev/null || true; \
 	fi
 	@echo "$(GREEN)✓ Complete environment cleanup finished$(NC)"
+
+# Chrome Extension Packaging
+package-extension: check-npm ## Create Chrome Web Store package
+	@echo "$(BLUE)Creating Chrome Web Store package...$(NC)"
+	@if [ ! -f "chrome-extension/manifest.json" ]; then \
+		echo "$(RED)✗ Chrome extension not found$(NC)"; \
+		echo "$(YELLOW)Expected: chrome-extension/manifest.json$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Running pre-package validation...$(NC)"
+	@$(MAKE) lint-js
+	@$(MAKE) validate-extension
+	@echo "$(YELLOW)Creating package...$(NC)"
+	@./scripts/package-extension.sh
+	@echo "$(GREEN)✓ Chrome Web Store package created$(NC)"
+	@echo ""
+	@echo "$(BLUE)Package location: dist/web-notes-extension-v*.zip$(NC)"
+	@echo "$(BLUE)Next steps:$(NC)"
+	@echo "  1. Upload ZIP to Chrome Web Store Developer Console"
+	@echo "  2. Fill out store listing information"
+	@echo "  3. Submit for review"
+
+validate-extension: ## Validate Chrome extension structure and manifest
+	@echo "$(BLUE)Validating Chrome extension...$(NC)"
+	@if [ ! -f "chrome-extension/manifest.json" ]; then \
+		echo "$(RED)✗ manifest.json not found$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Checking manifest.json syntax...$(NC)"
+	@if command -v python3 >/dev/null 2>&1; then \
+		python3 -m json.tool chrome-extension/manifest.json >/dev/null || { \
+			echo "$(RED)✗ Invalid JSON syntax in manifest.json$(NC)"; \
+			exit 1; \
+		}; \
+	elif command -v node >/dev/null 2>&1; then \
+		node -e "JSON.parse(require('fs').readFileSync('chrome-extension/manifest.json', 'utf8'))" || { \
+			echo "$(RED)✗ Invalid JSON syntax in manifest.json$(NC)"; \
+			exit 1; \
+		}; \
+	fi
+	@echo "$(YELLOW)Checking required files...$(NC)"
+	@for file in manifest.json background.js content.js popup.html popup.js; do \
+		if [ ! -f "chrome-extension/$$file" ]; then \
+			echo "$(RED)✗ Required file missing: $$file$(NC)"; \
+			exit 1; \
+		fi; \
+	done
+	@echo "$(YELLOW)Checking icon files...$(NC)"
+	@for icon in icon16.svg icon48.svg icon128.svg; do \
+		if [ ! -f "chrome-extension/$$icon" ]; then \
+			echo "$(RED)✗ Required icon missing: $$icon$(NC)"; \
+			exit 1; \
+		fi; \
+	done
+	@echo "$(GREEN)✓ Extension validation passed$(NC)"
+
+package-info: ## Show Chrome extension package information
+	@echo "$(BLUE)Chrome Extension Package Information$(NC)"
+	@echo "======================================"
+	@if [ -f "chrome-extension/manifest.json" ]; then \
+		echo "$(YELLOW)Name:$(NC) $$(grep '"name"' chrome-extension/manifest.json | sed 's/.*"name":\s*"\([^"]*\)".*/\1/')"; \
+		echo "$(YELLOW)Version:$(NC) $$(grep '"version"' chrome-extension/manifest.json | sed 's/.*"version":\s*"\([^"]*\)".*/\1/')"; \
+		echo "$(YELLOW)Description:$(NC) $$(grep '"description"' chrome-extension/manifest.json | sed 's/.*"description":\s*"\([^"]*\)".*/\1/')"; \
+	else \
+		echo "$(RED)✗ manifest.json not found$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)Required for Chrome Web Store:$(NC)"
+	@echo "  • ZIP package with manifest.json at root"
+	@echo "  • PNG icons (16px, 48px, 128px)"
+	@echo "  • Developer account with \$$5 registration fee"
+	@echo "  • 2-Step verification enabled"
+	@echo ""
+	@echo "$(YELLOW)Package will be created at:$(NC)"
+	@echo "  dist/web-notes-extension-v$$(grep '"version"' chrome-extension/manifest.json 2>/dev/null | sed 's/.*"version":\s*"\([^"]*\)".*/\1/' || echo 'VERSION').zip"
 
 # Development convenience commands
 run: dev ## Alias for 'make dev'

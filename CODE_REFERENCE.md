@@ -22,11 +22,13 @@ notes/
 │   ├── conftest.py             # Pytest fixtures
 │   └── test_main.py            # FastAPI endpoint tests
 ├── 📂 scripts/                  # Development automation
-│   └── dev.sh                  # Universal development server
+│   ├── dev.sh                  # Universal development server
+│   └── package-extension.sh    # Chrome Web Store packaging script
 └── ⚙️ Configuration Files
     ├── Makefile                # Development workflow commands
     ├── pyproject.toml          # Python packaging and tool config
-    └── .pre-commit-config.yaml # Git hooks for code quality
+    ├── .pre-commit-config.yaml # Git hooks for code quality
+    └── PUBLISHING.md           # Chrome Web Store submission guide
 ```
 
 ## 🔧 Key Functions & Constants
@@ -82,6 +84,14 @@ notes/
 - Load extension in Chrome developer mode from `chrome-extension/` folder
 - Right-click → "Show Web Notes Banner" to test context menu
 - Test on chrome:// pages (should show error)
+
+### Extension Packaging & Publishing
+- `make package-extension` - Create Chrome Web Store package
+- `make validate-extension` - Validate extension structure and manifest
+- `make package-info` - Show extension package information
+- `./scripts/package-extension.sh` - Direct packaging script execution
+- Package output: `dist/web-notes-extension-v1.0.0.zip`
+- Full publishing guide: See `PUBLISHING.md`
 
 ## 📦 Dependencies & Configuration
 
