@@ -9,7 +9,6 @@
 // Use shared constants and functions
 // EXTENSION_CONSTANTS, logError, getStats, setStats, isTabValid are imported
 
-
 /**
  * Updates stats display in the popup
  */
@@ -45,12 +44,20 @@ async function updateStatsDisplay() {
     // Create stats display safely using DOM methods
     const statsDiv = document.createElement("div");
     statsDiv.style.cssText = "font-size: 11px; line-height: 1.4;";
-    const bytesUsed = await getBytesUsed() / 1024; // Convert to KB
+    const bytesUsed = (await getBytesUsed()) / 1024; // Convert to KB
+
+    // Check server sync status
+    let serverStatus = "Disabled";
+    if (config.syncServerUrl) {
+      serverStatus = "Configured";
+      // TODO: Add server health check here if needed
+    }
 
     const statsData = [
       `• Installed: ${installDate}`,
       `• Last seen: ${lastSeen}`,
-      `• Storage Used: ${bytesUsed} KB`,
+      `• Storage Used: ${bytesUsed.toFixed(1)} KB`,
+      `• Server Sync: ${serverStatus}`,
     ];
 
     statsData.forEach(statText => {
@@ -73,7 +80,6 @@ async function updateStatsDisplay() {
     }
   }
 }
-
 
 /**
  * Gets current active tab with error handling
@@ -111,7 +117,7 @@ async function executeScriptInTab(tabId, func) {
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(
         () => reject(new Error("Script injection timeout")),
-        EXTENSION_CONSTANTS.SCRIPT_INJECTION_TIMEOUT,
+        EXTENSION_CONSTANTS.SCRIPT_INJECTION_TIMEOUT
       );
     });
 
@@ -127,7 +133,7 @@ async function executeScriptInTab(tabId, func) {
           } else {
             resolve(result);
           }
-        },
+        }
       );
     });
 
@@ -189,7 +195,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     const useChromeSyncCheckbox = document.getElementById("use-chrome-sync");
     const syncServerUrlInput = document.getElementById("sync-server-url");
 
-
     if (!clearStatsBtn) {
       logError("DOM initialization failed", "Required buttons not found");
       return;
@@ -240,11 +245,13 @@ document.addEventListener("DOMContentLoaded", async function () {
       try {
         const newValue = syncServerUrlInput.value.trim();
         await new Promise((resolve, reject) => {
-          let cfg = getWNConfig().then(cfg => {
-            cfg.syncServerUrl = newValue;
-            setWNConfig(cfg);
-            resolve();
-          }).catch(reject);
+          let cfg = getWNConfig()
+            .then(cfg => {
+              cfg.syncServerUrl = newValue;
+              setWNConfig(cfg);
+              resolve();
+            })
+            .catch(reject);
         });
       } catch (error) {
         logError("Error in settings input handler", error);

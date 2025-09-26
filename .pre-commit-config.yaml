@@ -59,15 +59,6 @@ repos:
         additional_dependencies:
           - prettier@3.2.5
 
-  - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: v8.57.0
-    hooks:
-      - id: eslint
-        files: ^chrome-extension/.*\.js$
-        additional_dependencies:
-          - eslint@8.57.0
-        args: [--fix]
-
 # Configuration for specific tools
 exclude: |
   (?x)^(

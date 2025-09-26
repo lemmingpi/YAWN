@@ -43,7 +43,7 @@ async function getStats() {
           resolve(EXTENSION_CONSTANTS.DEFAULT_STATS);
         } else {
           resolve(
-            result[EXTENSION_CONSTANTS.STATS_KEY] || EXTENSION_CONSTANTS.DEFAULT_STATS,
+            result[EXTENSION_CONSTANTS.STATS_KEY] || EXTENSION_CONSTANTS.DEFAULT_STATS
           );
         }
       });
@@ -151,6 +151,7 @@ async function getBytesUsed() {
 
 /**
  * Gets notes from appropriate storage based on configuration
+ * If server sync is enabled, fetches from server and merges with local cache
  * @returns {Promise<Object>} Promise resolving to notes object organized by URL
  */
 async function getNotes() {
@@ -158,16 +159,90 @@ async function getNotes() {
     const config = await getWNConfig();
     const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
 
-    return new Promise(resolve => {
+    // Get local notes first
+    const localNotes = await new Promise(resolve => {
       storage.get([EXTENSION_CONSTANTS.NOTES_KEY], result => {
         if (chrome.runtime.lastError) {
-          logError("Failed to get notes", chrome.runtime.lastError);
+          logError("Failed to get local notes", chrome.runtime.lastError);
           resolve({});
         } else {
           resolve(result[EXTENSION_CONSTANTS.NOTES_KEY] || {});
         }
       });
     });
+
+    // If server sync is enabled, fetch from server and merge
+    if (config.syncServerUrl && typeof ServerAPI !== "undefined") {
+      const serverNotes = await (typeof ErrorHandler !== "undefined"
+        ? ErrorHandler.withErrorHandling(
+            "fetch_notes",
+            async () => {
+              const currentUrl = window.location?.href;
+              if (currentUrl) {
+                const serverNotes = await ServerAPI.fetchNotesForPage(currentUrl);
+                const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
+
+                // Convert server notes to extension format
+                const convertedNotes = serverNotes.map(serverNote =>
+                  ServerAPI.convertFromServerFormat(serverNote)
+                );
+
+                // Set URL for each note
+                convertedNotes.forEach(note => {
+                  note.url = currentUrl;
+                });
+
+                // Merge server notes with local notes
+                const mergedNotes = { ...localNotes };
+                mergedNotes[normalizedUrl] = convertedNotes;
+
+                console.log(
+                  `[Web Notes] Merged ${convertedNotes.length} server notes with local notes`
+                );
+                return mergedNotes;
+              }
+              return localNotes;
+            },
+            { showUserFeedback: false }
+          ) // Don't show feedback for background fetches
+        : (async () => {
+            try {
+              const currentUrl = window.location?.href;
+              if (currentUrl) {
+                const serverNotes = await ServerAPI.fetchNotesForPage(currentUrl);
+                const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
+
+                const convertedNotes = serverNotes.map(serverNote =>
+                  ServerAPI.convertFromServerFormat(serverNote)
+                );
+
+                convertedNotes.forEach(note => {
+                  note.url = currentUrl;
+                });
+
+                const mergedNotes = { ...localNotes };
+                mergedNotes[normalizedUrl] = convertedNotes;
+
+                console.log(
+                  `[Web Notes] Merged ${convertedNotes.length} server notes with local notes`
+                );
+                return mergedNotes;
+              }
+            } catch (serverError) {
+              console.warn(
+                "[Web Notes] Server fetch failed, using local notes:",
+                serverError
+              );
+            }
+            return localNotes;
+          })());
+
+      if (serverNotes) {
+        return serverNotes;
+      }
+    }
+
+    return localNotes;
   } catch (error) {
     logError("Error in getNotes", error);
     return {};
@@ -176,6 +251,7 @@ async function getNotes() {
 
 /**
  * Save notes to appropriate storage based on configuration
+ * If server sync is enabled, also syncs to server
  * @param {Object} notes - Notes object organized by URL
  * @returns {Promise<boolean>} Promise resolving to success status
  */
@@ -183,16 +259,43 @@ async function setNotes(notes) {
   try {
     const config = await getWNConfig();
     const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
-    return new Promise(resolve => {
+
+    // Save to local storage first
+    const localSuccess = await new Promise(resolve => {
       storage.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, () => {
         if (chrome.runtime.lastError) {
-          logError("Failed to set notes", chrome.runtime.lastError);
+          logError("Failed to set notes locally", chrome.runtime.lastError);
           resolve(false);
         } else {
           resolve(true);
         }
       });
     });
+
+    // If server sync is enabled, also save to server
+    if (config.syncServerUrl && typeof ServerAPI !== "undefined" && localSuccess) {
+      try {
+        // Only sync notes for current page to avoid bulk operations
+        const currentUrl = window.location?.href;
+        if (currentUrl) {
+          const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
+          const pageNotes = notes[normalizedUrl] || [];
+
+          if (pageNotes.length > 0) {
+            await ServerAPI.bulkSyncNotes(currentUrl, pageNotes);
+            console.log(`[Web Notes] Synced ${pageNotes.length} notes to server`);
+          }
+        }
+      } catch (serverError) {
+        console.warn(
+          "[Web Notes] Server sync failed, notes saved locally:",
+          serverError
+        );
+        // Local save succeeded, so still return true
+      }
+    }
+
+    return localSuccess;
   } catch (error) {
     logError("Error in setNotes", error);
     return false;
@@ -202,6 +305,7 @@ async function setNotes(notes) {
 /**
  * Update a single note in storage, searching across URL variations that match
  * when normalized (ignoring anchor fragments)
+ * If server sync is enabled, also updates on server
  * @param {string} url - The URL where the note exists
  * @param {string} noteId - The note ID to update
  * @param {Object} noteData - The updated note data
@@ -209,6 +313,7 @@ async function setNotes(notes) {
  */
 async function updateNote(url, noteId, noteData) {
   try {
+    const config = await getWNConfig();
     const notes = await getNotes();
     const matchingUrls = findMatchingUrlsInStorage(url, notes);
 
@@ -218,13 +323,46 @@ async function updateNote(url, noteId, noteData) {
       const noteIndex = urlNotes.findIndex(note => note.id === noteId);
 
       if (noteIndex !== -1) {
-        urlNotes[noteIndex] = {
-          ...urlNotes[noteIndex],
+        const existingNote = urlNotes[noteIndex];
+        const updatedNote = {
+          ...existingNote,
           ...noteData,
           lastEdited: Date.now(),
         };
+
+        urlNotes[noteIndex] = updatedNote;
         notes[matchingUrl] = urlNotes;
-        return await setNotes(notes);
+
+        // Save locally first
+        const localSuccess = await setNotes(notes);
+
+        // If server sync is enabled and note has server ID, update on server
+        if (config.syncServerUrl && typeof ServerAPI !== "undefined" && localSuccess) {
+          try {
+            if (existingNote.serverId) {
+              await ServerAPI.updateNote(existingNote.serverId, updatedNote);
+              console.log(
+                `[Web Notes] Updated note ${existingNote.serverId} on server`
+              );
+            } else {
+              // Note doesn't have server ID, create it on server
+              const serverNote = await ServerAPI.createNote(url, updatedNote);
+              // Update local note with server ID
+              updatedNote.serverId = serverNote.id;
+              await setNotes(notes);
+              console.log(
+                `[Web Notes] Created note ${serverNote.id} on server during update`
+              );
+            }
+          } catch (serverError) {
+            console.warn(
+              "[Web Notes] Server update failed, note updated locally:",
+              serverError
+            );
+          }
+        }
+
+        return localSuccess;
       }
     }
 
@@ -330,18 +468,40 @@ function getNotesForUrl(url, allNotes) {
 
 /**
  * Add a new note to storage
+ * If server sync is enabled, also creates on server
  * @param {string} url - The URL where to add the note
  * @param {Object} noteData - The note data to add
  * @returns {Promise<boolean>} Promise resolving to success status
  */
 async function addNote(url, noteData) {
   try {
+    const config = await getWNConfig();
     const notes = await getNotes();
     const normalizedUrl = normalizeUrlForNoteStorage(url);
     const urlNotes = notes[normalizedUrl] || [];
+
+    // Add to local storage first
     urlNotes.push(noteData);
     notes[normalizedUrl] = urlNotes;
-    return await setNotes(notes);
+    const localSuccess = await setNotes(notes);
+
+    // If server sync is enabled, also create on server
+    if (config.syncServerUrl && typeof ServerAPI !== "undefined" && localSuccess) {
+      try {
+        const serverNote = await ServerAPI.createNote(url, noteData);
+        // Update local note with server ID
+        noteData.serverId = serverNote.id;
+        await setNotes(notes);
+        console.log(`[Web Notes] Created note ${serverNote.id} on server`);
+      } catch (serverError) {
+        console.warn(
+          "[Web Notes] Server create failed, note saved locally:",
+          serverError
+        );
+      }
+    }
+
+    return localSuccess;
   } catch (error) {
     logError("Error adding note", error);
     return false;
@@ -350,15 +510,18 @@ async function addNote(url, noteData) {
 
 /**
  * Delete a note from storage, searching across URL variations that match when normalized
+ * If server sync is enabled, also deletes from server
  * @param {string} url - The URL where the note exists
  * @param {string} noteId - The note ID to delete
  * @returns {Promise<boolean>} Promise resolving to success status
  */
 async function deleteNote(url, noteId) {
   try {
+    const config = await getWNConfig();
     const notes = await getNotes();
     const matchingUrls = findMatchingUrlsInStorage(url, notes);
     let noteFound = false;
+    let deletedNote = null;
 
     // Try to find and delete the note from any of the matching URL variations
     for (const matchingUrl of matchingUrls) {
@@ -366,6 +529,8 @@ async function deleteNote(url, noteId) {
       const noteIndex = urlNotes.findIndex(note => note.id === noteId);
 
       if (noteIndex !== -1) {
+        deletedNote = urlNotes[noteIndex];
+
         // Remove the note from the array
         urlNotes.splice(noteIndex, 1);
 
@@ -392,7 +557,28 @@ async function deleteNote(url, noteId) {
       return false;
     }
 
-    return await setNotes(notes);
+    // Save locally first
+    const localSuccess = await setNotes(notes);
+
+    // If server sync is enabled and note has server ID, delete from server
+    if (
+      config.syncServerUrl &&
+      typeof ServerAPI !== "undefined" &&
+      deletedNote?.serverId &&
+      localSuccess
+    ) {
+      try {
+        await ServerAPI.deleteNote(deletedNote.serverId);
+        console.log(`[Web Notes] Deleted note ${deletedNote.serverId} from server`);
+      } catch (serverError) {
+        console.warn(
+          "[Web Notes] Server delete failed, note deleted locally:",
+          serverError
+        );
+      }
+    }
+
+    return localSuccess;
   } catch (error) {
     logError("Error deleting note", error);
     return false;

@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Sticky notes for web pages",
   "permissions": ["activeTab", "storage", "scripting", "contextMenus"],
+  "host_permissions": ["http://localhost:8000/*", "https://*/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Web Notes"
@@ -17,10 +18,12 @@
       "js": [
         "libs/marked.min.js",
         "libs/dompurify.min.js",
-         "color-utils.js",
+        "color-utils.js",
         "color-dropdown.js",
         "markdown-utils.js",
         "shared-utils.js",
+        "server-api.js",
+        "error-handling.js",
         "contentDialog.js",
         "content.js"
       ]
