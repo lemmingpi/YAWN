@@ -75,14 +75,16 @@ validate_manifest() {
     log_step "Validating manifest.json..."
 
     # Check JSON syntax
-    if command_exists python3; then
-        python3 -m json.tool "$MANIFEST_FILE" >/dev/null 2>&1 || {
-            log_error "Invalid JSON syntax in manifest.json"
+    if command_exists python3.13; then
+        python3.13 -m json.tool "$MANIFEST_FILE" >/dev/null 2>&1 || {
+            log_error "Invalid JSON (1) syntax in manifest.json"
+            python3.13 -m json.tool "$MANIFEST_FILE"
             exit 1
         }
     elif command_exists node; then
         node -e "JSON.parse(require('fs').readFileSync('$MANIFEST_FILE', 'utf8'))" || {
-            log_error "Invalid JSON syntax in manifest.json"
+            log_error "Invalid JSON (2) syntax in manifest.json"
+            node -e "JSON.parse(require('fs').readFileSync('$MANIFEST_FILE', 'utf8'))"
             exit 1
         }
     fi
@@ -266,8 +268,10 @@ create_package() {
 
     if command_exists zip; then
         zip -r "$package_path" .
-    elif command_exists python3; then
-        python3 -c "
+    elif command_exists 7z; then
+        7z a "$package_path" .
+    elif command_exists python3.13; then
+        python3.13 -c "
 import zipfile
 import os
 import sys
