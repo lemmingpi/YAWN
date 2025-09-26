@@ -21,6 +21,7 @@
         "color-dropdown.js",
         "markdown-utils.js",
         "shared-utils.js",
+        "contentDialog.js",
         "content.js"
       ]
     }

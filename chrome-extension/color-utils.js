@@ -58,6 +58,57 @@ const NoteColorUtils = {
   getDefaultColor() {
     return "light-yellow";
   },
+
+  /**
+   * Validate and sanitize color values to prevent CSS injection
+   * @param {string} color - Color value to validate
+   * @returns {string} Safe color value or fallback
+   */
+  sanitizeColor(color) {
+    if (!color || typeof color !== 'string') {
+      return '#fff3cd'; // Default light yellow
+    }
+
+    // Allow hex colors (3 or 6 digits)
+    const hexPattern = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+    if (hexPattern.test(color)) {
+      return color;
+    }
+
+    // Allow rgb() values with basic validation
+    const rgbPattern = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/;
+    const rgbMatch = color.match(rgbPattern);
+    if (rgbMatch) {
+      const [, r, g, b] = rgbMatch;
+      // Validate RGB values are within 0-255 range
+      if (parseInt(r) <= 255 && parseInt(g) <= 255 && parseInt(b) <= 255) {
+        return color;
+      }
+    }
+
+    // Allow rgba() values with basic validation
+    const rgbaPattern = /^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*([01]?\.?\d*)\s*\)$/;
+    const rgbaMatch = color.match(rgbaPattern);
+    if (rgbaMatch) {
+      const [, r, g, b, a] = rgbaMatch;
+      // Validate RGB values are within 0-255 range and alpha is 0-1
+      if (parseInt(r) <= 255 && parseInt(g) <= 255 && parseInt(b) <= 255 && parseFloat(a) <= 1) {
+        return color;
+      }
+    }
+
+    // Allow named colors (basic set for security)
+    const namedColors = [
+      'transparent', 'white', 'black', 'red', 'green', 'blue', 'yellow', 'orange',
+      'purple', 'pink', 'gray', 'grey', 'brown', 'cyan', 'magenta', 'lime'
+    ];
+    if (namedColors.includes(color.toLowerCase())) {
+      return color.toLowerCase();
+    }
+
+    console.warn(`[Web Notes] Invalid color value: ${color}, using fallback`);
+    return '#fff3cd'; // Fallback to default
+  },
 };
 
 // Export for use in other scripts

@@ -273,6 +273,11 @@ function handleColorSelection(colorName, textarea) {
 
     console.log(`[Web Notes] Applied background color ${colorName} (${colorValue}) to note ${noteData.id}`);
 
+    // Create text highlighting if selection data exists
+    if (updatedNoteData.selectionData && updatedNoteData.selectionData.selectedText) {
+      const highlightColor = NoteColorUtils.getColorValue(updatedNoteData.backgroundColor || "light-yellow");
+      createTextHighlight(updatedNoteData, highlightColor);
+    }
     // Save to storage
     updateNote(window.location.href, noteData.id, updatedNoteData).then(success => {
       if (success) {

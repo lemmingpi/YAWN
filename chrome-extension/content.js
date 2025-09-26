@@ -1,5 +1,4 @@
 // Web Notes - Content script
-// Loads and displays existing notes for the current page with markdown editing support
 
 /* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote, deleteNote, normalizeUrlForNoteStorage */
 /* global getNotesForUrl, findMatchingUrlsInStorage */
@@ -51,56 +50,6 @@ document.addEventListener("contextmenu", function (event) {
   };
 });
 
-/**
- * Validate and sanitize color values to prevent CSS injection
- * @param {string} color - Color value to validate
- * @returns {string} Safe color value or fallback
- */
-function sanitizeColor(color) {
-  if (!color || typeof color !== 'string') {
-    return '#fff3cd'; // Default light yellow
-  }
-
-  // Allow hex colors (3 or 6 digits)
-  const hexPattern = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
-  if (hexPattern.test(color)) {
-    return color;
-  }
-
-  // Allow rgb() values with basic validation
-  const rgbPattern = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/;
-  const rgbMatch = color.match(rgbPattern);
-  if (rgbMatch) {
-    const [, r, g, b] = rgbMatch;
-    // Validate RGB values are within 0-255 range
-    if (parseInt(r) <= 255 && parseInt(g) <= 255 && parseInt(b) <= 255) {
-      return color;
-    }
-  }
-
-  // Allow rgba() values with basic validation
-  const rgbaPattern = /^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*([01]?\.?\d*)\s*\)$/;
-  const rgbaMatch = color.match(rgbaPattern);
-  if (rgbaMatch) {
-    const [, r, g, b, a] = rgbaMatch;
-    // Validate RGB values are within 0-255 range and alpha is 0-1
-    if (parseInt(r) <= 255 && parseInt(g) <= 255 && parseInt(b) <= 255 && parseFloat(a) <= 1) {
-      return color;
-    }
-  }
-
-  // Allow named colors (basic set for security)
-  const namedColors = [
-    'transparent', 'white', 'black', 'red', 'green', 'blue', 'yellow', 'orange',
-    'purple', 'pink', 'gray', 'grey', 'brown', 'cyan', 'magenta', 'lime'
-  ];
-  if (namedColors.includes(color.toLowerCase())) {
-    return color.toLowerCase();
-  }
-
-  console.warn(`[Web Notes] Invalid color value: ${color}, using fallback`);
-  return '#fff3cd'; // Fallback to default
-}
 
 /**
  * Validate XPath expressions to prevent injection attacks
@@ -258,7 +207,7 @@ function createTextHighlight(noteData, backgroundColor) {
     }
 
     // Validate and sanitize background color
-    const safeBackgroundColor = sanitizeColor(backgroundColor);
+    const safeBackgroundColor = NoteColorUtils.sanitizeColor(backgroundColor);
 
     // Remove any existing highlight for this note
     removeTextHighlight(noteData.id);
@@ -1110,7 +1059,7 @@ function enterEditMode(noteElement, noteData) {
   // Style the textarea to match the note
   const noteStyles = window.getComputedStyle(noteElement);
   textarea.style.cssText = `
-    width: 100%;
+    width: ${noteStyles.width};
     height: 100%;
     border: none;
     background: transparent;
@@ -1122,8 +1071,9 @@ function enterEditMode(noteElement, noteData) {
     color: ${noteStyles.color};
     padding: 0;
     margin: 0;
-    resize: none;
+    resize: both;
     outline: none;
+    max-width: calc(${noteStyles.maxWidth} - 20px);
     overflow: hidden;
   `;
 
@@ -1211,10 +1161,12 @@ function enterEditMode(noteElement, noteData) {
   // Auto-resize textarea
   function autoResize() {
     textarea.style.height = "auto";
+    textarea.style.width = "auto";
     textarea.style.height = textarea.scrollHeight + "px";
+    textarea.style.width = textarea.scrollWidth + "px";
   }
 
-  textarea.addEventListener("input", autoResize);
+  //textarea.addEventListener("input", autoResize);
   autoResize(); // Initial resize
 
   // Add keyboard shortcuts
@@ -1774,7 +1726,7 @@ function displayNote(noteData) {
       cursor: move;
       border: 1px solid ${isAnchored ? "rgba(33, 150, 243, 0.2)" : "rgba(233, 30, 99, 0.2)"};
       min-width: 85px;
-      max-width: 220px;
+      max-width: 520px;
       word-wrap: break-word;
       opacity: 0;
       transform: scale(0.8);
@@ -2462,239 +2414,4 @@ async function handleNoteDelete(noteElement, noteData) {
   }
 }
 
-/**
- * Create a custom styled confirmation dialog
- * @param {string} title - Dialog title
- * @param {string} message - Dialog message
- * @param {string} confirmText - Confirm button text
- * @param {string} cancelText - Cancel button text
- * @returns {Promise<boolean>} Promise resolving to user choice
- */
-function createCustomConfirmDialog(title, message, confirmText, cancelText) {
-  return new Promise(resolve => {
-    // Create overlay
-    const overlay = document.createElement("div");
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 10002;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    `;
 
-    // Create dialog
-    const dialog = document.createElement("div");
-    dialog.style.cssText = `
-      background: white;
-      border-radius: 12px;
-      padding: 24px;
-      min-width: 320px;
-      max-width: 400px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      transform: scale(0.8);
-      transition: transform 0.2s ease;
-    `;
-
-    // Create title
-    const titleElement = document.createElement("h3");
-    titleElement.textContent = title;
-    titleElement.style.cssText = `
-      margin: 0 0 12px 0;
-      font-size: 18px;
-      font-weight: 600;
-      color: #333;
-    `;
-
-    // Create message
-    const messageElement = document.createElement("p");
-    messageElement.textContent = message;
-    messageElement.style.cssText = `
-      margin: 0 0 24px 0;
-      font-size: 14px;
-      line-height: 1.5;
-      color: #666;
-    `;
-
-    // Create button container
-    const buttonContainer = document.createElement("div");
-    buttonContainer.style.cssText = `
-      display: flex;
-      gap: 12px;
-      justify-content: flex-end;
-    `;
-
-    // Create cancel button
-    const cancelButton = document.createElement("button");
-    cancelButton.textContent = cancelText;
-    cancelButton.style.cssText = `
-      padding: 10px 20px;
-      border: 1px solid #ddd;
-      background: white;
-      color: #666;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    `;
-
-    // Create confirm button
-    const confirmButton = document.createElement("button");
-    confirmButton.textContent = confirmText;
-    confirmButton.style.cssText = `
-      padding: 10px 20px;
-      border: none;
-      background: #f44336;
-      color: white;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    `;
-
-    // Add hover effects
-    cancelButton.addEventListener("mouseenter", () => {
-      cancelButton.style.background = "#f5f5f5";
-      cancelButton.style.borderColor = "#ccc";
-    });
-
-    cancelButton.addEventListener("mouseleave", () => {
-      cancelButton.style.background = "white";
-      cancelButton.style.borderColor = "#ddd";
-    });
-
-    confirmButton.addEventListener("mouseenter", () => {
-      confirmButton.style.background = "#d32f2f";
-    });
-
-    confirmButton.addEventListener("mouseleave", () => {
-      confirmButton.style.background = "#f44336";
-    });
-
-    // Handle responses
-    function handleResponse(result) {
-      overlay.style.opacity = "0";
-      dialog.style.transform = "scale(0.8)";
-
-      setTimeout(() => {
-        if (overlay.parentNode) {
-          overlay.remove();
-        }
-        resolve(result);
-      }, 200);
-    }
-
-    cancelButton.addEventListener("click", e => {
-      e.preventDefault();
-      e.stopPropagation();
-      handleResponse(false);
-    });
-
-    confirmButton.addEventListener("click", e => {
-      e.preventDefault();
-      e.stopPropagation();
-      handleResponse(true);
-    });
-
-    // Handle overlay click (cancel)
-    overlay.addEventListener("click", e => {
-      if (e.target === overlay) {
-        handleResponse(false);
-      }
-    });
-
-    // Handle escape key
-    function handleEscapeKey(e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        document.removeEventListener("keydown", handleEscapeKey);
-        handleResponse(false);
-      }
-    }
-    document.addEventListener("keydown", handleEscapeKey);
-
-    // Assemble dialog
-    buttonContainer.appendChild(cancelButton);
-    buttonContainer.appendChild(confirmButton);
-    dialog.appendChild(titleElement);
-    dialog.appendChild(messageElement);
-    dialog.appendChild(buttonContainer);
-    overlay.appendChild(dialog);
-
-    // Add to page and animate in
-    document.body.appendChild(overlay);
-
-    // Animate in
-    requestAnimationFrame(() => {
-      overlay.style.opacity = "1";
-      dialog.style.transform = "scale(1)";
-    });
-
-    // Focus confirm button for accessibility
-    setTimeout(() => {
-      confirmButton.focus();
-    }, 100);
-  });
-}
-
-/**
- * Show a temporary message to the user
- * @param {string} message - Message to show
- * @param {string} type - Message type ('error', 'success', 'info')
- */
-function showTemporaryMessage(message, type = "info") {
-  try {
-    const messageElement = document.createElement("div");
-    messageElement.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: ${type === "error" ? "#f44336" : type === "success" ? "#4caf50" : "#2196f3"};
-      color: white;
-      padding: 12px 16px;
-      border-radius: 6px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      z-index: 10003;
-      max-width: 300px;
-      opacity: 0;
-      transform: translateX(100%);
-      transition: all 0.3s ease;
-    `;
-
-    messageElement.textContent = message;
-    document.body.appendChild(messageElement);
-
-    // Animate in
-    requestAnimationFrame(() => {
-      messageElement.style.opacity = "1";
-      messageElement.style.transform = "translateX(0)";
-    });
-
-    // Remove after 4 seconds
-    setTimeout(() => {
-      messageElement.style.opacity = "0";
-      messageElement.style.transform = "translateX(100%)";
-      setTimeout(() => {
-        if (messageElement.parentNode) {
-          messageElement.remove();
-        }
-      }, 300);
-    }, 4000);
-  } catch (error) {
-    console.error("[Web Notes] Error showing temporary message:", error);
-    // Fallback to alert if custom message fails
-    alert(message);
-  }
-}

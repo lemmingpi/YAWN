@@ -27,7 +27,8 @@
       "Bash(npx eslint chrome-extension/markdown-utils.js)",
       "Bash(npx eslint:*)",
       "Bash(gh api:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Read(//c/Users/gordo/**)"
     ],
     "deny": [],
     "ask": [],
