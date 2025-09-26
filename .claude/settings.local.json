@@ -28,7 +28,13 @@
       "Bash(npx eslint:*)",
       "Bash(gh api:*)",
       "Bash(grep:*)",
-      "Read(//c/Users/gordo/**)"
+      "Read(//c/Users/gordo/**)",
+      "Bash(alembic init:*)",
+      "Bash(pip install:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(source:*)",
+      "Bash(git fetch:*)",
+      "Bash(git rebase:*)"
     ],
     "deny": [],
     "ask": [],

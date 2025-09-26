@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Web Notes{% endblock %}
+
+{% block content %}
+<div class="col-12">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">Dashboard</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item active">
+                        <i class="bi bi-house me-1"></i>Dashboard
+                    </li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <button class="btn btn-primary action-btn" onclick="refreshDashboard()">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card card-hover" data-stat-refresh>
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title mb-1">Total Sites</h6>
+                            <h3 class="mb-0" id="stats-sites">{{ stats.total_sites }}</h3>
+                        </div>
+                        <div class="ms-3">
+                            <i class="bi bi-globe" style="font-size: 2rem; opacity: 0.7;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card card-hover" data-stat-refresh>
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title mb-1">Total Pages</h6>
+                            <h3 class="mb-0" id="stats-pages">{{ stats.total_pages }}</h3>
+                        </div>
+                        <div class="ms-3">
+                            <i class="bi bi-file-earmark" style="font-size: 2rem; opacity: 0.7;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card card-hover" data-stat-refresh>
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title mb-1">Total Notes</h6>
+                            <h3 class="mb-0" id="stats-notes">{{ stats.total_notes }}</h3>
+                        </div>
+                        <div class="ms-3">
+                            <i class="bi bi-sticky" style="font-size: 2rem; opacity: 0.7;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <div class="card stats-card card-hover" data-stat-refresh>
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title mb-1">Total Artifacts</h6>
+                            <h3 class="mb-0" id="stats-artifacts">{{ stats.total_artifacts }}</h3>
+                        </div>
+                        <div class="ms-3">
+                            <i class="bi bi-magic" style="font-size: 2rem; opacity: 0.7;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="row">
+        <!-- Recent Sites -->
+        <div class="col-md-6 mb-4">
+            <div class="card content-wrapper">
+                <div class="card-header bg-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-globe me-2 text-primary"></i>Recent Sites
+                        </h5>
+                        <a href="/app/sites" class="btn btn-sm btn-outline-primary">View All</a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if recent_sites %}
+                        <div class="list-group list-group-flush">
+                            {% for site in recent_sites %}
+                            <div class="list-group-item border-0 px-0">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">{{ site.domain }}</h6>
+                                        <small class="text-muted">
+                                            <i class="bi bi-file-earmark me-1"></i>
+                                            {{ site.pages_count }} pages
+                                        </small>
+                                    </div>
+                                    <div class="text-end">
+                                        <small class="text-muted">{{ site.created_at.strftime('%m/%d/%Y') }}</small>
+                                        <br>
+                                        <span class="badge bg-{{ 'success' if site.is_active else 'secondary' }}">
+                                            {{ 'Active' if site.is_active else 'Inactive' }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="bi bi-globe text-muted" style="font-size: 3rem;"></i>
+                            <p class="text-muted mt-2">No sites found</p>
+                            <a href="/app/sites" class="btn btn-primary btn-sm">Create First Site</a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Notes -->
+        <div class="col-md-6 mb-4">
+            <div class="card content-wrapper">
+                <div class="card-header bg-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-sticky me-2 text-primary"></i>Recent Notes
+                        </h5>
+                        <a href="/app/notes" class="btn btn-sm btn-outline-primary">View All</a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if recent_notes %}
+                        <div class="list-group list-group-flush">
+                            {% for note in recent_notes %}
+                            <div class="list-group-item border-0 px-0">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1 me-3">
+                                        <p class="mb-1">{{ note.content[:100] }}{% if note.content|length > 100 %}...{% endif %}</p>
+                                        <small class="text-muted">
+                                            <i class="bi bi-clock me-1"></i>
+                                            {{ note.created_at.strftime('%m/%d/%Y %H:%M') }}
+                                        </small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-info">
+                                            {{ note.artifacts_count }} artifacts
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="bi bi-sticky text-muted" style="font-size: 3rem;"></i>
+                            <p class="text-muted mt-2">No notes found</p>
+                            <a href="/app/notes" class="btn btn-primary btn-sm">Create First Note</a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card content-wrapper">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-lightning me-2 text-primary"></i>Quick Actions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <a href="/app/sites" class="btn btn-outline-primary w-100 d-flex align-items-center justify-content-center py-3">
+                                <i class="bi bi-plus-circle me-2"></i>
+                                <div class="text-start">
+                                    <div class="fw-bold">New Site</div>
+                                    <small>Add a new domain</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="/app/notes" class="btn btn-outline-success w-100 d-flex align-items-center justify-content-center py-3">
+                                <i class="bi bi-plus-circle me-2"></i>
+                                <div class="text-start">
+                                    <div class="fw-bold">New Note</div>
+                                    <small>Create a note</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="/app/artifacts" class="btn btn-outline-info w-100 d-flex align-items-center justify-content-center py-3">
+                                <i class="bi bi-magic me-2"></i>
+                                <div class="text-start">
+                                    <div class="fw-bold">Generate Artifact</div>
+                                    <small>Use AI to enhance</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="/app/llm-providers" class="btn btn-outline-warning w-100 d-flex align-items-center justify-content-center py-3">
+                                <i class="bi bi-cpu me-2"></i>
+                                <div class="text-start">
+                                    <div class="fw-bold">LLM Settings</div>
+                                    <small>Configure providers</small>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function refreshDashboard() {
+        // Show loading state
+        const refreshBtn = document.querySelector('[onclick="refreshDashboard()"]');
+        const originalContent = refreshBtn.innerHTML;
+        refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1 spin"></i>Refreshing...';
+        refreshBtn.disabled = true;
+
+        // Reload the page
+        setTimeout(() => {
+            window.location.reload();
+        }, 500);
+    }
+
+    // Add spin animation for loading
+    document.addEventListener('DOMContentLoaded', function() {
+        const style = document.createElement('style');
+        style.textContent = `
+            .spin {
+                animation: spin 1s linear infinite;
+            }
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+    });
+</script>
+{% endblock %}
