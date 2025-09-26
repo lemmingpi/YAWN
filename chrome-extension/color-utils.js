@@ -65,9 +65,6 @@ if (typeof window !== "undefined") {
   window.NoteColorUtils = NoteColorUtils;
 }
 
-// Node.js compatibility
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    NoteColorUtils,
-  };
+  module.exports = { NoteColorUtils };
 }

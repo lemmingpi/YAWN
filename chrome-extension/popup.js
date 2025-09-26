@@ -9,7 +9,6 @@
 // Use shared constants and functions
 // EXTENSION_CONSTANTS, logError, getStats, setStats, isTabValid are imported
 
-// All storage and logging functions now imported from shared-utils.js
 
 /**
  * Updates stats display in the popup
@@ -46,12 +45,12 @@ async function updateStatsDisplay() {
     // Create stats display safely using DOM methods
     const statsDiv = document.createElement("div");
     statsDiv.style.cssText = "font-size: 11px; line-height: 1.4;";
-    const bytesUsed = await getBytesUsed()/1024; // Convert to KB
+    const bytesUsed = await getBytesUsed() / 1024; // Convert to KB
 
     const statsData = [
       `• Installed: ${installDate}`,
       `• Last seen: ${lastSeen}`,
-      `• Storage Used: ${bytesUsed} KB`
+      `• Storage Used: ${bytesUsed} KB`,
     ];
 
     statsData.forEach(statText => {
@@ -225,13 +224,13 @@ document.addEventListener("DOMContentLoaded", async function () {
       try {
         const newValue = useChromeSyncCheckbox.checked;
         let cfg = await getWNConfig();
-        if(cfg.useChromeSync != newValue) {
+        if (cfg.useChromeSync !== newValue) {
           let notes = await getNotes();
           cfg.useChromeSync = newValue;
           await setWNConfig(cfg);
           await setNotes(notes);
         }
-    } catch (error) {
+      } catch (error) {
         logError("Error in settings click handler", error);
         showUserError("Failed to update settings");
       }

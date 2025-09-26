@@ -17,7 +17,7 @@
       "js": [
         "libs/marked.min.js",
         "libs/dompurify.min.js",
-        "color-utils.js",
+         "color-utils.js",
         "color-dropdown.js",
         "markdown-utils.js",
         "shared-utils.js",

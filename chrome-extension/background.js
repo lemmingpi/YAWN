@@ -3,11 +3,9 @@
  * Handles context menu creation, click events, and error handling
  */
 
-/* global importScripts, EXTENSION_CONSTANTS, logError, safeApiCall */
-/* global getStats, setStats, getNotes, isTabValid, getNotesForUrl */
 
 // Import shared utilities
-importScripts("shared-utils.js");
+importScripts("./shared-utils.js");
 
 // Constants
 const EXTENSION_ID = "add-web-note";

@@ -1,9 +1,9 @@
 // Web Notes - Content script
 // Loads and displays existing notes for the current page with markdown editing support
 
-
 /* global EXTENSION_CONSTANTS, NoteDataUtils, updateNote, deleteNote, normalizeUrlForNoteStorage */
 /* global getNotesForUrl, findMatchingUrlsInStorage */
+/* global createColorDropdown, handleColorSelection */
 
 // Timing constants for better maintainability
 const TIMING = {
@@ -1343,11 +1343,11 @@ function displayNote(noteData) {
     const isAnchored = targetElement !== null;
     note.style.cssText = `
       position: absolute;
-      background: ${NoteColorUtils.getColorValue(noteData.backgroundColor || 'light-yellow')};
+      background: ${NoteColorUtils.getColorValue(noteData.backgroundColor || "light-yellow")};
       color: #2c3e50;
       padding: 10px 14px;
       border-radius: 8px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       font-size: 13px;
       font-weight: 500;
       line-height: 1.4;
@@ -1509,9 +1509,9 @@ if ("navigation" in window) {
  * Create a note at specific coordinates
  * @param {number} noteNumber - The note number
  * @param {Object} coords - Click coordinates with target element
- * @param {string} [backgroundColor='light-yellow'] - Optional background color for the note
+ * @param {string} [backgroundColor="light-yellow"] - Optional background color for the note
  */
-function createNoteAtCoords(noteNumber, coords, backgroundColor = 'light-yellow') {
+function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow") {
   try {
     // Generate unique note ID
     const noteId = `web-note-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;

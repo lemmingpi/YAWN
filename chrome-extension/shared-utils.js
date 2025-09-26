@@ -449,15 +449,13 @@ function safeApiCall(apiCall, context) {
 /* global module */
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    EXTENSION_CONSTANTS,
-    logError,
     getStats,
     setStats,
+    getNotes,
+    setNotes,
     getWNConfig,
     setWNConfig,
     getBytesUsed,
-    getNotes,
-    setNotes,
     updateNote,
     addNote,
     deleteNote,
