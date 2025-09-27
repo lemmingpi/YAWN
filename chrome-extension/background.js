@@ -3,7 +3,6 @@
  * Handles context menu creation, click events, and error handling
  */
 
-
 // Import shared utilities
 importScripts("./shared-utils.js");
 
@@ -23,16 +22,58 @@ const ongoingInjections = new Set();
 async function createContextMenu() {
   try {
     await safeApiCall(() => {
+      // Main add note menu item
       chrome.contextMenus.create({
         id: EXTENSION_ID,
         title: MENU_TITLE,
         contexts: ["page", "selection", "link", "image"],
+      });
+
+      // Sharing submenu (will be shown/hidden based on authentication)
+      chrome.contextMenus.create({
+        id: "share-submenu",
+        title: "🔗 Share",
+        contexts: ["page"],
+        visible: false, // Hidden by default, shown when user is authenticated
+      });
+
+      chrome.contextMenus.create({
+        id: "share-current-page",
+        parentId: "share-submenu",
+        title: "Share Current Page",
+        contexts: ["page"],
+      });
+
+      chrome.contextMenus.create({
+        id: "share-current-site",
+        parentId: "share-submenu",
+        title: "Share Current Site",
+        contexts: ["page"],
       });
     }, "Creating context menu");
 
     console.log("[Web Notes Extension] Context menu created successfully");
   } catch (error) {
     logError("Failed to create context menu", error);
+  }
+}
+
+/**
+ * Update context menu visibility based on sharing capability
+ * @param {boolean} canShare - Whether sharing is available
+ */
+async function updateSharingContextMenu(canShare) {
+  try {
+    await safeApiCall(() => {
+      chrome.contextMenus.update("share-submenu", {
+        visible: canShare,
+      });
+    }, "Updating sharing context menu");
+
+    console.log(`[Web Notes Extension] Sharing context menu ${canShare ? "enabled" : "disabled"}`);
+  } catch (error) {
+    // Silently fail if context menu doesn't exist yet
+    console.debug("Context menu update failed (expected during initialization):", error);
   }
 }
 
@@ -120,7 +161,7 @@ async function createNoteWithCoordinates(tabId, noteNumber) {
           } else {
             resolve(result);
           }
-        },
+        }
       );
     });
 
@@ -148,20 +189,44 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== EXTENSION_ID) {
-    return;
-  }
-
   try {
     // Validate tab
     if (!isTabValid(tab)) {
-      logError(
-        "Invalid tab for script injection",
-        `Tab ID: ${tab?.id}, URL: ${tab?.url}`,
-      );
+      logError("Invalid tab for context menu action", `Tab ID: ${tab?.id}, URL: ${tab?.url}`);
       return;
     }
 
+    switch (info.menuItemId) {
+      case EXTENSION_ID:
+        // Handle add note action
+        await handleAddNote(info, tab);
+        break;
+
+      case "share-current-page":
+        // Handle share page action
+        await handleSharePage(info, tab);
+        break;
+
+      case "share-current-site":
+        // Handle share site action
+        await handleShareSite(info, tab);
+        break;
+
+      default:
+        console.log(`[Web Notes Extension] Unknown context menu item: ${info.menuItemId}`);
+    }
+  } catch (error) {
+    logError("Error handling context menu click", error);
+  }
+});
+
+/**
+ * Handle add note context menu action
+ * @param {Object} info - Context menu info
+ * @param {Object} tab - Tab object
+ */
+async function handleAddNote(info, tab) {
+  try {
     // Get next note number using enhanced URL matching
     const notes = await getNotes();
     const urlNotes = getNotesForUrl(tab.url, notes);
@@ -181,9 +246,102 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       });
     }
   } catch (error) {
-    logError("Error handling context menu click", error);
+    logError("Error handling add note action", error);
   }
+}
+
+/**
+ * Handle share page context menu action
+ * @param {Object} info - Context menu info
+ * @param {Object} tab - Tab object
+ */
+async function handleSharePage(info, tab) {
+  try {
+    console.log("[Web Notes Extension] Share page requested via context menu");
+
+    // Send message to content script to open sharing dialog
+    chrome.tabs
+      .sendMessage(tab.id, {
+        type: "shareCurrentPage",
+      })
+      .catch(error => {
+        console.error("[Web Notes Extension] Failed to send share page message:", error);
+      });
+  } catch (error) {
+    logError("Error handling share page action", error);
+  }
+}
+
+/**
+ * Handle share site context menu action
+ * @param {Object} info - Context menu info
+ * @param {Object} tab - Tab object
+ */
+async function handleShareSite(info, tab) {
+  try {
+    console.log("[Web Notes Extension] Share site requested via context menu");
+
+    // Send message to content script to open sharing dialog
+    chrome.tabs
+      .sendMessage(tab.id, {
+        type: "shareCurrentSite",
+      })
+      .catch(error => {
+        console.error("[Web Notes Extension] Failed to send share site message:", error);
+      });
+  } catch (error) {
+    logError("Error handling share site action", error);
+  }
+}
+
+// ===== SHARING MESSAGE HANDLING =====
+
+/**
+ * Handle messages from content scripts and popup
+ */
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || !message.type) {
+    return;
+  }
+
+  try {
+    switch (message.type) {
+      case "updateContextMenu":
+        handleContextMenuUpdate(message.data);
+        sendResponse({ success: true });
+        break;
+
+      case "getSharingCapability":
+        // This will be handled by content script, just acknowledge
+        sendResponse({ success: true });
+        break;
+
+      default:
+        // Unknown message type, let other handlers process it
+        return;
+    }
+  } catch (error) {
+    logError("Error handling background message", error);
+    sendResponse({ success: false, error: error.message });
+  }
+
+  return true; // Keep message channel open for async response
 });
+
+/**
+ * Handle context menu update request
+ * @param {Object} data - Update data
+ */
+async function handleContextMenuUpdate(data) {
+  try {
+    if (data && typeof data.hasSharingCapability === "boolean") {
+      await updateSharingContextMenu(data.hasSharingCapability);
+      console.log("[Web Notes Extension] Context menu updated based on sharing capability");
+    }
+  } catch (error) {
+    logError("Error updating context menu", error);
+  }
+}
 
 // Handle extension errors
 chrome.runtime.onStartup.addListener(() => {

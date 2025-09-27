@@ -48,9 +48,16 @@ async function updateStatsDisplay() {
 
     // Check server sync status
     let serverStatus = "Disabled";
+    let authStatus = "Local Only";
+
     if (config.syncServerUrl) {
       serverStatus = "Configured";
-      // TODO: Add server health check here if needed
+
+      // Check authentication status if AuthManager is available
+      if (typeof AuthManager !== "undefined") {
+        const isAuthenticated = AuthManager.isAuthenticated();
+        authStatus = isAuthenticated ? "Authenticated" : "Not Authenticated";
+      }
     }
 
     const statsData = [
@@ -58,6 +65,7 @@ async function updateStatsDisplay() {
       `• Last seen: ${lastSeen}`,
       `• Storage Used: ${bytesUsed.toFixed(1)} KB`,
       `• Server Sync: ${serverStatus}`,
+      `• Auth Status: ${authStatus}`,
     ];
 
     statsData.forEach(statText => {
@@ -77,6 +85,130 @@ async function updateStatsDisplay() {
     const statsContentElement = document.getElementById("stats-content");
     if (statsContentElement) {
       statsContentElement.textContent = "Error loading stats";
+    }
+  }
+}
+
+/**
+ * Updates user authentication status display
+ */
+async function updateUserStatus() {
+  try {
+    const signedInView = document.getElementById("signed-in-view");
+    const signedOutView = document.getElementById("signed-out-view");
+    const userNameElement = document.getElementById("user-name");
+    const userEmailElement = document.getElementById("user-email");
+
+    if (!signedInView || !signedOutView) {
+      logError("User status update failed", "Required elements not found");
+      return;
+    }
+
+    // Check if AuthManager is available
+    if (typeof AuthManager === "undefined") {
+      // Show signed out view if AuthManager not available
+      signedInView.style.display = "none";
+      signedOutView.style.display = "block";
+      return;
+    }
+
+    const isAuthenticated = AuthManager.isAuthenticated();
+    const user = AuthManager.getCurrentUser();
+
+    if (isAuthenticated && user) {
+      // Show signed in view
+      signedInView.style.display = "block";
+      signedOutView.style.display = "none";
+
+      // Update user information
+      if (userNameElement) {
+        userNameElement.textContent = user.name || "Unknown User";
+      }
+      if (userEmailElement) {
+        userEmailElement.textContent = user.email || "";
+      }
+    } else {
+      // Show signed out view
+      signedInView.style.display = "none";
+      signedOutView.style.display = "block";
+    }
+  } catch (error) {
+    logError("Error updating user status", error);
+
+    // Fallback to signed out view
+    const signedInView = document.getElementById("signed-in-view");
+    const signedOutView = document.getElementById("signed-out-view");
+    if (signedInView && signedOutView) {
+      signedInView.style.display = "none";
+      signedOutView.style.display = "block";
+    }
+  }
+}
+
+/**
+ * Handle sign in button click
+ */
+async function handleSignIn() {
+  try {
+    const signInBtn = document.getElementById("sign-in-btn");
+    if (signInBtn) {
+      signInBtn.textContent = "Signing in...";
+      signInBtn.disabled = true;
+    }
+
+    if (typeof AuthManager === "undefined") {
+      showUserError("Authentication manager not available");
+      return;
+    }
+
+    const user = await AuthManager.signIn(true);
+    if (user) {
+      console.log("[Popup] Sign-in successful:", user);
+      await updateUserStatus();
+      await updateStatsDisplay();
+    } else {
+      showUserError("Sign-in failed");
+    }
+  } catch (error) {
+    logError("Sign-in error", error);
+    showUserError("Sign-in failed: " + error.message);
+  } finally {
+    const signInBtn = document.getElementById("sign-in-btn");
+    if (signInBtn) {
+      signInBtn.textContent = "Sign In with Google";
+      signInBtn.disabled = false;
+    }
+  }
+}
+
+/**
+ * Handle sign out button click
+ */
+async function handleSignOut() {
+  try {
+    const signOutBtn = document.getElementById("sign-out-btn");
+    if (signOutBtn) {
+      signOutBtn.textContent = "Signing out...";
+      signOutBtn.disabled = true;
+    }
+
+    if (typeof AuthManager === "undefined") {
+      showUserError("Authentication manager not available");
+      return;
+    }
+
+    await AuthManager.signOut();
+    console.log("[Popup] Sign-out successful");
+    await updateUserStatus();
+    await updateStatsDisplay();
+  } catch (error) {
+    logError("Sign-out error", error);
+    showUserError("Sign-out failed: " + error.message);
+  } finally {
+    const signOutBtn = document.getElementById("sign-out-btn");
+    if (signOutBtn) {
+      signOutBtn.textContent = "Sign Out";
+      signOutBtn.disabled = false;
     }
   }
 }
@@ -115,10 +247,7 @@ async function getCurrentTab() {
 async function executeScriptInTab(tabId, func) {
   try {
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(
-        () => reject(new Error("Script injection timeout")),
-        EXTENSION_CONSTANTS.SCRIPT_INJECTION_TIMEOUT
-      );
+      setTimeout(() => reject(new Error("Script injection timeout")), EXTENSION_CONSTANTS.SCRIPT_INJECTION_TIMEOUT);
     });
 
     const injectionPromise = new Promise((resolve, reject) => {
@@ -194,6 +323,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     const clearStatsBtn = document.getElementById("clear-stats");
     const useChromeSyncCheckbox = document.getElementById("use-chrome-sync");
     const syncServerUrlInput = document.getElementById("sync-server-url");
+    const signInBtn = document.getElementById("sign-in-btn");
+    const signOutBtn = document.getElementById("sign-out-btn");
 
     if (!clearStatsBtn) {
       logError("DOM initialization failed", "Required buttons not found");
@@ -259,11 +390,418 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
     });
 
-    // Initialize popup
+    // Sign In Button
+    if (signInBtn) {
+      signInBtn.addEventListener("click", handleSignIn);
+    }
+
+    // Sign Out Button
+    if (signOutBtn) {
+      signOutBtn.addEventListener("click", handleSignOut);
+    }
+
+    // Set up authentication state listener
+    if (typeof AuthManager !== "undefined") {
+      AuthManager.addAuthListener(async (event, data) => {
+        console.log("[Popup] Auth state changed:", event, data);
+        await updateUserStatus();
+        await updateStatsDisplay();
+      });
+    }
+
+    // Initialize popup displays
+    await updateUserStatus();
     await updateStatsDisplay();
+
+    // Initialize sharing functionality
+    await initializeSharingSection();
   } catch (error) {
     logError("Error during popup initialization", error);
   }
 });
+
+// ===== SHARING FUNCTIONALITY =====
+
+/**
+ * Initialize sharing section in popup
+ */
+async function initializeSharingSection() {
+  try {
+    const sharingSectionElement = document.getElementById("sharing-section");
+    const sharePageBtn = document.getElementById("share-page-btn");
+    const shareSiteBtn = document.getElementById("share-site-btn");
+    const manageSharesBtn = document.getElementById("manage-shares-btn");
+
+    if (!sharingSectionElement) {
+      console.log("[Popup] Sharing section not found in DOM");
+      return;
+    }
+
+    // Check if sharing is available (user authenticated and server configured)
+    const canShare = await checkSharingCapability();
+
+    if (canShare) {
+      // Show sharing section
+      sharingSectionElement.style.display = "block";
+
+      // Set up event listeners
+      if (sharePageBtn) {
+        sharePageBtn.addEventListener("click", handleSharePageClick);
+      }
+      if (shareSiteBtn) {
+        shareSiteBtn.addEventListener("click", handleShareSiteClick);
+      }
+      if (manageSharesBtn) {
+        manageSharesBtn.addEventListener("click", handleManageSharesClick);
+      }
+
+      // Update sharing status
+      await updateSharingStatus();
+
+      console.log("[Popup] Sharing section initialized");
+    } else {
+      // Hide sharing section if user not authenticated
+      sharingSectionElement.style.display = "none";
+      console.log("[Popup] Sharing section hidden - authentication required");
+    }
+  } catch (error) {
+    logError("Error initializing sharing section", error);
+  }
+}
+
+/**
+ * Check if sharing capabilities are available
+ * @returns {Promise<boolean>} True if sharing is available
+ */
+async function checkSharingCapability() {
+  try {
+    // Check if user is authenticated
+    if (typeof AuthManager === "undefined" || !AuthManager.isAuthenticated()) {
+      return false;
+    }
+
+    // Check if server sync is configured
+    const config = await getWNConfig();
+    if (!config.syncServerUrl) {
+      return false;
+    }
+
+    // Check if ServerAPI is available
+    if (typeof ServerAPI === "undefined") {
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[Popup] Error checking sharing capability:", error);
+    return false;
+  }
+}
+
+/**
+ * Update sharing status display
+ */
+async function updateSharingStatus() {
+  try {
+    // Get current tab information
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      console.log("[Popup] No active tab found");
+      return;
+    }
+
+    const currentTab = tabs[0];
+    const pageUrl = currentTab.url;
+    const domain = new URL(pageUrl).hostname;
+
+    // Update page sharing status
+    await updatePageSharingStatus(pageUrl);
+
+    // Update site sharing status
+    await updateSiteSharingStatus(domain);
+  } catch (error) {
+    console.error("[Popup] Error updating sharing status:", error);
+
+    // Set default state on error
+    setPageSharingStatus(false, "Unable to check status");
+    setSiteSharingStatus(false, "Unable to check status");
+  }
+}
+
+/**
+ * Update page sharing status
+ * @param {string} pageUrl - Page URL
+ */
+async function updatePageSharingStatus(pageUrl) {
+  try {
+    const status = await ServerAPI.getSharingStatus("page", pageUrl);
+    const isShared = status.isShared || false;
+    const shareCount = status.shareCount || 0;
+
+    let statusText = isShared ? `Shared with ${shareCount} user${shareCount !== 1 ? "s" : ""}` : "Page not shared";
+    setPageSharingStatus(isShared, statusText);
+  } catch (error) {
+    console.debug("[Popup] Error checking page sharing status:", error);
+    setPageSharingStatus(false, "Page not shared");
+  }
+}
+
+/**
+ * Update site sharing status
+ * @param {string} domain - Site domain
+ */
+async function updateSiteSharingStatus(domain) {
+  try {
+    const status = await ServerAPI.getSharingStatus("site", domain);
+    const isShared = status.isShared || false;
+    const shareCount = status.shareCount || 0;
+
+    let statusText = isShared ? `Site shared with ${shareCount} user${shareCount !== 1 ? "s" : ""}` : "Site not shared";
+    setSiteSharingStatus(isShared, statusText);
+  } catch (error) {
+    console.debug("[Popup] Error checking site sharing status:", error);
+    setSiteSharingStatus(false, "Site not shared");
+  }
+}
+
+/**
+ * Set page sharing status display
+ * @param {boolean} isShared - Whether page is shared
+ * @param {string} statusText - Status text to display
+ */
+function setPageSharingStatus(isShared, statusText) {
+  const indicator = document.getElementById("page-sharing-indicator");
+  const text = document.getElementById("page-sharing-text");
+
+  if (indicator) {
+    indicator.className = `sharing-indicator ${isShared ? "shared" : "not-shared"}`;
+  }
+  if (text) {
+    text.textContent = statusText;
+  }
+}
+
+/**
+ * Set site sharing status display
+ * @param {boolean} isShared - Whether site is shared
+ * @param {string} statusText - Status text to display
+ */
+function setSiteSharingStatus(isShared, statusText) {
+  const indicator = document.getElementById("site-sharing-indicator");
+  const text = document.getElementById("site-sharing-text");
+
+  if (indicator) {
+    indicator.className = `sharing-indicator ${isShared ? "shared" : "not-shared"}`;
+  }
+  if (text) {
+    text.textContent = statusText;
+  }
+}
+
+/**
+ * Handle share page button click
+ */
+async function handleSharePageClick() {
+  try {
+    console.log("[Popup] Share page button clicked");
+
+    // Get current tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      showPopupMessage("No active tab found", "error");
+      return;
+    }
+
+    const currentTab = tabs[0];
+
+    // Send message to content script to open sharing dialog
+    chrome.tabs
+      .sendMessage(currentTab.id, {
+        type: "shareCurrentPage",
+      })
+      .then(response => {
+        if (response && response.success) {
+          console.log("[Popup] Page sharing dialog opened successfully");
+          // Close popup after slight delay
+          setTimeout(() => window.close(), 500);
+        } else {
+          showPopupMessage("Failed to open sharing dialog", "error");
+        }
+      })
+      .catch(error => {
+        console.error("[Popup] Error sending share page message:", error);
+        showPopupMessage("Failed to communicate with page", "error");
+      });
+  } catch (error) {
+    logError("Error handling share page click", error);
+    showPopupMessage("Failed to share page", "error");
+  }
+}
+
+/**
+ * Handle share site button click
+ */
+async function handleShareSiteClick() {
+  try {
+    console.log("[Popup] Share site button clicked");
+
+    // Get current tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      showPopupMessage("No active tab found", "error");
+      return;
+    }
+
+    const currentTab = tabs[0];
+
+    // Send message to content script to open sharing dialog
+    chrome.tabs
+      .sendMessage(currentTab.id, {
+        type: "shareCurrentSite",
+      })
+      .then(response => {
+        if (response && response.success) {
+          console.log("[Popup] Site sharing dialog opened successfully");
+          // Close popup after slight delay
+          setTimeout(() => window.close(), 500);
+        } else {
+          showPopupMessage("Failed to open sharing dialog", "error");
+        }
+      })
+      .catch(error => {
+        console.error("[Popup] Error sending share site message:", error);
+        showPopupMessage("Failed to communicate with page", "error");
+      });
+  } catch (error) {
+    logError("Error handling share site click", error);
+    showPopupMessage("Failed to share site", "error");
+  }
+}
+
+/**
+ * Handle manage shares button click
+ */
+async function handleManageSharesClick() {
+  try {
+    console.log("[Popup] Manage shares button clicked");
+
+    // Get current tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      showPopupMessage("No active tab found", "error");
+      return;
+    }
+
+    const currentTab = tabs[0];
+    const pageUrl = currentTab.url;
+    const pageTitle = currentTab.title || pageUrl;
+
+    // Send message to content script to open page sharing dialog (which includes management)
+    chrome.tabs
+      .sendMessage(currentTab.id, {
+        type: "shareCurrentPage",
+      })
+      .then(response => {
+        if (response && response.success) {
+          console.log("[Popup] Manage shares dialog opened successfully");
+          // Close popup after slight delay
+          setTimeout(() => window.close(), 500);
+        } else {
+          showPopupMessage("Failed to open manage shares dialog", "error");
+        }
+      })
+      .catch(error => {
+        console.error("[Popup] Error sending manage shares message:", error);
+        showPopupMessage("Failed to communicate with page", "error");
+      });
+  } catch (error) {
+    logError("Error handling manage shares click", error);
+    showPopupMessage("Failed to open manage shares", "error");
+  }
+}
+
+/**
+ * Show temporary message in popup
+ * @param {string} message - Message to show
+ * @param {string} type - Message type (success, error, info)
+ */
+function showPopupMessage(message, type = "info") {
+  try {
+    // Create or update message element
+    let messageElement = document.getElementById("popup-message");
+
+    if (!messageElement) {
+      messageElement = document.createElement("div");
+      messageElement.id = "popup-message";
+      messageElement.style.cssText = `
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        padding: 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        text-align: center;
+        z-index: 1000;
+        transition: opacity 0.3s ease;
+      `;
+      document.body.appendChild(messageElement);
+    }
+
+    // Set message content and styling based on type
+    messageElement.textContent = message;
+
+    switch (type) {
+      case "success":
+        messageElement.style.background = "rgba(76, 175, 80, 0.9)";
+        messageElement.style.color = "white";
+        break;
+      case "error":
+        messageElement.style.background = "rgba(244, 67, 54, 0.9)";
+        messageElement.style.color = "white";
+        break;
+      default:
+        messageElement.style.background = "rgba(33, 150, 243, 0.9)";
+        messageElement.style.color = "white";
+    }
+
+    // Show message
+    messageElement.style.opacity = "1";
+
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+      if (messageElement) {
+        messageElement.style.opacity = "0";
+        setTimeout(() => {
+          if (messageElement && messageElement.parentNode) {
+            messageElement.parentNode.removeChild(messageElement);
+          }
+        }, 300);
+      }
+    }, 3000);
+  } catch (error) {
+    console.error("[Popup] Error showing popup message:", error);
+  }
+}
+
+/**
+ * Update sharing section when user authentication changes
+ */
+async function updateSharingOnAuthChange() {
+  try {
+    await initializeSharingSection();
+  } catch (error) {
+    console.error("[Popup] Error updating sharing on auth change:", error);
+  }
+}
+
+// Add auth listener for sharing updates
+if (typeof AuthManager !== "undefined") {
+  AuthManager.addAuthListener(async (event, data) => {
+    if (event === "signIn" || event === "signOut") {
+      await updateSharingOnAuthChange();
+    }
+  });
+}
 
 // Banner functions removed - functionality no longer needed

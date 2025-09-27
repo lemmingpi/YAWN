@@ -127,6 +127,98 @@
       .feature-list .button {
         margin-top: 8px;
       }
+
+      .user-status {
+        margin-top: 8px;
+      }
+
+      .user-info {
+        margin-bottom: 8px;
+        font-size: 11px;
+        padding: 6px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+      }
+
+      #user-name {
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+
+      #user-email {
+        opacity: 0.8;
+        font-size: 10px;
+      }
+
+      .auth-status {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+      }
+
+      .auth-status.authenticated {
+        background-color: #4caf50;
+      }
+
+      .auth-status.unauthenticated {
+        background-color: #f44336;
+      }
+
+      .sharing-section {
+        margin-top: 16px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 12px;
+        font-size: 12px;
+        text-align: left;
+      }
+
+      .sharing-status {
+        margin-bottom: 8px;
+        padding: 6px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+        font-size: 11px;
+      }
+
+      .sharing-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 8px;
+      }
+
+      .sharing-actions .button {
+        flex: 1;
+        min-width: 0;
+        margin: 0;
+        padding: 6px 8px;
+        font-size: 11px;
+        text-align: center;
+      }
+
+      .sharing-indicator {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        margin-right: 4px;
+      }
+
+      .sharing-indicator.shared {
+        background-color: #4caf50;
+      }
+
+      .sharing-indicator.not-shared {
+        background-color: #9e9e9e;
+      }
+
+      .disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
@@ -152,6 +244,42 @@
       </div>
 
       <div class="config-section">
+        <strong>User Account:</strong>
+        <div class="user-status" id="user-status">
+          <div id="signed-out-view">
+            <div class="user-info">Not signed in - using local storage only</div>
+            <button class="button" id="sign-in-btn">Sign In with Google</button>
+          </div>
+          <div id="signed-in-view" style="display: none">
+            <div class="user-info">
+              <div id="user-name">Loading...</div>
+              <div id="user-email">Loading...</div>
+            </div>
+            <button class="button" id="sign-out-btn">Sign Out</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sharing-section" id="sharing-section" style="display: none">
+        <strong>Sharing:</strong>
+        <div class="sharing-status" id="sharing-status">
+          <div id="page-sharing-status">
+            <span class="sharing-indicator not-shared" id="page-sharing-indicator"></span>
+            <span id="page-sharing-text">Page not shared</span>
+          </div>
+          <div id="site-sharing-status">
+            <span class="sharing-indicator not-shared" id="site-sharing-indicator"></span>
+            <span id="site-sharing-text">Site not shared</span>
+          </div>
+        </div>
+        <div class="sharing-actions">
+          <button class="button" id="share-page-btn">Share Page</button>
+          <button class="button" id="share-site-btn">Share Site</button>
+          <button class="button" id="manage-shares-btn">Manage Shares</button>
+        </div>
+      </div>
+
+      <div class="config-section">
         <strong>Configuration:</strong>
         <div class="config-item">
           <label for="sync-server-url">Sync Server URL:</label>
@@ -172,6 +300,7 @@
     </div>
 
     <script src="shared-utils.js"></script>
+    <script src="auth-manager.js"></script>
     <script src="server-api.js"></script>
     <script src="error-handling.js"></script>
     <script src="popup.js"></script>

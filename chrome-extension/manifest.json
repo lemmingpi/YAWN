@@ -22,9 +22,11 @@
         "color-dropdown.js",
         "markdown-utils.js",
         "shared-utils.js",
+        "auth-manager.js",
         "server-api.js",
         "error-handling.js",
         "contentDialog.js",
+        "sharing-interface.js",
         "content.js"
       ]
     }
