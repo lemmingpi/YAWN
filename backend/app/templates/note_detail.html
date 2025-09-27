@@ -1,0 +1,651 @@
+{% extends "base.html" %}
+
+{% block title %}Note #{{ note.id }} - Note Details - Web Notes Dashboard{% endblock %}
+
+{% block content %}
+<div class="col-12">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/app/dashboard">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="/app/notes">Notes</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Note #{{ note.id }}</li>
+        </ol>
+    </nav>
+
+    <!-- Note Header -->
+    <div class="content-wrapper p-4 mb-4">
+        <div class="row align-items-start">
+            <div class="col-md-8">
+                <div class="d-flex align-items-start mb-3">
+                    <i class="bi bi-sticky display-6 text-primary me-3 mt-1"></i>
+                    <div class="flex-grow-1">
+                        <h1 class="h3 mb-2">Note #{{ note.id }}</h1>
+                        <div class="mb-3">
+                            <span class="badge {{ 'bg-success' if note.is_active else 'bg-secondary' }} me-2">
+                                {{ 'Active' if note.is_active else 'Inactive' }}
+                            </span>
+                            {% if note.artifacts_count > 0 %}
+                            <span class="badge bg-primary me-2">{{ note.artifacts_count }} Artifacts</span>
+                            {% endif %}
+                            {% if note.server_link_id %}
+                            <span class="badge bg-info">Synced</span>
+                            {% endif %}
+                        </div>
+                        <div class="note-content-display p-3 bg-light rounded">
+                            <p class="mb-0">{{ note.content }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Note Metadata -->
+                <div class="row text-muted small">
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Created:</strong> {{ note.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                        <p class="mb-1"><strong>Last Updated:</strong> {{ note.updated_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Position:</strong> X: {{ note.position_x }}, Y: {{ note.position_y }}</p>
+                        {% if note.server_link_id %}
+                        <p class="mb-1"><strong>Server Link ID:</strong> {{ note.server_link_id }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary" onclick="editNote()">
+                        <i class="bi bi-pencil me-1"></i>Edit Note
+                    </button>
+                    <button class="btn btn-outline-success" onclick="generateArtifact()" id="generateBtn">
+                        <i class="bi bi-magic me-1"></i>Generate Artifact
+                    </button>
+                    <a href="{{ note.page_url if note.page_url else '#' }}" target="_blank" class="btn btn-outline-info" {{ 'disabled' if not note.page_url else '' }}>
+                        <i class="bi bi-box-arrow-up-right me-1"></i>View Page
+                    </a>
+                    <button class="btn btn-outline-danger" onclick="deleteNote()">
+                        <i class="bi bi-trash me-1"></i>Delete Note
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page Information -->
+    <div class="content-wrapper p-4 mb-4">
+        <h5 class="mb-3">
+            <i class="bi bi-file-earmark text-primary me-2"></i>Page Information
+        </h5>
+        <div id="pageInfo">
+            <div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Loading page information...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Technical Details -->
+    <div class="content-wrapper p-4 mb-4">
+        <h5 class="mb-3">
+            <i class="bi bi-code-square text-primary me-2"></i>Technical Details
+        </h5>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label text-muted">Element Selector</label>
+                    <code class="d-block p-2 bg-light rounded">
+                        {{ note.element_selector or 'Not specified' }}
+                    </code>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">Anchor Data</label>
+                    <pre class="bg-light p-2 rounded small">{{ note.anchor_data or 'No anchor data' }}</pre>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label text-muted">Element XPath</label>
+                    <code class="d-block p-2 bg-light rounded">
+                        {{ note.element_xpath or 'Not specified' }}
+                    </code>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">Position Offset</label>
+                    <code class="d-block p-2 bg-light rounded">
+                        X: {{ note.offset_x or 0 }}, Y: {{ note.offset_y or 0 }}
+                    </code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Artifacts Section -->
+    <div class="content-wrapper p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">
+                <i class="bi bi-magic text-primary me-2"></i>Generated Artifacts
+            </h5>
+            <button class="btn btn-primary btn-sm" onclick="generateArtifact()">
+                <i class="bi bi-plus-circle me-1"></i>Generate New
+            </button>
+        </div>
+
+        <div id="artifactsContainer">
+            <div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Loading artifacts...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Note Modal -->
+<div class="modal fade" id="editNoteModal" tabindex="-1" aria-labelledby="editNoteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editNoteModalLabel">Edit Note #{{ note.id }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editNoteForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editNoteContent" class="form-label">Content <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="editNoteContent" rows="4" required>{{ note.content }}</textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editNotePositionX" class="form-label">Position X</label>
+                                <input type="number" class="form-control" id="editNotePositionX" value="{{ note.position_x }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editNotePositionY" class="form-label">Position Y</label>
+                                <input type="number" class="form-control" id="editNotePositionY" value="{{ note.position_y }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editNoteSelector" class="form-label">Element Selector</label>
+                                <input type="text" class="form-control" id="editNoteSelector" value="{{ note.element_selector or '' }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editNoteXPath" class="form-label">XPath</label>
+                                <input type="text" class="form-control" id="editNoteXPath" value="{{ note.element_xpath or '' }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="editNoteServerLinkId" class="form-label">Server Link ID</label>
+                                <input type="text" class="form-control" id="editNoteServerLinkId" value="{{ note.server_link_id or '' }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3 mt-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="editNoteActive" {{ 'checked' if note.is_active else '' }}>
+                                    <label class="form-check-label" for="editNoteActive">
+                                        Active Note
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle me-1"></i>Update Note
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Generate Artifact Modal -->
+<div class="modal fade" id="generateArtifactModal" tabindex="-1" aria-labelledby="generateArtifactModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="generateArtifactModalLabel">Generate Artifact</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="generateArtifactForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="llmProvider" class="form-label">LLM Provider <span class="text-danger">*</span></label>
+                        <select class="form-select" id="llmProvider" required>
+                            <option value="">Select a provider...</option>
+                            <!-- Providers will be loaded here -->
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="artifactType" class="form-label">Artifact Type <span class="text-danger">*</span></label>
+                        <select class="form-select" id="artifactType" required>
+                            <option value="">Select type...</option>
+                            <option value="summary">Summary</option>
+                            <option value="questions">Questions</option>
+                            <option value="analysis">Analysis</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="customPromptContainer" style="display: none;">
+                        <label for="customPrompt" class="form-label">Custom Prompt</label>
+                        <textarea class="form-control" id="customPrompt" rows="3" placeholder="Enter your custom prompt..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-magic me-1"></i>Generate
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.note-content-display {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.artifact-card {
+    transition: all 0.2s ease;
+}
+
+.artifact-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.artifact-content {
+    max-height: 200px;
+    overflow-y: auto;
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    padding: 12px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.875rem;
+}
+
+.artifact-metadata {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.generation-progress {
+    display: none;
+}
+
+.generation-progress.active {
+    display: block;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+class NoteDetailManager {
+    constructor() {
+        this.noteId = {{ note.id }};
+        this.pageId = {{ note.page_id }};
+
+        this.initializeEventListeners();
+        this.loadPageInfo();
+        this.loadArtifacts();
+        this.loadLLMProviders();
+    }
+
+    initializeEventListeners() {
+        // Edit note form
+        document.getElementById('editNoteForm').addEventListener('submit', (e) => this.handleEditNote(e));
+
+        // Generate artifact form
+        document.getElementById('generateArtifactForm').addEventListener('submit', (e) => this.handleGenerateArtifact(e));
+
+        // Artifact type change
+        document.getElementById('artifactType').addEventListener('change', (e) => {
+            const customContainer = document.getElementById('customPromptContainer');
+            customContainer.style.display = e.target.value === 'custom' ? 'block' : 'none';
+        });
+    }
+
+    async loadPageInfo() {
+        try {
+            const response = await fetch(`/api/pages/${this.pageId}`);
+            const page = await response.json();
+
+            document.getElementById('pageInfo').innerHTML = `
+                <div class="row">
+                    <div class="col-md-8">
+                        <h6 class="mb-2">${this.escapeHtml(page.title || 'Untitled Page')}</h6>
+                        <p class="text-muted mb-2">
+                            <a href="${this.escapeHtml(page.url)}" target="_blank" class="text-decoration-none">
+                                ${this.truncateText(page.url, 80)}
+                                <i class="bi bi-box-arrow-up-right ms-1"></i>
+                            </a>
+                        </p>
+                        <small class="text-muted">
+                            Site: ${this.escapeHtml(page.site_domain || 'Unknown')} •
+                            Created: ${new Date(page.created_at).toLocaleDateString()}
+                        </small>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <span class="badge bg-info">${page.note_count || 0} notes on this page</span>
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error loading page info:', error);
+            document.getElementById('pageInfo').innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Unable to load page information
+                </div>
+            `;
+        }
+    }
+
+    async loadArtifacts() {
+        try {
+            const response = await fetch(`/api/notes/${this.noteId}/artifacts`);
+            const artifacts = await response.json();
+
+            this.renderArtifacts(artifacts);
+        } catch (error) {
+            console.error('Error loading artifacts:', error);
+            document.getElementById('artifactsContainer').innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Unable to load artifacts
+                </div>
+            `;
+        }
+    }
+
+    renderArtifacts(artifacts) {
+        const container = document.getElementById('artifactsContainer');
+
+        if (artifacts.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="bi bi-magic display-1 text-muted"></i>
+                    <h6 class="mt-2 text-muted">No artifacts generated yet</h6>
+                    <p class="text-muted">Generate your first artifact using AI</p>
+                    <button class="btn btn-primary" onclick="generateArtifact()">
+                        <i class="bi bi-magic me-1"></i>Generate Artifact
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = artifacts.map(artifact => `
+            <div class="card artifact-card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h6 class="card-title mb-1">
+                                <i class="bi bi-magic text-primary me-1"></i>
+                                ${this.escapeHtml(artifact.artifact_type)} Artifact
+                            </h6>
+                            <div class="artifact-metadata">
+                                Generated: ${new Date(artifact.created_at).toLocaleString()} •
+                                Provider: ${this.escapeHtml(artifact.llm_provider_name || 'Unknown')}
+                            </div>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="copyArtifact(${artifact.id})">
+                                    <i class="bi bi-clipboard me-2"></i>Copy Content
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" onclick="downloadArtifact(${artifact.id})">
+                                    <i class="bi bi-download me-2"></i>Download
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item text-danger" href="#" onclick="deleteArtifact(${artifact.id})">
+                                    <i class="bi bi-trash me-2"></i>Delete
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="artifact-content">
+                        ${this.escapeHtml(artifact.content)}
+                    </div>
+                    ${artifact.prompt_used ? `
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <strong>Prompt used:</strong> ${this.truncateText(artifact.prompt_used, 100)}
+                            </small>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async loadLLMProviders() {
+        try {
+            const response = await fetch('/api/llm-providers/');
+            const providers = await response.json();
+
+            const select = document.getElementById('llmProvider');
+            providers.forEach(provider => {
+                if (provider.is_active) {
+                    const option = document.createElement('option');
+                    option.value = provider.id;
+                    option.textContent = `${provider.name} (${provider.provider_type})`;
+                    select.appendChild(option);
+                }
+            });
+        } catch (error) {
+            console.error('Error loading LLM providers:', error);
+        }
+    }
+
+    async handleEditNote(e) {
+        e.preventDefault();
+
+        const noteData = {
+            content: document.getElementById('editNoteContent').value.trim(),
+            position_x: parseInt(document.getElementById('editNotePositionX').value) || 0,
+            position_y: parseInt(document.getElementById('editNotePositionY').value) || 0,
+            element_selector: document.getElementById('editNoteSelector').value.trim() || null,
+            element_xpath: document.getElementById('editNoteXPath').value.trim() || null,
+            server_link_id: document.getElementById('editNoteServerLinkId').value.trim() || null,
+            is_active: document.getElementById('editNoteActive').checked
+        };
+
+        try {
+            const response = await fetch(`/api/notes/${this.noteId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(noteData)
+            });
+
+            if (response.ok) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editNoteModal'));
+                modal.hide();
+                location.reload(); // Reload to show updated data
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || 'Failed to update note'));
+            }
+        } catch (error) {
+            console.error('Error updating note:', error);
+            alert('Error: Failed to update note');
+        }
+    }
+
+    async handleGenerateArtifact(e) {
+        e.preventDefault();
+
+        const llmProviderId = document.getElementById('llmProvider').value;
+        const artifactType = document.getElementById('artifactType').value;
+        const customPrompt = document.getElementById('customPrompt').value.trim();
+
+        try {
+            // Show generation progress
+            const modal = bootstrap.Modal.getInstance(document.getElementById('generateArtifactModal'));
+            modal.hide();
+
+            // Show loading state
+            const generateBtn = document.getElementById('generateBtn');
+            const originalText = generateBtn.innerHTML;
+            generateBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Generating...';
+            generateBtn.disabled = true;
+
+            const requestData = {
+                llm_provider_id: parseInt(llmProviderId),
+                artifact_type: artifactType
+            };
+
+            if (artifactType === 'custom' && customPrompt) {
+                requestData.custom_prompt = customPrompt;
+            }
+
+            const response = await fetch(`/api/artifacts/generate/note/${this.noteId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            });
+
+            if (response.ok) {
+                document.getElementById('generateArtifactForm').reset();
+                this.loadArtifacts(); // Reload artifacts
+                alert('Artifact generated successfully!');
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || 'Failed to generate artifact'));
+            }
+        } catch (error) {
+            console.error('Error generating artifact:', error);
+            alert('Error: Failed to generate artifact');
+        } finally {
+            // Reset button
+            const generateBtn = document.getElementById('generateBtn');
+            generateBtn.innerHTML = originalText;
+            generateBtn.disabled = false;
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    truncateText(text, maxLength) {
+        if (text.length <= maxLength) return this.escapeHtml(text);
+        return this.escapeHtml(text.substring(0, maxLength)) + '...';
+    }
+}
+
+// Global functions for buttons
+function editNote() {
+    const modal = new bootstrap.Modal(document.getElementById('editNoteModal'));
+    modal.show();
+}
+
+function generateArtifact() {
+    const modal = new bootstrap.Modal(document.getElementById('generateArtifactModal'));
+    modal.show();
+}
+
+async function deleteNote() {
+    if (!confirm('Are you sure you want to delete this note? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/notes/{{ note.id }}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            alert('Note deleted successfully');
+            window.location.href = '/app/notes';
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.detail || 'Failed to delete note'));
+        }
+    } catch (error) {
+        console.error('Error deleting note:', error);
+        alert('Error: Failed to delete note');
+    }
+}
+
+async function copyArtifact(artifactId) {
+    try {
+        const response = await fetch(`/api/artifacts/${artifactId}`);
+        const artifact = await response.json();
+
+        await navigator.clipboard.writeText(artifact.content);
+        alert('Artifact content copied to clipboard!');
+    } catch (error) {
+        console.error('Error copying artifact:', error);
+        alert('Failed to copy artifact content');
+    }
+}
+
+function downloadArtifact(artifactId) {
+    // This would need to be implemented based on your requirements
+    alert('Download functionality would be implemented here');
+}
+
+async function deleteArtifact(artifactId) {
+    if (!confirm('Are you sure you want to delete this artifact?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/artifacts/${artifactId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            noteDetailManager.loadArtifacts(); // Reload artifacts
+            alert('Artifact deleted successfully');
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.detail || 'Failed to delete artifact'));
+        }
+    } catch (error) {
+        console.error('Error deleting artifact:', error);
+        alert('Error: Failed to delete artifact');
+    }
+}
+
+// Initialize note detail manager when page loads
+let noteDetailManager;
+document.addEventListener('DOMContentLoaded', function() {
+    noteDetailManager = new NoteDetailManager();
+});
+</script>
+{% endblock %}

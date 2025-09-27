@@ -1,0 +1,700 @@
+{% extends "base.html" %}
+
+{% block title %}Notes - Web Notes Dashboard{% endblock %}
+
+{% block content %}
+<div class="col-12">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/app/dashboard">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Notes</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">
+                <i class="bi bi-sticky me-2 text-primary"></i>Notes Management
+            </h1>
+            <p class="text-muted mb-0">Manage and organize all your web notes</p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-outline-primary me-2" id="bulkActionsBtn" disabled>
+                <i class="bi bi-list-check me-1"></i>Bulk Actions
+            </button>
+            <button type="button" class="btn btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#addNoteModal">
+                <i class="bi bi-plus-circle me-1"></i>Add Note
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters and Search -->
+    <div class="content-wrapper p-4 mb-4">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text" class="form-control" id="searchInput" placeholder="Search notes content...">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="siteFilter">
+                    <option value="">All Sites</option>
+                    <!-- Sites will be loaded here -->
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="statusFilter">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="artifactFilter">
+                    <option value="">All Notes</option>
+                    <option value="with_artifacts">With Artifacts</option>
+                    <option value="without_artifacts">Without Artifacts</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="sortBy">
+                    <option value="created_desc">Newest First</option>
+                    <option value="created_asc">Oldest First</option>
+                    <option value="updated_desc">Recently Updated</option>
+                    <option value="content_asc">Content A-Z</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Toggle -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex align-items-center">
+            <span class="text-muted me-2">View:</span>
+            <div class="btn-group" role="group" aria-label="View toggle">
+                <button type="button" class="btn btn-outline-secondary active" id="cardViewBtn">
+                    <i class="bi bi-grid"></i>
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="listViewBtn">
+                    <i class="bi bi-list"></i>
+                </button>
+            </div>
+        </div>
+        <div class="text-muted">
+            <span id="itemsCount">0</span> notes found
+        </div>
+    </div>
+
+    <!-- Notes Container -->
+    <div id="notesContainer">
+        <!-- Notes will be loaded here -->
+    </div>
+
+    <!-- Pagination -->
+    <div class="d-flex justify-content-center mt-4">
+        <nav aria-label="Notes pagination">
+            <ul class="pagination" id="pagination">
+                <!-- Pagination will be generated here -->
+            </ul>
+        </nav>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center py-5 d-none">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="text-muted mt-2">Loading notes...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="text-center py-5 d-none">
+        <i class="bi bi-sticky display-1 text-muted"></i>
+        <h4 class="mt-3">No Notes Found</h4>
+        <p class="text-muted">No notes match your current search criteria.</p>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addNoteModal">
+            <i class="bi bi-plus-circle me-1"></i>Create First Note
+        </button>
+    </div>
+</div>
+
+<!-- Add Note Modal -->
+<div class="modal fade" id="addNoteModal" tabindex="-1" aria-labelledby="addNoteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addNoteModalLabel">Add New Note</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="addNoteForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="notePage" class="form-label">Page <span class="text-danger">*</span></label>
+                                <select class="form-select" id="notePage" required>
+                                    <option value="">Select a page...</option>
+                                    <!-- Pages will be loaded here -->
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="notePosition" class="form-label">Position</label>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <input type="number" class="form-control" id="notePositionX" placeholder="X" value="0">
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="number" class="form-control" id="notePositionY" placeholder="Y" value="0">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="noteContent" class="form-label">Content <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="noteContent" rows="4" placeholder="Enter your note content..." required></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="noteSelector" class="form-label">Element Selector</label>
+                                <input type="text" class="form-control" id="noteSelector" placeholder="CSS selector (optional)">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="noteXPath" class="form-label">XPath</label>
+                                <input type="text" class="form-control" id="noteXPath" placeholder="XPath (optional)">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="noteServerLinkId" class="form-label">Server Link ID</label>
+                                <input type="text" class="form-control" id="noteServerLinkId" placeholder="Unique identifier (optional)">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input" type="checkbox" id="noteActive" checked>
+                                    <label class="form-check-label" for="noteActive">
+                                        Active Note
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-1"></i>Add Note
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Actions Modal -->
+<div class="modal fade" id="bulkActionsModal" tabindex="-1" aria-labelledby="bulkActionsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkActionsModalLabel">Bulk Actions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Select an action to apply to <span id="selectedCount">0</span> selected notes:</p>
+                <div class="list-group">
+                    <button type="button" class="list-group-item list-group-item-action" onclick="bulkAction('activate')">
+                        <i class="bi bi-check-circle text-success me-2"></i>Activate Notes
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action" onclick="bulkAction('deactivate')">
+                        <i class="bi bi-x-circle text-warning me-2"></i>Deactivate Notes
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action text-danger" onclick="bulkAction('delete')">
+                        <i class="bi bi-trash me-2"></i>Delete Notes
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.note-card {
+    transition: all 0.2s ease;
+    border: 1px solid #dee2e6;
+}
+
+.note-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.note-card.selected {
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.note-content {
+    max-height: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.note-list-item {
+    transition: background-color 0.2s ease;
+}
+
+.note-list-item:hover {
+    background-color: #f8f9fa;
+}
+
+.note-list-item.selected {
+    background-color: rgba(0,123,255,0.1);
+    border-left: 3px solid #007bff;
+}
+
+.artifact-badge {
+    font-size: 0.75rem;
+}
+
+.selection-checkbox {
+    cursor: pointer;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+class NotesManager {
+    constructor() {
+        this.currentPage = 1;
+        this.pageSize = 12;
+        this.totalItems = 0;
+        this.selectedNotes = new Set();
+        this.viewMode = 'card'; // 'card' or 'list'
+
+        this.initializeEventListeners();
+        this.loadSites();
+        this.loadPages();
+        this.loadNotes();
+    }
+
+    initializeEventListeners() {
+        // Search and filters
+        document.getElementById('searchInput').addEventListener('input',
+            this.debounce(() => this.handleFilterChange(), 300));
+        document.getElementById('siteFilter').addEventListener('change', () => this.handleFilterChange());
+        document.getElementById('statusFilter').addEventListener('change', () => this.handleFilterChange());
+        document.getElementById('artifactFilter').addEventListener('change', () => this.handleFilterChange());
+        document.getElementById('sortBy').addEventListener('change', () => this.handleFilterChange());
+
+        // View toggle
+        document.getElementById('cardViewBtn').addEventListener('click', () => this.setViewMode('card'));
+        document.getElementById('listViewBtn').addEventListener('click', () => this.setViewMode('list'));
+
+        // Forms
+        document.getElementById('addNoteForm').addEventListener('submit', (e) => this.handleAddNote(e));
+
+        // Bulk actions
+        document.getElementById('bulkActionsBtn').addEventListener('click', () => this.showBulkActions());
+    }
+
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    handleFilterChange() {
+        this.currentPage = 1;
+        this.selectedNotes.clear();
+        this.updateBulkActionsButton();
+        this.loadNotes();
+    }
+
+    setViewMode(mode) {
+        this.viewMode = mode;
+        document.getElementById('cardViewBtn').classList.toggle('active', mode === 'card');
+        document.getElementById('listViewBtn').classList.toggle('active', mode === 'list');
+        this.loadNotes();
+    }
+
+    async loadSites() {
+        try {
+            const response = await fetch('/api/sites?limit=1000');
+            const sites = await response.json();
+
+            const siteFilter = document.getElementById('siteFilter');
+            sites.forEach(site => {
+                const option = document.createElement('option');
+                option.value = site.id;
+                option.textContent = site.domain;
+                siteFilter.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error loading sites:', error);
+        }
+    }
+
+    async loadPages() {
+        try {
+            const response = await fetch('/api/pages?limit=1000');
+            const pages = await response.json();
+
+            const pageSelect = document.getElementById('notePage');
+            pages.forEach(page => {
+                const option = document.createElement('option');
+                option.value = page.id;
+                option.textContent = `${page.title || 'Untitled'} - ${page.url}`;
+                pageSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error loading pages:', error);
+        }
+    }
+
+    async loadNotes() {
+        this.showLoading();
+
+        try {
+            const params = new URLSearchParams({
+                skip: (this.currentPage - 1) * this.pageSize,
+                limit: this.pageSize
+            });
+
+            // Add filters
+            const search = document.getElementById('searchInput').value.trim();
+            if (search) params.append('search', search);
+
+            const siteId = document.getElementById('siteFilter').value;
+            if (siteId) {
+                // Get pages for this site first
+                const pagesResponse = await fetch(`/api/pages?site_id=${siteId}&limit=1000`);
+                const pages = await pagesResponse.json();
+                if (pages.length > 0) {
+                    params.append('page_id', pages.map(p => p.id).join(','));
+                }
+            }
+
+            const status = document.getElementById('statusFilter').value;
+            if (status === 'active') params.append('is_active', 'true');
+            if (status === 'inactive') params.append('is_active', 'false');
+
+            const response = await fetch(`/api/notes?${params}`);
+            const notes = await response.json();
+
+            // Filter by artifacts if needed
+            const artifactFilter = document.getElementById('artifactFilter').value;
+            const filteredNotes = notes.filter(note => {
+                if (artifactFilter === 'with_artifacts') return note.artifacts_count > 0;
+                if (artifactFilter === 'without_artifacts') return note.artifacts_count === 0;
+                return true;
+            });
+
+            this.renderNotes(filteredNotes);
+            this.hideLoading();
+
+        } catch (error) {
+            console.error('Error loading notes:', error);
+            this.showError('Failed to load notes');
+            this.hideLoading();
+        }
+    }
+
+    renderNotes(notes) {
+        const container = document.getElementById('notesContainer');
+        const emptyState = document.getElementById('emptyState');
+
+        if (notes.length === 0) {
+            container.innerHTML = '';
+            emptyState.classList.remove('d-none');
+            document.getElementById('itemsCount').textContent = '0';
+            return;
+        }
+
+        emptyState.classList.add('d-none');
+        document.getElementById('itemsCount').textContent = notes.length;
+
+        if (this.viewMode === 'card') {
+            container.innerHTML = `<div class="row">${notes.map(note => this.renderNoteCard(note)).join('')}</div>`;
+        } else {
+            container.innerHTML = `<div class="list-group">${notes.map(note => this.renderNoteListItem(note)).join('')}</div>`;
+        }
+
+        // Add event listeners for checkboxes
+        document.querySelectorAll('.note-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => this.handleNoteSelection(e));
+        });
+    }
+
+    renderNoteCard(note) {
+        const isSelected = this.selectedNotes.has(note.id);
+        return `
+            <div class="col-md-4 mb-4">
+                <div class="card note-card h-100 ${isSelected ? 'selected' : ''}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input note-checkbox" type="checkbox"
+                                       value="${note.id}" ${isSelected ? 'checked' : ''}>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="badge ${note.is_active ? 'bg-success' : 'bg-secondary'} me-2">
+                                    ${note.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                                ${note.artifacts_count > 0 ?
+                                    `<span class="badge bg-primary artifact-badge">${note.artifacts_count} artifacts</span>` :
+                                    ''
+                                }
+                            </div>
+                        </div>
+                        <p class="card-text note-content">
+                            ${this.escapeHtml(note.content)}
+                        </p>
+                        <div class="mt-auto">
+                            <small class="text-muted d-block mb-2">
+                                <i class="bi bi-clock me-1"></i>
+                                ${new Date(note.created_at).toLocaleDateString()}
+                            </small>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">
+                                    ID: ${note.id}
+                                </small>
+                                <a href="/app/notes/${note.id}" class="btn btn-sm btn-outline-primary">
+                                    View Details
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    renderNoteListItem(note) {
+        const isSelected = this.selectedNotes.has(note.id);
+        return `
+            <div class="list-group-item note-list-item ${isSelected ? 'selected' : ''}">
+                <div class="d-flex align-items-start">
+                    <div class="form-check me-3">
+                        <input class="form-check-input note-checkbox" type="checkbox"
+                               value="${note.id}" ${isSelected ? 'checked' : ''}>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h6 class="mb-1">Note #${note.id}</h6>
+                                <p class="mb-1">
+                                    ${this.truncateText(note.content, 150)}
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <div class="mb-2">
+                                    <span class="badge ${note.is_active ? 'bg-success' : 'bg-secondary'} me-1">
+                                        ${note.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                    ${note.artifacts_count > 0 ?
+                                        `<span class="badge bg-primary">${note.artifacts_count} artifacts</span>` :
+                                        ''
+                                    }
+                                </div>
+                                <a href="/app/notes/${note.id}" class="btn btn-sm btn-outline-primary">
+                                    View Details
+                                </a>
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            <i class="bi bi-clock me-1"></i>
+                            Created: ${new Date(note.created_at).toLocaleDateString()} •
+                            <i class="bi bi-pencil me-1"></i>
+                            Updated: ${new Date(note.updated_at).toLocaleDateString()}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    handleNoteSelection(e) {
+        const noteId = parseInt(e.target.value);
+        if (e.target.checked) {
+            this.selectedNotes.add(noteId);
+        } else {
+            this.selectedNotes.delete(noteId);
+        }
+        this.updateBulkActionsButton();
+        this.updateNoteSelection(noteId, e.target.checked);
+    }
+
+    updateNoteSelection(noteId, selected) {
+        const noteElement = document.querySelector(`[data-note-id="${noteId}"]`) ||
+                           document.querySelector(`.note-checkbox[value="${noteId}"]`).closest('.note-card, .note-list-item');
+        if (noteElement) {
+            noteElement.classList.toggle('selected', selected);
+        }
+    }
+
+    updateBulkActionsButton() {
+        const btn = document.getElementById('bulkActionsBtn');
+        btn.disabled = this.selectedNotes.size === 0;
+        if (this.selectedNotes.size > 0) {
+            btn.innerHTML = `<i class="bi bi-list-check me-1"></i>Bulk Actions (${this.selectedNotes.size})`;
+        } else {
+            btn.innerHTML = `<i class="bi bi-list-check me-1"></i>Bulk Actions`;
+        }
+    }
+
+    showBulkActions() {
+        document.getElementById('selectedCount').textContent = this.selectedNotes.size;
+        const modal = new bootstrap.Modal(document.getElementById('bulkActionsModal'));
+        modal.show();
+    }
+
+    async handleAddNote(e) {
+        e.preventDefault();
+
+        const noteData = {
+            page_id: parseInt(document.getElementById('notePage').value),
+            content: document.getElementById('noteContent').value.trim(),
+            position_x: parseInt(document.getElementById('notePositionX').value) || 0,
+            position_y: parseInt(document.getElementById('notePositionY').value) || 0,
+            element_selector: document.getElementById('noteSelector').value.trim() || null,
+            element_xpath: document.getElementById('noteXPath').value.trim() || null,
+            server_link_id: document.getElementById('noteServerLinkId').value.trim() || null,
+            is_active: document.getElementById('noteActive').checked
+        };
+
+        try {
+            const response = await fetch('/api/notes/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(noteData)
+            });
+
+            if (response.ok) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('addNoteModal'));
+                modal.hide();
+                document.getElementById('addNoteForm').reset();
+                this.loadNotes();
+                this.showSuccess('Note added successfully');
+            } else {
+                const error = await response.json();
+                this.showError(error.detail || 'Failed to add note');
+            }
+        } catch (error) {
+            console.error('Error adding note:', error);
+            this.showError('Failed to add note');
+        }
+    }
+
+    showLoading() {
+        document.getElementById('loadingState').classList.remove('d-none');
+        document.getElementById('notesContainer').style.display = 'none';
+        document.getElementById('emptyState').classList.add('d-none');
+    }
+
+    hideLoading() {
+        document.getElementById('loadingState').classList.add('d-none');
+        document.getElementById('notesContainer').style.display = 'block';
+    }
+
+    showSuccess(message) {
+        alert('Success: ' + message);
+    }
+
+    showError(message) {
+        alert('Error: ' + message);
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    truncateText(text, maxLength) {
+        if (text.length <= maxLength) return this.escapeHtml(text);
+        return this.escapeHtml(text.substring(0, maxLength)) + '...';
+    }
+}
+
+// Global functions
+async function bulkAction(action) {
+    if (notesManager.selectedNotes.size === 0) return;
+
+    const noteIds = Array.from(notesManager.selectedNotes);
+    let confirmMessage = '';
+    let endpoint = '';
+    let method = '';
+    let body = null;
+
+    switch (action) {
+        case 'activate':
+            confirmMessage = `Are you sure you want to activate ${noteIds.length} notes?`;
+            // We'd need a bulk update endpoint for this
+            break;
+        case 'deactivate':
+            confirmMessage = `Are you sure you want to deactivate ${noteIds.length} notes?`;
+            // We'd need a bulk update endpoint for this
+            break;
+        case 'delete':
+            confirmMessage = `Are you sure you want to delete ${noteIds.length} notes? This action cannot be undone.`;
+            // We'd need to delete each note individually
+            break;
+    }
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+        // For now, implement delete action (others would need bulk API endpoints)
+        if (action === 'delete') {
+            for (const noteId of noteIds) {
+                await fetch(`/api/notes/${noteId}`, { method: 'DELETE' });
+            }
+        }
+
+        const modal = bootstrap.Modal.getInstance(document.getElementById('bulkActionsModal'));
+        modal.hide();
+
+        notesManager.selectedNotes.clear();
+        notesManager.updateBulkActionsButton();
+        notesManager.loadNotes();
+        notesManager.showSuccess(`${action} completed successfully`);
+
+    } catch (error) {
+        console.error(`Error performing bulk ${action}:`, error);
+        notesManager.showError(`Failed to ${action} notes`);
+    }
+}
+
+// Initialize notes manager when page loads
+let notesManager;
+document.addEventListener('DOMContentLoaded', function() {
+    notesManager = new NotesManager();
+});
+</script>
+{% endblock %}

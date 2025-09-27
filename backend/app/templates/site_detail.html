@@ -1,0 +1,650 @@
+{% extends "base.html" %}
+
+{% block title %}{{ site.domain }} - Site Details - Web Notes Dashboard{% endblock %}
+
+{% block content %}
+<div class="col-12">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/app/dashboard">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="/app/sites">Sites</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ site.domain }}</li>
+        </ol>
+    </nav>
+
+    <!-- Site Header -->
+    <div class="content-wrapper p-4 mb-4">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-globe display-6 text-primary me-3"></i>
+                    <div>
+                        <h1 class="h3 mb-1">{{ site.domain }}</h1>
+                        <p class="text-muted mb-0">
+                            Site ID: {{ site.id }} •
+                            Created: {{ site.created_at.strftime('%B %d, %Y') }} •
+                            <span class="badge {{ 'bg-success' if site.is_active else 'bg-secondary' }}">
+                                {{ 'Active' if site.is_active else 'Inactive' }}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                {% if site.user_context %}
+                <div class="mt-3">
+                    <h6 class="text-muted">User Context:</h6>
+                    <p class="mb-0">{{ site.user_context }}</p>
+                </div>
+                {% endif %}
+            </div>
+            <div class="col-md-4 text-end">
+                <button class="btn btn-outline-primary me-2" onclick="editSite()">
+                    <i class="bi bi-pencil me-1"></i>Edit Site
+                </button>
+                <a href="http://{{ site.domain }}" target="_blank" class="btn btn-primary">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Visit Site
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stats-card text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-file-earmark display-4 mb-2"></i>
+                    <h3 class="card-title mb-1" id="totalPages">0</h3>
+                    <p class="card-text">Total Pages</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-sticky display-4 mb-2"></i>
+                    <h3 class="card-title mb-1" id="totalNotes">0</h3>
+                    <p class="card-text">Total Notes</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-magic display-4 mb-2"></i>
+                    <h3 class="card-title mb-1" id="totalArtifacts">0</h3>
+                    <p class="card-text">Total Artifacts</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stats-card text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-calendar-event display-4 mb-2"></i>
+                    <h3 class="card-title mb-1" id="recentActivity">0</h3>
+                    <p class="card-text">Recent Notes (7d)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs mb-4" id="siteTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="pages-tab" data-bs-toggle="tab" data-bs-target="#pages" type="button" role="tab">
+                <i class="bi bi-file-earmark me-1"></i>Pages
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="notes-tab" data-bs-toggle="tab" data-bs-target="#notes" type="button" role="tab">
+                <i class="bi bi-sticky me-1"></i>Notes
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity" type="button" role="tab">
+                <i class="bi bi-clock-history me-1"></i>Activity
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="siteTabContent">
+        <!-- Pages Tab -->
+        <div class="tab-pane fade show active" id="pages" role="tabpanel">
+            <div class="content-wrapper p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-file-earmark text-primary me-2"></i>Pages on this Site
+                    </h5>
+                    <div class="search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" class="form-control" id="pagesSearch" placeholder="Search pages...">
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Page Title</th>
+                                <th>URL</th>
+                                <th>Notes</th>
+                                <th>Last Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pagesTableBody">
+                            <!-- Pages will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="pagesEmpty" class="text-center py-4 d-none">
+                    <i class="bi bi-file-earmark display-1 text-muted"></i>
+                    <h6 class="mt-2 text-muted">No pages found for this site</h6>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notes Tab -->
+        <div class="tab-pane fade" id="notes" role="tabpanel">
+            <div class="content-wrapper p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-sticky text-primary me-2"></i>Notes on this Site
+                    </h5>
+                    <div class="search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" class="form-control" id="notesSearch" placeholder="Search notes...">
+                    </div>
+                </div>
+
+                <div class="row" id="notesContainer">
+                    <!-- Notes will be loaded here -->
+                </div>
+
+                <div id="notesEmpty" class="text-center py-4 d-none">
+                    <i class="bi bi-sticky display-1 text-muted"></i>
+                    <h6 class="mt-2 text-muted">No notes found for this site</h6>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Tab -->
+        <div class="tab-pane fade" id="activity" role="tabpanel">
+            <div class="content-wrapper p-4">
+                <h5 class="mb-3">
+                    <i class="bi bi-clock-history text-primary me-2"></i>Recent Activity
+                </h5>
+
+                <div class="timeline" id="activityTimeline">
+                    <!-- Activity items will be loaded here -->
+                </div>
+
+                <div id="activityEmpty" class="text-center py-4 d-none">
+                    <i class="bi bi-clock-history display-1 text-muted"></i>
+                    <h6 class="mt-2 text-muted">No recent activity for this site</h6>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Site Modal -->
+<div class="modal fade" id="editSiteModal" tabindex="-1" aria-labelledby="editSiteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editSiteModalLabel">Edit Site</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editSiteForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editSiteDomain" class="form-label">Domain <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="editSiteDomain" value="{{ site.domain }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editSiteContext" class="form-label">User Context</label>
+                        <textarea class="form-control" id="editSiteContext" rows="3">{{ site.user_context or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editSiteActive" {{ 'checked' if site.is_active else '' }}>
+                            <label class="form-check-label" for="editSiteActive">
+                                Active Site
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle me-1"></i>Update Site
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 20px;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -26px;
+    top: 0;
+    width: 10px;
+    height: 10px;
+    background: #007bff;
+    border-radius: 50%;
+    border: 2px solid #fff;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 3px solid #007bff;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+class SiteDetailManager {
+    constructor() {
+        this.siteId = {{ site.id }};
+        this.siteDomain = '{{ site.domain }}';
+
+        this.initializeEventListeners();
+        this.loadStats();
+        this.loadPages();
+        this.loadNotes();
+        this.loadActivity();
+    }
+
+    initializeEventListeners() {
+        // Tab change events
+        document.getElementById('pages-tab').addEventListener('shown.bs.tab', () => this.loadPages());
+        document.getElementById('notes-tab').addEventListener('shown.bs.tab', () => this.loadNotes());
+        document.getElementById('activity-tab').addEventListener('shown.bs.tab', () => this.loadActivity());
+
+        // Search inputs
+        document.getElementById('pagesSearch').addEventListener('input',
+            this.debounce(() => this.loadPages(), 300));
+        document.getElementById('notesSearch').addEventListener('input',
+            this.debounce(() => this.loadNotes(), 300));
+
+        // Edit site form
+        document.getElementById('editSiteForm').addEventListener('submit', (e) => this.handleEditSite(e));
+    }
+
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    async loadStats() {
+        try {
+            // Load pages stats
+            const pagesResponse = await fetch(`/api/pages?site_id=${this.siteId}&limit=1000`);
+            const pages = await pagesResponse.json();
+            document.getElementById('totalPages').textContent = pages.length;
+
+            // Load notes stats (get notes for all pages on this site)
+            let totalNotes = 0;
+            let totalArtifacts = 0;
+            let recentNotes = 0;
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+            for (const page of pages) {
+                const notesResponse = await fetch(`/api/notes?page_id=${page.id}&limit=1000`);
+                const notes = await notesResponse.json();
+                totalNotes += notes.length;
+
+                // Count recent notes
+                const recent = notes.filter(note => new Date(note.created_at) > sevenDaysAgo);
+                recentNotes += recent.length;
+
+                // Count artifacts
+                for (const note of notes) {
+                    totalArtifacts += note.artifacts_count || 0;
+                }
+            }
+
+            document.getElementById('totalNotes').textContent = totalNotes;
+            document.getElementById('totalArtifacts').textContent = totalArtifacts;
+            document.getElementById('recentActivity').textContent = recentNotes;
+
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+
+    async loadPages() {
+        try {
+            const search = document.getElementById('pagesSearch').value.trim();
+            const params = new URLSearchParams({
+                site_id: this.siteId,
+                limit: 100
+            });
+            if (search) params.append('search', search);
+
+            const response = await fetch(`/api/pages?${params}`);
+            const pages = await response.json();
+
+            this.renderPages(pages);
+        } catch (error) {
+            console.error('Error loading pages:', error);
+        }
+    }
+
+    renderPages(pages) {
+        const tbody = document.getElementById('pagesTableBody');
+        const emptyState = document.getElementById('pagesEmpty');
+
+        if (pages.length === 0) {
+            tbody.innerHTML = '';
+            emptyState.classList.remove('d-none');
+            return;
+        }
+
+        emptyState.classList.add('d-none');
+        tbody.innerHTML = pages.map(page => `
+            <tr>
+                <td>
+                    <div class="fw-semibold">
+                        ${this.escapeHtml(page.title || 'Untitled Page')}
+                    </div>
+                </td>
+                <td>
+                    <a href="${this.escapeHtml(page.url)}" target="_blank" class="text-decoration-none">
+                        ${this.truncateText(page.url, 60)}
+                        <i class="bi bi-box-arrow-up-right ms-1"></i>
+                    </a>
+                </td>
+                <td>
+                    <span class="badge bg-success">${page.note_count || 0}</span>
+                </td>
+                <td>
+                    <small class="text-muted">
+                        ${new Date(page.updated_at).toLocaleDateString()}
+                    </small>
+                </td>
+                <td>
+                    <a href="/app/pages/${page.id}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-eye"></i>
+                    </a>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async loadNotes() {
+        try {
+            const search = document.getElementById('notesSearch').value.trim();
+
+            // First get all pages for this site
+            const pagesResponse = await fetch(`/api/pages?site_id=${this.siteId}&limit=1000`);
+            const pages = await pagesResponse.json();
+
+            let allNotes = [];
+            for (const page of pages) {
+                const params = new URLSearchParams({
+                    page_id: page.id,
+                    limit: 100
+                });
+                if (search) params.append('search', search);
+
+                const notesResponse = await fetch(`/api/notes?${params}`);
+                const notes = await notesResponse.json();
+
+                // Add page info to each note
+                notes.forEach(note => {
+                    note.page_title = page.title;
+                    note.page_url = page.url;
+                });
+
+                allNotes = allNotes.concat(notes);
+            }
+
+            // Sort by creation date (newest first)
+            allNotes.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            this.renderNotes(allNotes);
+        } catch (error) {
+            console.error('Error loading notes:', error);
+        }
+    }
+
+    renderNotes(notes) {
+        const container = document.getElementById('notesContainer');
+        const emptyState = document.getElementById('notesEmpty');
+
+        if (notes.length === 0) {
+            container.innerHTML = '';
+            emptyState.classList.remove('d-none');
+            return;
+        }
+
+        emptyState.classList.add('d-none');
+        container.innerHTML = notes.map(note => `
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <small class="text-muted">
+                                ${this.escapeHtml(note.page_title || 'Untitled Page')}
+                            </small>
+                            <span class="badge bg-success">${note.artifacts_count || 0} artifacts</span>
+                        </div>
+                        <p class="card-text">
+                            ${this.truncateText(note.content, 150)}
+                        </p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                ${new Date(note.created_at).toLocaleDateString()}
+                            </small>
+                            <a href="/app/notes/${note.id}" class="btn btn-sm btn-outline-primary">
+                                View Details
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async loadActivity() {
+        try {
+            // Get recent activity for this site
+            const pagesResponse = await fetch(`/api/pages?site_id=${this.siteId}&limit=1000`);
+            const pages = await pagesResponse.json();
+
+            let activities = [];
+
+            for (const page of pages) {
+                const notesResponse = await fetch(`/api/notes?page_id=${page.id}&limit=50`);
+                const notes = await notesResponse.json();
+
+                notes.forEach(note => {
+                    activities.push({
+                        type: 'note_created',
+                        timestamp: note.created_at,
+                        content: note.content,
+                        page_title: page.title,
+                        page_url: page.url,
+                        note_id: note.id
+                    });
+
+                    if (note.updated_at !== note.created_at) {
+                        activities.push({
+                            type: 'note_updated',
+                            timestamp: note.updated_at,
+                            content: note.content,
+                            page_title: page.title,
+                            page_url: page.url,
+                            note_id: note.id
+                        });
+                    }
+                });
+            }
+
+            // Sort by timestamp (newest first)
+            activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            // Take only the most recent 20 activities
+            activities = activities.slice(0, 20);
+
+            this.renderActivity(activities);
+        } catch (error) {
+            console.error('Error loading activity:', error);
+        }
+    }
+
+    renderActivity(activities) {
+        const timeline = document.getElementById('activityTimeline');
+        const emptyState = document.getElementById('activityEmpty');
+
+        if (activities.length === 0) {
+            timeline.innerHTML = '';
+            emptyState.classList.remove('d-none');
+            return;
+        }
+
+        emptyState.classList.add('d-none');
+        timeline.innerHTML = activities.map(activity => `
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="mb-1">
+                            <i class="bi bi-${activity.type === 'note_created' ? 'plus-circle text-success' : 'pencil text-primary'} me-1"></i>
+                            ${activity.type === 'note_created' ? 'Note Created' : 'Note Updated'}
+                        </h6>
+                        <small class="text-muted">
+                            ${this.formatRelativeTime(activity.timestamp)}
+                        </small>
+                    </div>
+                    <p class="mb-2">
+                        ${this.truncateText(activity.content, 100)}
+                    </p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="bi bi-file-earmark me-1"></i>
+                            ${this.escapeHtml(activity.page_title || 'Untitled Page')}
+                        </small>
+                        <a href="/app/notes/${activity.note_id}" class="btn btn-sm btn-outline-primary">
+                            View Note
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async handleEditSite(e) {
+        e.preventDefault();
+
+        const domain = document.getElementById('editSiteDomain').value.trim();
+        const userContext = document.getElementById('editSiteContext').value.trim();
+        const isActive = document.getElementById('editSiteActive').checked;
+
+        try {
+            const response = await fetch(`/api/sites/${this.siteId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    domain: domain,
+                    user_context: userContext || null,
+                    is_active: isActive
+                })
+            });
+
+            if (response.ok) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editSiteModal'));
+                modal.hide();
+                location.reload(); // Reload to show updated data
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || 'Failed to update site'));
+            }
+        } catch (error) {
+            console.error('Error updating site:', error);
+            alert('Error: Failed to update site');
+        }
+    }
+
+    formatRelativeTime(timestamp) {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+
+        const minutes = Math.floor(diff / (1000 * 60));
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+        if (minutes < 1) return 'Just now';
+        if (minutes < 60) return `${minutes}m ago`;
+        if (hours < 24) return `${hours}h ago`;
+        if (days < 7) return `${days}d ago`;
+        return date.toLocaleDateString();
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    truncateText(text, maxLength) {
+        if (text.length <= maxLength) return this.escapeHtml(text);
+        return this.escapeHtml(text.substring(0, maxLength)) + '...';
+    }
+}
+
+// Global functions for buttons
+function editSite() {
+    const modal = new bootstrap.Modal(document.getElementById('editSiteModal'));
+    modal.show();
+}
+
+// Initialize site detail manager when page loads
+let siteDetailManager;
+document.addEventListener('DOMContentLoaded', function() {
+    siteDetailManager = new SiteDetailManager();
+});
+</script>
+{% endblock %}
