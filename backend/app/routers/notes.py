@@ -7,11 +7,21 @@ Notes are user-created content anchored to specific pages.
 from typing import cast, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth import get_current_active_user
 from ..database import get_db
-from ..models import Note, NoteArtifact, Page, Site
+from ..models import (
+    Note,
+    NoteArtifact,
+    Page,
+    PermissionLevel,
+    Site,
+    User,
+    UserPageShare,
+    UserSiteShare,
+)
 from ..schemas import (
     BulkNoteCreate,
     BulkNoteCreateWithURL,
@@ -25,8 +35,142 @@ from ..schemas import (
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 
 
+async def check_note_access(
+    db: AsyncSession, note: Note, user: User, required_permission: PermissionLevel
+) -> bool:
+    """Check if user has required permission level for a note.
+
+    Args:
+        db: Database session
+        note: Note to check access for
+        user: User requesting access
+        required_permission: Required permission level
+
+    Returns:
+        True if user has required access, False otherwise
+    """
+    # Admin users have access to everything
+    if user.is_admin:
+        return True
+
+    # Owner has full access
+    if note.user_id == user.id:
+        return True
+
+    # Check page-level sharing first (more specific)
+    page_share_query = select(UserPageShare).where(
+        and_(
+            UserPageShare.user_id == user.id,
+            UserPageShare.page_id == note.page_id,
+            UserPageShare.is_active.is_(True),
+        )
+    )
+    page_share_result = await db.execute(page_share_query)
+    page_share = page_share_result.scalar_one_or_none()
+
+    if page_share and _has_sufficient_permission(
+        page_share.permission_level, required_permission
+    ):
+        return True
+
+    # Check site-level sharing (fallback)
+    site_share_query = (
+        select(UserSiteShare)
+        .join(Page, Page.site_id == UserSiteShare.site_id)
+        .where(
+            and_(
+                UserSiteShare.user_id == user.id,
+                Page.id == note.page_id,
+                UserSiteShare.is_active.is_(True),
+            )
+        )
+    )
+    site_share_result = await db.execute(site_share_query)
+    site_share = site_share_result.scalar_one_or_none()
+
+    return site_share is not None and _has_sufficient_permission(
+        site_share.permission_level, required_permission
+    )
+
+
+async def get_user_accessible_notes_query(
+    db: AsyncSession, user: User, base_query: Optional[select] = None
+) -> select:
+    """Build a query that filters notes to only those accessible by the user.
+
+    Args:
+        db: Database session
+        user: User to filter for
+        base_query: Optional base query to extend
+
+    Returns:
+        SQLAlchemy select query with user access filtering applied
+    """
+    if base_query is None:
+        base_query = select(Note)
+
+    # Admin users can see everything
+    if user.is_admin:
+        return base_query
+
+    # Build access conditions
+    access_conditions = [
+        # Own notes
+        Note.user_id
+        == user.id,
+    ]
+
+    # Add page-level sharing access
+    page_share_subquery = select(UserPageShare.page_id).where(
+        and_(
+            UserPageShare.user_id == user.id,
+            UserPageShare.is_active.is_(True),
+        )
+    )
+    access_conditions.append(Note.page_id.in_(page_share_subquery))
+
+    # Add site-level sharing access
+    site_share_subquery = (
+        select(Page.id)
+        .join(UserSiteShare, Page.site_id == UserSiteShare.site_id)
+        .where(
+            and_(
+                UserSiteShare.user_id == user.id,
+                UserSiteShare.is_active.is_(True),
+            )
+        )
+    )
+    access_conditions.append(Note.page_id.in_(site_share_subquery))
+
+    return base_query.where(or_(*access_conditions))
+
+
+def _has_sufficient_permission(
+    user_permission: PermissionLevel, required_permission: PermissionLevel
+) -> bool:
+    """Check if user permission level is sufficient for required permission.
+
+    Args:
+        user_permission: User's permission level
+        required_permission: Required permission level
+
+    Returns:
+        True if user has sufficient permission
+    """
+    permission_hierarchy = {
+        PermissionLevel.VIEW: 1,
+        PermissionLevel.EDIT: 2,
+        PermissionLevel.ADMIN: 3,
+    }
+
+    return (
+        permission_hierarchy[user_permission]
+        >= permission_hierarchy[required_permission]
+    )
+
+
 async def get_or_create_page_by_url(
-    db: AsyncSession, url: str, title: Optional[str] = None
+    db: AsyncSession, url: str, user: User, title: Optional[str] = None
 ) -> Page:
     """Get or create a page by URL, auto-creating site if needed."""
     # Normalize the URL for consistent storage
@@ -62,8 +206,10 @@ async def get_or_create_page_by_url(
     else:
         site = existing_site
 
-    # Create new page
-    new_page = Page(url=normalized_url, title=title or "", site_id=site.id)
+    # Create new page associated with the user
+    new_page = Page(
+        url=normalized_url, title=title or "", site_id=site.id, user_id=user.id
+    )
     db.add(new_page)
     await db.flush()  # Get ID without committing
 
@@ -74,7 +220,9 @@ async def get_or_create_page_by_url(
     "/with-url", response_model=NoteResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_note_with_url(
-    note_data: NoteCreateWithURL, db: AsyncSession = Depends(get_db)
+    note_data: NoteCreateWithURL,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> NoteResponse:
     """Create a new note with URL (auto-creates page and site if needed).
 
@@ -90,11 +238,14 @@ async def create_note_with_url(
     """
     try:
         # Get or create page (and site if needed)
-        page = await get_or_create_page_by_url(db, note_data.url, note_data.page_title)
+        page = await get_or_create_page_by_url(
+            db, note_data.url, current_user, note_data.page_title
+        )
 
-        # Create new note
+        # Create new note associated with current user
         note_dict = note_data.model_dump(exclude={"url", "page_title"})
         note_dict["page_id"] = page.id
+        note_dict["user_id"] = current_user.id
         note = Note(**note_dict)
         db.add(note)
         await db.commit()
@@ -111,7 +262,9 @@ async def create_note_with_url(
 
 @router.post("/", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)
 async def create_note(
-    note_data: NoteCreate, db: AsyncSession = Depends(get_db)
+    note_data: NoteCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> NoteResponse:
     """Create a new note.
 
@@ -125,16 +278,62 @@ async def create_note(
     Raises:
         HTTPException: If associated page not found
     """
-    # Verify page exists
+    # Verify page exists and user has access to it
     page_result = await db.execute(select(Page).where(Page.id == note_data.page_id))
-    if not page_result.scalar_one_or_none():
+    page = page_result.scalar_one_or_none()
+    if not page:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Page with ID {note_data.page_id} not found",
         )
 
-    # Create new note
-    note = Note(**note_data.model_dump())
+    # Check if user has access to create notes on this page
+    if page.user_id != current_user.id and not current_user.is_admin:
+        # Check for shared access with EDIT or ADMIN permission
+        has_page_access = False
+
+        # Check page-level sharing
+        page_share_query = select(UserPageShare).where(
+            and_(
+                UserPageShare.user_id == current_user.id,
+                UserPageShare.page_id == page.id,
+                UserPageShare.is_active.is_(True),
+                UserPageShare.permission_level.in_(
+                    [PermissionLevel.EDIT, PermissionLevel.ADMIN]
+                ),
+            )
+        )
+        page_share_result = await db.execute(page_share_query)
+        page_share = page_share_result.scalar_one_or_none()
+
+        if page_share:
+            has_page_access = True
+        else:
+            # Check site-level sharing
+            site_share_query = select(UserSiteShare).where(
+                and_(
+                    UserSiteShare.user_id == current_user.id,
+                    UserSiteShare.site_id == page.site_id,
+                    UserSiteShare.is_active.is_(True),
+                    UserSiteShare.permission_level.in_(
+                        [PermissionLevel.EDIT, PermissionLevel.ADMIN]
+                    ),
+                )
+            )
+            site_share_result = await db.execute(site_share_query)
+            site_share = site_share_result.scalar_one_or_none()
+            has_page_access = site_share is not None
+
+        if not has_page_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to create notes on this page",
+            )
+
+    # Create new note associated with current user
+    note_dict = note_data.model_dump()
+    note_dict["user_id"] = current_user.id
+    note = Note(**note_dict)
     db.add(note)
     await db.commit()
     await db.refresh(note)
@@ -152,6 +351,7 @@ async def get_notes_by_url(
     search: Optional[str] = Query(None, description="Search in note content"),
     server_link_id: Optional[str] = Query(None, description="Filter by server link ID"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[NoteResponse]:
     """Get notes for a specific URL directly without requiring page ID.
 
@@ -174,12 +374,15 @@ async def get_notes_by_url(
     if normalized_url.endswith("/") and len(normalized_url) > 1:
         normalized_url = normalized_url[:-1]
 
-    # Build query with joins
-    query = (
+    # Build base query with joins
+    base_query = (
         select(Note)
         .join(Page, Note.page_id == Page.id)
         .where(Page.url == normalized_url)
     )
+
+    # Apply user access control
+    query = await get_user_accessible_notes_query(db, current_user, base_query)
 
     # Apply filters
     if is_active is not None:
@@ -225,6 +428,7 @@ async def get_notes(
     search: Optional[str] = Query(None, description="Search in note content"),
     server_link_id: Optional[str] = Query(None, description="Filter by server link ID"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[NoteResponse]:
     """Get all notes with optional filtering.
 
@@ -240,8 +444,8 @@ async def get_notes(
     Returns:
         List of notes with artifact counts
     """
-    # Build query
-    query = select(Note)
+    # Build base query with user access control
+    query = await get_user_accessible_notes_query(db, current_user)
 
     # Apply filters
     if page_id is not None:
@@ -280,7 +484,11 @@ async def get_notes(
 
 
 @router.get("/{note_id}", response_model=NoteResponse)
-async def get_note(note_id: int, db: AsyncSession = Depends(get_db)) -> NoteResponse:
+async def get_note(
+    note_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> NoteResponse:
     """Get a specific note by ID.
 
     Args:
@@ -303,6 +511,13 @@ async def get_note(note_id: int, db: AsyncSession = Depends(get_db)) -> NoteResp
             detail=f"Note with ID {note_id} not found",
         )
 
+    # Check user access to the note
+    if not await check_note_access(db, note, current_user, PermissionLevel.VIEW):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to view this note",
+        )
+
     # Get artifact count
     artifact_count_result = await db.execute(
         select(func.count(NoteArtifact.id)).where(NoteArtifact.note_id == note.id)
@@ -316,7 +531,10 @@ async def get_note(note_id: int, db: AsyncSession = Depends(get_db)) -> NoteResp
 
 @router.put("/{note_id}", response_model=NoteResponse)
 async def update_note(
-    note_id: int, note_data: NoteUpdate, db: AsyncSession = Depends(get_db)
+    note_id: int,
+    note_data: NoteUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> NoteResponse:
     """Update a specific note.
 
@@ -339,6 +557,13 @@ async def update_note(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Note with ID {note_id} not found",
+        )
+
+    # Check user access to edit the note
+    if not await check_note_access(db, note, current_user, PermissionLevel.EDIT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to edit this note",
         )
 
     # Verify page exists if page_id is being updated
@@ -370,7 +595,11 @@ async def update_note(
 
 
 @router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_note(note_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_note(
+    note_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
     """Delete a specific note.
 
     This will cascade delete all associated artifacts.
@@ -392,6 +621,13 @@ async def delete_note(note_id: int, db: AsyncSession = Depends(get_db)) -> None:
             detail=f"Note with ID {note_id} not found",
         )
 
+    # Check user access to delete the note (requires ADMIN permission)
+    if not await check_note_access(db, note, current_user, PermissionLevel.ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to delete this note",
+        )
+
     # Delete note (cascades to artifacts)
     await db.delete(note)
     await db.commit()
@@ -406,6 +642,7 @@ async def get_note_artifacts(
     ),
     artifact_type: Optional[str] = Query(None, description="Filter by artifact type"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[dict]:
     """Get all artifacts for a specific note.
 
@@ -422,12 +659,20 @@ async def get_note_artifacts(
     Raises:
         HTTPException: If note not found
     """
-    # Verify note exists
+    # Verify note exists and check access
     note_result = await db.execute(select(Note).where(Note.id == note_id))
-    if not note_result.scalar_one_or_none():
+    note = note_result.scalar_one_or_none()
+    if not note:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Note with ID {note_id} not found",
+        )
+
+    # Check user access to view the note artifacts
+    if not await check_note_access(db, note, current_user, PermissionLevel.VIEW):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to view artifacts for this note",
         )
 
     # Build query
@@ -462,7 +707,9 @@ async def get_note_artifacts(
 
 @router.post("/bulk-with-url", response_model=BulkNoteResponse)
 async def create_notes_bulk_with_url(
-    bulk_data: BulkNoteCreateWithURL, db: AsyncSession = Depends(get_db)
+    bulk_data: BulkNoteCreateWithURL,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> BulkNoteResponse:
     """Create or update multiple notes with URLs (auto-creates pages/sites).
 
@@ -490,7 +737,7 @@ async def create_notes_bulk_with_url(
                 page = page_cache[cache_key]
             else:
                 page = await get_or_create_page_by_url(
-                    db, note_data.url, note_data.page_title
+                    db, note_data.url, current_user, note_data.page_title
                 )
                 page_cache[cache_key] = page
 
@@ -503,6 +750,19 @@ async def create_notes_bulk_with_url(
                 existing_note = existing_note_result.scalar_one_or_none()
 
             if existing_note:
+                # Check access to update existing note
+                if not await check_note_access(
+                    db, existing_note, current_user, PermissionLevel.EDIT
+                ):
+                    errors.append(
+                        {
+                            "index": i,
+                            "error": "Insufficient permissions to update this note",
+                            "note_data": note_data.model_dump(),
+                        }
+                    )
+                    continue
+
                 # Update existing note
                 note_dict = note_data.model_dump(exclude={"url", "page_title"})
                 for field, value in note_dict.items():
@@ -522,9 +782,10 @@ async def create_notes_bulk_with_url(
                 note_response.artifacts_count = artifact_count
                 created_notes.append(note_response)
             else:
-                # Create new note
+                # Create new note associated with current user
                 note_dict = note_data.model_dump(exclude={"url", "page_title"})
                 note_dict["page_id"] = page.id
+                note_dict["user_id"] = current_user.id
                 note = Note(**note_dict)
                 db.add(note)
                 await db.flush()
@@ -549,7 +810,9 @@ async def create_notes_bulk_with_url(
 
 @router.post("/bulk", response_model=BulkNoteResponse)
 async def create_notes_bulk(
-    bulk_data: BulkNoteCreate, db: AsyncSession = Depends(get_db)
+    bulk_data: BulkNoteCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> BulkNoteResponse:
     """Create or update multiple notes in a single request (upsert operation).
 
@@ -603,6 +866,19 @@ async def create_notes_bulk(
                 existing_note = existing_notes.get(note_data.server_link_id)
 
             if existing_note:
+                # Check access to update existing note
+                if not await check_note_access(
+                    db, existing_note, current_user, PermissionLevel.EDIT
+                ):
+                    errors.append(
+                        {
+                            "index": i,
+                            "error": "Insufficient permissions to update this note",
+                            "note_data": note_data.model_dump(),
+                        }
+                    )
+                    continue
+
                 # Update existing note
                 update_data = note_data.model_dump(exclude_unset=True)
                 for field, value in update_data.items():
@@ -622,8 +898,10 @@ async def create_notes_bulk(
                 note_response.artifacts_count = artifact_count
                 created_notes.append(note_response)
             else:
-                # Create new note
-                note = Note(**note_data.model_dump())
+                # Create new note associated with current user
+                note_dict = note_data.model_dump()
+                note_dict["user_id"] = current_user.id
+                note = Note(**note_dict)
                 db.add(note)
                 await db.flush()  # Flush to get ID without committing
 

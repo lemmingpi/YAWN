@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import (
     AuthenticationError,
     create_access_token,
-    create_user_from_chrome_token,
+    create_user_from_google_token,
     get_current_active_user,
     get_current_admin_user,
     get_token_expiry_seconds,
@@ -53,9 +53,9 @@ async def register_user(
         HTTPException: If token verification fails or other errors occur
     """
     try:
-        # Create or update user from Chrome token
-        user = await create_user_from_chrome_token(
-            chrome_token=user_data.chrome_token,
+        # Create or update user from Google token
+        user = await create_user_from_google_token(
+            google_id_token=user_data.chrome_token,
             display_name_override=user_data.display_name,
             session=session,
         )
@@ -107,9 +107,9 @@ async def login_user(
         HTTPException: If authentication fails
     """
     try:
-        # Create or update user from Chrome token (login also handles registration)
-        user = await create_user_from_chrome_token(
-            chrome_token=login_data.chrome_token,
+        # Create or update user from Google token (login also handles registration)
+        user = await create_user_from_google_token(
+            google_id_token=login_data.chrome_token,
             display_name_override=None,  # Don't override on login
             session=session,
         )
