@@ -3,7 +3,7 @@
   "name": "Web Notes",
   "version": "1.0.0",
   "description": "Sticky notes for web pages",
-  "permissions": ["activeTab", "storage", "scripting", "contextMenus"],
+  "permissions": ["activeTab", "storage", "scripting", "contextMenus", "identity"],
   "host_permissions": ["http://localhost:8000/*", "https://*/*"],
   "action": {
     "default_popup": "popup.html",

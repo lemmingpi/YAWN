@@ -1,12 +1,22 @@
 """SQLAlchemy database models for Web Notes API."""
 
+import enum
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, func, Index, JSON, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    func,
+    Index,
+    JSON,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql.sqltypes import Integer
-import enum
 
 from .database import Base
 
@@ -48,6 +58,15 @@ class User(Base, TimestampMixin):
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # OAuth token management
+    refresh_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    token_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    oauth_scopes: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True
+    )  # Comma-separated scopes
 
     # Relationships to owned resources
     sites: Mapped[List["Site"]] = relationship(
@@ -204,9 +223,7 @@ class LLMProvider(Base, TimestampMixin):
     max_tokens: Mapped[int] = mapped_column(Integer, default=4096, nullable=False)
     temperature: Mapped[float] = mapped_column(default=0.7, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    configuration: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSON, nullable=True
-    )
+    configuration: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     # Relationships
     artifacts: Mapped[List["NoteArtifact"]] = relationship(

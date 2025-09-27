@@ -5,13 +5,14 @@ and authentication middleware for the FastAPI application.
 """
 
 import os
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Union
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 
-import httpx
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from google.auth.transport import requests
+from google.oauth2 import id_token
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,8 +27,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
 )  # 24 hours
 
-# Chrome Identity API Configuration
-CHROME_IDENTITY_VERIFY_URL = "https://oauth2.googleapis.com/tokeninfo"
+# Google OAuth2 Configuration
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 # Security scheme for FastAPI
 security = HTTPBearer()
@@ -42,11 +44,11 @@ class AuthenticationError(Exception):
         super().__init__(self.message)
 
 
-async def verify_chrome_token(chrome_token: str) -> Dict[str, Any]:
-    """Verify Chrome Identity token with Google's token verification endpoint.
+def verify_google_id_token(id_token_str: str) -> Dict[str, Any]:
+    """Verify Google ID token using Google Auth library.
 
     Args:
-        chrome_token: Chrome Identity token to verify
+        id_token_str: Google ID token to verify
 
     Returns:
         Dict containing user information from Google
@@ -55,43 +57,31 @@ async def verify_chrome_token(chrome_token: str) -> Dict[str, Any]:
         AuthenticationError: If token verification fails
     """
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                CHROME_IDENTITY_VERIFY_URL,
-                params={"id_token": chrome_token},
-                timeout=30.0,
-            )
+        # Use Google's official library for token verification
+        request = requests.Request()
+        id_info = id_token.verify_oauth2_token(id_token_str, request, GOOGLE_CLIENT_ID)
 
-        if response.status_code != 200:
+        # Verify the issuer
+        if id_info["iss"] not in ["accounts.google.com", "https://accounts.google.com"]:
             raise AuthenticationError(
-                "Invalid Chrome Identity token",
+                "Invalid token issuer",
                 status_code=status.HTTP_401_UNAUTHORIZED,
             )
 
-        token_data = response.json()
-
-        # Validate required fields
-        required_fields = ["sub", "email", "email_verified"]
-        for field in required_fields:
-            if field not in token_data:
-                raise AuthenticationError(
-                    f"Invalid token data: missing {field}",
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                )
-
         # Ensure email is verified
-        if not token_data.get("email_verified", False):
+        if not id_info.get("email_verified", False):
             raise AuthenticationError(
                 "Email address not verified with Google",
                 status_code=status.HTTP_401_UNAUTHORIZED,
             )
 
-        return token_data
+        return dict(id_info)
 
-    except httpx.RequestError as e:
+    except ValueError as e:
+        # Google Auth library raises ValueError for invalid tokens
         raise AuthenticationError(
-            f"Failed to verify Chrome token: {str(e)}",
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            f"Invalid Google ID token: {str(e)}",
+            status_code=status.HTTP_401_UNAUTHORIZED,
         )
     except Exception as e:
         if isinstance(e, AuthenticationError):
@@ -116,13 +106,15 @@ def create_access_token(
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+        )
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return str(encoded_jwt)
 
 
 async def verify_token(token: str) -> TokenData:
@@ -187,7 +179,7 @@ async def get_current_user(
         if not user.is_active:
             raise AuthenticationError("Inactive user")
 
-        return user
+        return user  # type: ignore[no-any-return]
 
     except AuthenticationError as e:
         raise HTTPException(
@@ -215,7 +207,7 @@ async def get_current_active_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
         )
-    return current_user
+    return current_user  # type: ignore[return-value]
 
 
 async def get_current_admin_user(
@@ -236,16 +228,16 @@ async def get_current_admin_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
         )
-    return current_user
+    return current_user  # type: ignore[return-value]
 
 
-async def create_user_from_chrome_token(
-    chrome_token: str, display_name_override: Optional[str], session: AsyncSession
+async def create_user_from_google_token(
+    google_id_token: str, display_name_override: Optional[str], session: AsyncSession
 ) -> User:
-    """Create or update user from Chrome Identity token.
+    """Create or update user from Google ID token.
 
     Args:
-        chrome_token: Chrome Identity token
+        google_id_token: Google ID token
         display_name_override: Optional display name override
         session: Database session
 
@@ -255,8 +247,8 @@ async def create_user_from_chrome_token(
     Raises:
         AuthenticationError: If token verification fails
     """
-    # Verify Chrome token and get user info
-    token_data = await verify_chrome_token(chrome_token)
+    # Verify Google ID token and get user info
+    token_data = verify_google_id_token(google_id_token)
 
     chrome_user_id = token_data["sub"]
     email = token_data["email"]
@@ -274,7 +266,7 @@ async def create_user_from_chrome_token(
             existing_user.display_name = display_name
         await session.commit()
         await session.refresh(existing_user)
-        return existing_user
+        return existing_user  # type: ignore[no-any-return]
 
     # Create new user
     new_user = User(
@@ -289,7 +281,45 @@ async def create_user_from_chrome_token(
     await session.commit()
     await session.refresh(new_user)
 
-    return new_user
+    return new_user  # type: ignore[return-value]
+
+
+async def refresh_user_token(user: User, session: AsyncSession) -> Optional[str]:
+    """Refresh user's access token if possible.
+
+    Args:
+        user: User object with refresh token
+        session: Database session
+
+    Returns:
+        New access token or None if refresh not possible
+
+    Raises:
+        AuthenticationError: If refresh fails
+    """
+    if not user.refresh_token:
+        raise AuthenticationError("No refresh token available")
+
+    # Note: For Google OAuth2, you would exchange the refresh token
+    # for a new access token here. This is a placeholder implementation.
+    # In a full implementation, you'd call Google's token refresh endpoint.
+
+    # For now, just create a new JWT token
+    token_data = {
+        "sub": str(user.id),
+        "chrome_user_id": user.chrome_user_id,
+        "email": user.email,
+    }
+
+    new_token = create_access_token(token_data)
+
+    # Update token expiration
+    user.token_expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    await session.commit()
+
+    return new_token
 
 
 def get_token_expiry_seconds() -> int:
@@ -299,3 +329,18 @@ def get_token_expiry_seconds() -> int:
         Token expiry time in seconds
     """
     return ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+
+def is_token_expired(user: User) -> bool:
+    """Check if user's token is expired.
+
+    Args:
+        user: User object
+
+    Returns:
+        True if token is expired or expiry is unknown
+    """
+    if not user.token_expires_at:
+        return True
+
+    return bool(datetime.now(timezone.utc) >= user.token_expires_at)

@@ -29,3 +29,7 @@ httpx==0.25.2
 
 # LLM Provider APIs
 anthropic==0.68.1           # Claude API client
+
+# Authentication and Security
+google-auth==2.40.3         # Google authentication library
+PyJWT==2.10.1              # JWT token handling
