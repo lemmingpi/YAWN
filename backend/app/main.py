@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from .database import create_tables
 from .llm.provider_manager import provider_manager
 from .middleware import RequestLoggingMiddleware, SecurityHeadersMiddleware
-from .routers import artifacts, llm_providers, notes, pages, sites, users, web
+from .routers import artifacts, llm_providers, notes, pages, sharing, sites, users, web
 from .schemas import HealthCheckResponse
 
 
@@ -103,6 +103,7 @@ app.include_router(pages.router)
 app.include_router(notes.router)
 app.include_router(artifacts.router)
 app.include_router(llm_providers.router)
+app.include_router(sharing.router)
 
 # Include web dashboard router
 app.include_router(web.router)

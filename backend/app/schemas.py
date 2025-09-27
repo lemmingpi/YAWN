@@ -5,8 +5,8 @@ used by the FastAPI endpoints for the Web Notes API.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -489,6 +489,113 @@ class HealthCheckResponse(BaseModel):
 
 
 # Sharing schemas
+class ShareCreate(BaseModel):
+    """Schema for creating a new share with email-based user lookup."""
+
+    user_email: str = Field(
+        ...,
+        min_length=3,
+        max_length=320,
+        description="Email address of the user to share with",
+    )
+    permission_level: PermissionLevel = Field(
+        PermissionLevel.VIEW, description="Permission level for the share"
+    )
+
+
+class ShareUpdate(BaseModel):
+    """Schema for updating an existing share."""
+
+    permission_level: Optional[PermissionLevel] = Field(
+        None, description="New permission level for the share"
+    )
+    is_active: Optional[bool] = Field(
+        None, description="Whether the share should be active"
+    )
+
+
+class ShareResponse(BaseModel):
+    """Schema for share API responses."""
+
+    id: int
+    user_id: int = Field(..., description="ID of the user the resource is shared with")
+    user_email: str = Field(
+        ..., description="Email of the user the resource is shared with"
+    )
+    user_display_name: str = Field(..., description="Display name of the user")
+    permission_level: PermissionLevel = Field(..., description="Permission level")
+    is_active: bool = Field(..., description="Whether the share is active")
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SiteShareResponse(ShareResponse):
+    """Schema for site share API responses."""
+
+    site_id: int = Field(..., description="ID of the shared site")
+    site_domain: str = Field(..., description="Domain of the shared site")
+
+
+class PageShareResponse(ShareResponse):
+    """Schema for page share API responses."""
+
+    page_id: int = Field(..., description="ID of the shared page")
+    page_url: str = Field(..., description="URL of the shared page")
+    page_title: Optional[str] = Field(None, description="Title of the shared page")
+
+
+class MySharesResponse(BaseModel):
+    """Schema for user's own shares."""
+
+    shared_sites: List[SiteShareResponse] = Field(
+        default_factory=list, description="Sites shared with the user"
+    )
+    shared_pages: List[PageShareResponse] = Field(
+        default_factory=list, description="Pages shared with the user"
+    )
+
+
+class InviteCreate(BaseModel):
+    """Schema for inviting a user by email (pre-registration)."""
+
+    user_email: str = Field(
+        ..., min_length=3, max_length=320, description="Email address to invite"
+    )
+    resource_type: str = Field(
+        ...,
+        pattern="^(site|page)$",
+        description="Type of resource to share (site or page)",
+    )
+    resource_id: int = Field(..., description="ID of the resource to share")
+    permission_level: PermissionLevel = Field(
+        PermissionLevel.VIEW, description="Permission level for the share"
+    )
+    invitation_message: Optional[str] = Field(
+        None, max_length=500, description="Optional invitation message"
+    )
+
+
+class InviteResponse(BaseModel):
+    """Schema for invite responses."""
+
+    invite_id: str = Field(..., description="Unique invite ID")
+    user_email: str = Field(..., description="Email address invited")
+    resource_type: str = Field(..., description="Type of resource shared")
+    resource_id: int = Field(..., description="ID of the resource")
+    permission_level: PermissionLevel = Field(..., description="Permission level")
+    invitation_message: Optional[str] = Field(None, description="Invitation message")
+    invited_by_email: str = Field(
+        ..., description="Email of the user who sent the invite"
+    )
+    expires_at: Optional[datetime] = Field(None, description="When the invite expires")
+    is_accepted: bool = Field(False, description="Whether the invite has been accepted")
+    created_at: datetime
+
+
+# Legacy sharing schemas for backward compatibility
 class UserSiteShareBase(BaseModel):
     """Base schema for site sharing."""
 
