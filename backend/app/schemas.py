@@ -6,8 +6,17 @@ used by the FastAPI endpoints for the Web Notes API.
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from enum import Enum
 
 from pydantic import BaseModel, Field
+
+
+class PermissionLevel(str, Enum):
+    """Permission levels for sharing resources."""
+
+    VIEW = "view"  # Read-only access
+    EDIT = "edit"  # Read and write access
+    ADMIN = "admin"  # Full access including sharing and deletion
 
 
 # Base schemas
@@ -111,6 +120,7 @@ class SiteResponse(SiteBase, TimestampSchema):
     """Schema for site API responses."""
 
     id: int
+    user_id: int = Field(..., description="ID of the site owner")
     pages_count: Optional[int] = Field(
         None, description="Number of pages associated with this site"
     )
@@ -158,6 +168,7 @@ class PageResponse(PageBase, TimestampSchema):
 
     id: int
     site_id: int
+    user_id: int = Field(..., description="ID of the page owner")
     notes_count: Optional[int] = Field(None, description="Number of notes on this page")
     sections_count: Optional[int] = Field(
         None, description="Number of sections extracted from this page"
@@ -217,6 +228,7 @@ class NoteResponse(NoteBase, TimestampSchema):
 
     id: int
     page_id: int
+    user_id: int = Field(..., description="ID of the note owner")
     artifacts_count: Optional[int] = Field(
         None, description="Number of artifacts generated for this note"
     )
@@ -474,3 +486,82 @@ class HealthCheckResponse(BaseModel):
     database_connected: bool = Field(
         ..., description="Whether database connection is working"
     )
+
+
+# Sharing schemas
+class UserSiteShareBase(BaseModel):
+    """Base schema for site sharing."""
+
+    permission_level: PermissionLevel = Field(
+        PermissionLevel.VIEW, description="Permission level for the share"
+    )
+    is_active: bool = Field(True, description="Whether the share is active")
+
+
+class UserSiteShareCreate(BaseModel):
+    """Schema for creating a new site share."""
+
+    user_id: int = Field(..., description="ID of the user to share with")
+    site_id: int = Field(..., description="ID of the site to share")
+    permission_level: PermissionLevel = Field(
+        PermissionLevel.VIEW, description="Permission level for the share"
+    )
+
+
+class UserSiteShareUpdate(BaseModel):
+    """Schema for updating an existing site share."""
+
+    permission_level: Optional[PermissionLevel] = None
+    is_active: Optional[bool] = None
+
+
+class UserSiteShareResponse(UserSiteShareBase, TimestampSchema):
+    """Schema for site share API responses."""
+
+    id: int
+    user_id: int = Field(..., description="ID of the user the site is shared with")
+    site_id: int = Field(..., description="ID of the shared site")
+    user: Optional[UserResponse] = Field(None, description="User details")
+    site: Optional[SiteResponse] = Field(None, description="Site details")
+
+    class Config:
+        from_attributes = True
+
+
+class UserPageShareBase(BaseModel):
+    """Base schema for page sharing."""
+
+    permission_level: PermissionLevel = Field(
+        PermissionLevel.VIEW, description="Permission level for the share"
+    )
+    is_active: bool = Field(True, description="Whether the share is active")
+
+
+class UserPageShareCreate(BaseModel):
+    """Schema for creating a new page share."""
+
+    user_id: int = Field(..., description="ID of the user to share with")
+    page_id: int = Field(..., description="ID of the page to share")
+    permission_level: PermissionLevel = Field(
+        PermissionLevel.VIEW, description="Permission level for the share"
+    )
+
+
+class UserPageShareUpdate(BaseModel):
+    """Schema for updating an existing page share."""
+
+    permission_level: Optional[PermissionLevel] = None
+    is_active: Optional[bool] = None
+
+
+class UserPageShareResponse(UserPageShareBase, TimestampSchema):
+    """Schema for page share API responses."""
+
+    id: int
+    user_id: int = Field(..., description="ID of the user the page is shared with")
+    page_id: int = Field(..., description="ID of the shared page")
+    user: Optional[UserResponse] = Field(None, description="User details")
+    page: Optional[PageResponse] = Field(None, description="Page details")
+
+    class Config:
+        from_attributes = True
