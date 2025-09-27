@@ -39,7 +39,8 @@
       "Bash(.venv/Scripts/activate)",
       "Bash(pip-compile:*)",
       "Bash(pip check)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(alembic revision:*)"
     ],
     "deny": [],
     "ask": [],

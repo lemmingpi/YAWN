@@ -15,7 +15,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from .database import create_tables
 from .llm.provider_manager import provider_manager
-from .routers import artifacts, llm_providers, notes, pages, sites, web
+from .middleware import RequestLoggingMiddleware, SecurityHeadersMiddleware
+from .routers import artifacts, llm_providers, notes, pages, sites, users, web
 from .schemas import HealthCheckResponse
 
 
@@ -80,6 +81,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Configure middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestLoggingMiddleware, log_body=False)
+
 # Configure CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -92,6 +97,7 @@ app.add_middleware(
 )
 
 # Include API routers
+app.include_router(users.router)
 app.include_router(sites.router)
 app.include_router(pages.router)
 app.include_router(notes.router)

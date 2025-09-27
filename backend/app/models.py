@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, func, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, func, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql.sqltypes import Integer
@@ -22,6 +22,35 @@ class TimestampMixin:
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class User(Base, TimestampMixin):
+    """User model for multi-user Web Notes application with Chrome Identity integration."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    chrome_user_id: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True, nullable=False
+    )
+    email: Mapped[str] = mapped_column(
+        String(320), unique=True, index=True, nullable=False
+    )  # RFC 5321 maximum email length
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Relationships to existing models (for future multi-user implementation)
+    # sites: Mapped[List["Site"]] = relationship(
+    #     "Site", back_populates="user", cascade="all, delete-orphan"
+    # )
+
+    # Create explicit index for performance
+    __table_args__ = (
+        Index("idx_user_chrome_id", "chrome_user_id"),
+        Index("idx_user_email", "email"),
+        Index("idx_user_active", "is_active"),
     )
 
 

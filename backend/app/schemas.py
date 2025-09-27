@@ -18,6 +18,70 @@ class TimestampSchema(BaseModel):
     updated_at: datetime
 
 
+# User schemas
+class UserBase(BaseModel):
+    """Base user schema with common fields."""
+
+    email: str = Field(
+        ..., min_length=3, max_length=320, description="User email address"
+    )
+    display_name: str = Field(
+        ..., min_length=1, max_length=255, description="User display name"
+    )
+    is_admin: bool = Field(False, description="Whether the user has admin privileges")
+    is_active: bool = Field(True, description="Whether the user account is active")
+
+
+class UserCreate(BaseModel):
+    """Schema for creating a new user with Chrome Identity token."""
+
+    chrome_token: str = Field(..., min_length=1, description="Chrome Identity token")
+    display_name: Optional[str] = Field(
+        None, max_length=255, description="Optional display name override"
+    )
+
+
+class UserUpdate(BaseModel):
+    """Schema for updating an existing user."""
+
+    display_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    is_admin: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
+class UserResponse(UserBase, TimestampSchema):
+    """Schema for user API responses."""
+
+    id: int
+    chrome_user_id: str = Field(..., description="Chrome user ID")
+
+    class Config:
+        from_attributes = True
+
+
+class UserLogin(BaseModel):
+    """Schema for user login with Chrome Identity token."""
+
+    chrome_token: str = Field(..., min_length=1, description="Chrome Identity token")
+
+
+class TokenResponse(BaseModel):
+    """Schema for authentication token response."""
+
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field("bearer", description="Token type")
+    expires_in: int = Field(..., description="Token expiration time in seconds")
+    user: UserResponse = Field(..., description="User information")
+
+
+class TokenData(BaseModel):
+    """Schema for token data validation."""
+
+    user_id: Optional[int] = None
+    chrome_user_id: Optional[str] = None
+    email: Optional[str] = None
+
+
 # Site schemas
 class SiteBase(BaseModel):
     """Base site schema with common fields."""
