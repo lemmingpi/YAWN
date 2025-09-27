@@ -129,6 +129,13 @@ class NoteCreate(NoteBase):
     page_id: int = Field(..., description="ID of the associated page")
 
 
+class NoteCreateWithURL(NoteBase):
+    """Schema for creating a new note with URL (auto-creates page/site)."""
+
+    url: str = Field(..., description="URL of the page for this note")
+    page_title: Optional[str] = Field(None, description="Title of the page (optional)")
+
+
 class NoteUpdate(BaseModel):
     """Schema for updating an existing note."""
 
@@ -368,6 +375,17 @@ class BulkNoteCreate(BaseModel):
 
     notes: List[NoteCreate] = Field(
         ..., min_length=1, max_length=100, description="List of notes to create"
+    )
+
+
+class BulkNoteCreateWithURL(BaseModel):
+    """Schema for bulk note creation with URLs."""
+
+    notes: List[NoteCreateWithURL] = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="List of notes to create with URLs",
     )
 
 

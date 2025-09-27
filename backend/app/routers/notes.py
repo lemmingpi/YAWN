@@ -4,23 +4,109 @@ This module provides REST endpoints for managing notes in the Web Notes API.
 Notes are user-created content anchored to specific pages.
 """
 
-from typing import List, Optional
+from typing import cast, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import Note, NoteArtifact, Page
+from ..models import Note, NoteArtifact, Page, Site
 from ..schemas import (
     BulkNoteCreate,
+    BulkNoteCreateWithURL,
     BulkNoteResponse,
     NoteCreate,
+    NoteCreateWithURL,
     NoteResponse,
     NoteUpdate,
 )
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
+
+
+async def get_or_create_page_by_url(
+    db: AsyncSession, url: str, title: Optional[str] = None
+) -> Page:
+    """Get or create a page by URL, auto-creating site if needed."""
+    # Normalize the URL for consistent storage
+    from urllib.parse import urlparse, urlunparse
+
+    parsed = urlparse(url)
+    normalized_url = urlunparse(parsed._replace(fragment=""))
+    if normalized_url.endswith("/") and len(normalized_url) > 1:
+        normalized_url = normalized_url[:-1]
+
+    # Try to find existing page
+    page_result = await db.execute(select(Page).where(Page.url == normalized_url))
+    existing_page = page_result.scalar_one_or_none()
+
+    if existing_page:
+        return cast(Page, existing_page)
+
+    # Extract domain and get or create site
+    domain = parsed.hostname
+    if not domain:
+        raise ValueError("Invalid URL: cannot extract domain")
+
+    # Try to find existing site
+    site_result = await db.execute(select(Site).where(Site.domain == domain))
+    existing_site = site_result.scalar_one_or_none()
+
+    if not existing_site:
+        # Create new site
+        new_site = Site(domain=domain, user_context=None)
+        db.add(new_site)
+        await db.flush()  # Get ID without committing
+        site = new_site
+    else:
+        site = existing_site
+
+    # Create new page
+    new_page = Page(url=normalized_url, title=title or "", site_id=site.id)
+    db.add(new_page)
+    await db.flush()  # Get ID without committing
+
+    return new_page
+
+
+@router.post(
+    "/with-url", response_model=NoteResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_note_with_url(
+    note_data: NoteCreateWithURL, db: AsyncSession = Depends(get_db)
+) -> NoteResponse:
+    """Create a new note with URL (auto-creates page and site if needed).
+
+    Args:
+        note_data: Note creation data with URL
+        db: Database session
+
+    Returns:
+        Created note data
+
+    Raises:
+        HTTPException: If URL is invalid
+    """
+    try:
+        # Get or create page (and site if needed)
+        page = await get_or_create_page_by_url(db, note_data.url, note_data.page_title)
+
+        # Create new note
+        note_dict = note_data.model_dump(exclude={"url", "page_title"})
+        note_dict["page_id"] = page.id
+        note = Note(**note_dict)
+        db.add(note)
+        await db.commit()
+        await db.refresh(note)
+
+        # Add artifacts count
+        result = NoteResponse.model_validate(note)
+        result.artifacts_count = 0  # New note has no artifacts yet
+        return result
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)
@@ -57,6 +143,75 @@ async def create_note(
     result = NoteResponse.model_validate(note)
     result.artifacts_count = 0  # New note has no artifacts yet
     return result
+
+
+@router.get("/by-url", response_model=List[NoteResponse])
+async def get_notes_by_url(
+    url: str = Query(..., description="URL of the page to get notes for"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    search: Optional[str] = Query(None, description="Search in note content"),
+    server_link_id: Optional[str] = Query(None, description="Filter by server link ID"),
+    db: AsyncSession = Depends(get_db),
+) -> List[NoteResponse]:
+    """Get notes for a specific URL directly without requiring page ID.
+
+    Args:
+        url: The page URL to get notes for
+        is_active: Filter by active status
+        search: Search term for note content
+        server_link_id: Filter by server link ID
+        db: Database session
+
+    Returns:
+        List of notes for the specified URL
+    """
+    # Normalize the URL for consistent storage
+    # Remove fragment and normalize trailing slashes
+    from urllib.parse import urlparse, urlunparse
+
+    parsed = urlparse(url)
+    normalized_url = urlunparse(parsed._replace(fragment=""))
+    if normalized_url.endswith("/") and len(normalized_url) > 1:
+        normalized_url = normalized_url[:-1]
+
+    # Build query with joins
+    query = (
+        select(Note)
+        .join(Page, Note.page_id == Page.id)
+        .where(Page.url == normalized_url)
+    )
+
+    # Apply filters
+    if is_active is not None:
+        query = query.where(Note.is_active.is_(is_active))
+
+    if server_link_id:
+        query = query.where(Note.server_link_id == server_link_id)
+
+    if search:
+        search_term = f"%{search.lower()}%"
+        query = query.where(func.lower(Note.content).like(search_term))
+
+    # Add ordering
+    query = query.order_by(Note.created_at.desc())
+
+    # Execute query
+    result = await db.execute(query)
+    notes = result.scalars().all()
+
+    # Get artifact counts for each note
+    note_responses = []
+    for note in notes:
+        artifact_count_result = await db.execute(
+            select(func.count(NoteArtifact.id)).where(NoteArtifact.note_id == note.id)
+        )
+        artifact_count = artifact_count_result.scalar() or 0
+
+        note_response = NoteResponse.model_validate(note)
+        note_response.artifacts_count = artifact_count
+        note_responses.append(note_response)
+
+    return note_responses
 
 
 @router.get("/", response_model=List[NoteResponse])
@@ -303,6 +458,93 @@ async def get_note_artifacts(
         }
         for artifact in artifacts
     ]
+
+
+@router.post("/bulk-with-url", response_model=BulkNoteResponse)
+async def create_notes_bulk_with_url(
+    bulk_data: BulkNoteCreateWithURL, db: AsyncSession = Depends(get_db)
+) -> BulkNoteResponse:
+    """Create or update multiple notes with URLs (auto-creates pages/sites).
+
+    Args:
+        bulk_data: Bulk note creation data with URLs
+        db: Database session
+
+    Returns:
+        Results of bulk upsert operation with any errors
+
+    Raises:
+        HTTPException: If any URLs are invalid
+    """
+    created_notes = []
+    errors = []
+
+    # Cache for created pages to avoid duplicates
+    page_cache: Dict[str, Page] = {}
+
+    for i, note_data in enumerate(bulk_data.notes):
+        try:
+            # Get or create page (use cache to avoid duplicates)
+            cache_key = note_data.url
+            if cache_key in page_cache:
+                page = page_cache[cache_key]
+            else:
+                page = await get_or_create_page_by_url(
+                    db, note_data.url, note_data.page_title
+                )
+                page_cache[cache_key] = page
+
+            # Check if note exists by server_link_id (for upsert behavior)
+            existing_note = None
+            if note_data.server_link_id:
+                existing_note_result = await db.execute(
+                    select(Note).where(Note.server_link_id == note_data.server_link_id)
+                )
+                existing_note = existing_note_result.scalar_one_or_none()
+
+            if existing_note:
+                # Update existing note
+                note_dict = note_data.model_dump(exclude={"url", "page_title"})
+                for field, value in note_dict.items():
+                    setattr(existing_note, field, value)
+
+                await db.flush()
+
+                # Get artifact count for the updated note
+                artifact_count_result = await db.execute(
+                    select(func.count(NoteArtifact.id)).where(
+                        NoteArtifact.note_id == existing_note.id
+                    )
+                )
+                artifact_count = artifact_count_result.scalar() or 0
+
+                note_response = NoteResponse.model_validate(existing_note)
+                note_response.artifacts_count = artifact_count
+                created_notes.append(note_response)
+            else:
+                # Create new note
+                note_dict = note_data.model_dump(exclude={"url", "page_title"})
+                note_dict["page_id"] = page.id
+                note = Note(**note_dict)
+                db.add(note)
+                await db.flush()
+
+                note_response = NoteResponse.model_validate(note)
+                note_response.artifacts_count = 0
+                created_notes.append(note_response)
+
+        except Exception as e:
+            errors.append(
+                {"index": i, "error": str(e), "note_data": note_data.model_dump()}
+            )
+
+    # Commit all successful operations
+    if created_notes:
+        await db.commit()
+    else:
+        await db.rollback()
+
+    return BulkNoteResponse(created_notes=created_notes, errors=errors)
 
 
 @router.post("/bulk", response_model=BulkNoteResponse)

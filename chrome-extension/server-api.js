@@ -16,8 +16,7 @@ const ServerAPI = {
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000, // 1 second
 
-  // Cache for page ID resolution
-  pageIdCache: new Map(),
+  // Note: pageIdCache removed - no longer needed with direct URL queries
 
   // In-memory cache for server configuration
   cachedConfig: null,
@@ -102,10 +101,7 @@ const ServerAPI = {
 
       return response;
     } catch (error) {
-      console.error(
-        `[Web Notes] API Request failed (attempt ${retryCount + 1}):`,
-        error
-      );
+      console.error(`[Web Notes] API Request failed (attempt ${retryCount + 1}):`, error);
 
       // Retry logic for network errors
       if (retryCount < this.RETRY_ATTEMPTS && this.shouldRetry(error)) {
@@ -141,110 +137,21 @@ const ServerAPI = {
     return new Promise(resolve => setTimeout(resolve, ms));
   },
 
-  /**
-   * Get or create a page by URL
-   * @param {string} url - The page URL
-   * @returns {Promise<Object>} Page object with ID
-   */
-  async getOrCreatePage(url) {
-    try {
-      const normalizedUrl = normalizeUrlForNoteStorage(url);
-
-      // Check cache first
-      if (this.pageIdCache.has(normalizedUrl)) {
-        return this.pageIdCache.get(normalizedUrl);
-      }
-
-      // Try to find existing page
-      const encodedUrl = encodeURIComponent(normalizedUrl);
-      let response = await this.makeRequest(`/pages/?search=${encodedUrl}&limit=1`);
-      let pages = await response.json();
-
-      if (pages.length > 0) {
-        const page = pages[0];
-        this.pageIdCache.set(normalizedUrl, page);
-        return page;
-      }
-
-      // Create new page if not found
-      const domain = new URL(normalizedUrl).hostname;
-
-      // First, get or create the site
-      const site = await this.getOrCreateSite(domain);
-
-      const pageData = {
-        url: normalizedUrl,
-        title: document.title || "",
-        site_id: site.id,
-      };
-
-      response = await this.makeRequest("/pages/", {
-        method: "POST",
-        body: JSON.stringify(pageData),
-      });
-
-      const newPage = await response.json();
-      this.pageIdCache.set(normalizedUrl, newPage);
-      console.log(`[Web Notes] Created new page: ${newPage.id} for ${normalizedUrl}`);
-
-      return newPage;
-    } catch (error) {
-      console.error("[Web Notes] Failed to get/create page:", error);
-      throw error;
-    }
-  },
+  // Note: getOrCreatePage and getOrCreateSite methods removed
+  // Notes are now created directly with URLs, and pages/sites are auto-created by the server
 
   /**
-   * Get or create a site by domain
-   * @param {string} domain - The site domain
-   * @returns {Promise<Object>} Site object with ID
-   */
-  async getOrCreateSite(domain) {
-    try {
-      // Try to find existing site
-      const encodedDomain = encodeURIComponent(domain);
-      let response = await this.makeRequest(`/sites/?search=${encodedDomain}&limit=1`);
-      let sites = await response.json();
-
-      if (sites.length > 0) {
-        return sites[0];
-      }
-
-      // Create new site if not found
-      const siteData = {
-        domain: domain,
-        user_context: "",
-      };
-
-      response = await this.makeRequest("/sites/", {
-        method: "POST",
-        body: JSON.stringify(siteData),
-      });
-
-      const newSite = await response.json();
-      console.log(`[Web Notes] Created new site: ${newSite.id} for ${domain}`);
-
-      return newSite;
-    } catch (error) {
-      console.error("[Web Notes] Failed to get/create site:", error);
-      throw error;
-    }
-  },
-
-  /**
-   * Fetch notes for a page
+   * Fetch notes for a page by URL directly
    * @param {string} url - The page URL
    * @returns {Promise<Array>} Array of notes
    */
   async fetchNotesForPage(url) {
     try {
-      const page = await this.getOrCreatePage(url);
-      const response = await this.makeRequest(
-        `/notes/?page_id=${page.id}&is_active=true`
-      );
+      const encodedUrl = encodeURIComponent(url);
+      const response = await this.makeRequest(`/notes/by-url?url=${encodedUrl}&is_active=true`);
       const notes = await response.json();
 
-      console.log(`[Web Notes] Fetched ${notes.length} notes for page ${page.id}`);
+      console.log(`[Web Notes] Fetched ${notes.length} notes for URL ${url}`);
       return notes;
     } catch (error) {
       console.error("[Web Notes] Failed to fetch notes for page:", error);
@@ -253,18 +160,16 @@ const ServerAPI = {
   },
 
   /**
-   * Create a new note
+   * Create a new note with URL (auto-creates page/site)
    * @param {string} url - The page URL
    * @param {Object} noteData - Note data
    * @returns {Promise<Object>} Created note
    */
   async createNote(url, noteData) {
     try {
-      const page = await this.getOrCreatePage(url);
+      const serverNoteData = this.convertToServerFormatWithURL(noteData, url);
 
-      const serverNoteData = this.convertToServerFormat(noteData, page.id);
-
-      const response = await this.makeRequest("/notes/", {
+      const response = await this.makeRequest("/notes/with-url", {
         method: "POST",
         body: JSON.stringify(serverNoteData),
       });
@@ -323,20 +228,16 @@ const ServerAPI = {
   },
 
   /**
-   * Bulk create/update notes
+   * Bulk create/update notes with URL (auto-creates pages/sites)
    * @param {string} url - The page URL
    * @param {Array} notes - Array of notes to create/update
    * @returns {Promise<Object>} Bulk operation result
    */
   async bulkSyncNotes(url, notes) {
     try {
-      const page = await this.getOrCreatePage(url);
+      const serverNotesData = notes.map(note => this.convertToServerFormatWithURL(note, url));
 
-      const serverNotesData = notes.map(note =>
-        this.convertToServerFormat(note, page.id)
-      );
-
-      const response = await this.makeRequest("/notes/bulk", {
+      const response = await this.makeRequest("/notes/bulk-with-url", {
         method: "POST",
         body: JSON.stringify({
           notes: serverNotesData,
@@ -344,9 +245,7 @@ const ServerAPI = {
       });
 
       const result = await response.json();
-      console.log(
-        `[Web Notes] Bulk synced ${result.created_notes.length} notes, ${result.errors.length} errors`
-      );
+      console.log(`[Web Notes] Bulk synced ${result.created_notes.length} notes, ${result.errors.length} errors`);
 
       return result;
     } catch (error) {
@@ -356,7 +255,35 @@ const ServerAPI = {
   },
 
   /**
-   * Convert extension note format to server format
+   * Convert extension note format to server format with URL
+   * @param {Object} extensionNote - Note in extension format
+   * @param {string} url - Page URL
+   * @returns {Object} Note in server format with URL
+   */
+  convertToServerFormatWithURL(extensionNote, url) {
+    return {
+      content: extensionNote.content || "",
+      position_x: extensionNote.fallbackPosition?.x || 0,
+      position_y: extensionNote.fallbackPosition?.y || 0,
+      anchor_data: {
+        elementSelector: extensionNote.elementSelector || null,
+        elementXPath: extensionNote.elementXPath || null,
+        offsetX: extensionNote.offsetX || 0,
+        offsetY: extensionNote.offsetY || 0,
+        selectionData: extensionNote.selectionData || null,
+        backgroundColor: extensionNote.backgroundColor || "light-yellow",
+        isMarkdown: extensionNote.isMarkdown || false,
+        contentHash: extensionNote.contentHash || null,
+      },
+      is_active: extensionNote.isVisible !== false,
+      server_link_id: extensionNote.id, // Use extension ID as link ID
+      url: url,
+      page_title: document.title || "",
+    };
+  },
+
+  /**
+   * Convert extension note format to server format (legacy - for compatibility)
    * @param {Object} extensionNote - Note in extension format
    * @param {number} pageId - Server page ID
    * @returns {Object} Note in server format
@@ -446,14 +373,6 @@ const ServerAPI = {
       // Mark as synced with server
       isSynced: true,
     };
-  },
-
-  /**
-   * Clear page ID cache (useful for testing or when URLs change)
-   */
-  clearPageCache() {
-    this.pageIdCache.clear();
-    console.log("[Web Notes] Cleared page ID cache");
   },
 
   /**
