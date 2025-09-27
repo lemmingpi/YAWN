@@ -3,28 +3,25 @@
 import os
 from typing import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import NullPool
 
 # Database configuration
 DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://postgres:abcd@localhost:5432/webnotes"
+    "DATABASE_URL", "postgresql+asyncpg://postgres:abcd@localhost:5432/webnotes"
 )
 
 # Create async engine
 engine = create_async_engine(
     DATABASE_URL,
     poolclass=NullPool,  # Disable pooling for Cloud Run compatibility
-    echo=os.getenv("SQL_DEBUG", "false").lower() == "true"
+    echo=os.getenv("SQL_DEBUG", "false").lower() == "true",
 )
 
 # Create session factory
 async_session_maker = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False
+    engine, class_=AsyncSession, expire_on_commit=False
 )
 
 # Base class for all models

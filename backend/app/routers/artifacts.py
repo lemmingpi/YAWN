@@ -7,26 +7,27 @@ Artifacts are LLM-generated content based on notes and page sections.
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import NoteArtifact, Note, LLMProvider
+from ..models import LLMProvider, Note, NoteArtifact
 from ..schemas import (
+    ArtifactGenerationRequest,
+    ArtifactGenerationResponse,
     NoteArtifactCreate,
     NoteArtifactResponse,
     NoteArtifactUpdate,
-    ArtifactGenerationRequest,
-    ArtifactGenerationResponse,
 )
 
 router = APIRouter(prefix="/api/artifacts", tags=["artifacts"])
 
 
-@router.post("/", response_model=NoteArtifactResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=NoteArtifactResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_artifact(
-    artifact_data: NoteArtifactCreate,
-    db: AsyncSession = Depends(get_db)
+    artifact_data: NoteArtifactCreate, db: AsyncSession = Depends(get_db)
 ) -> NoteArtifactResponse:
     """Create a new note artifact.
 
@@ -45,7 +46,7 @@ async def create_artifact(
     if not note_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Note with ID {artifact_data.note_id} not found"
+            detail=f"Note with ID {artifact_data.note_id} not found",
         )
 
     # Verify LLM provider exists
@@ -55,7 +56,7 @@ async def create_artifact(
     if not provider_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"LLM provider with ID {artifact_data.llm_provider_id} not found"
+            detail=f"LLM provider with ID {artifact_data.llm_provider_id} not found",
         )
 
     # Create new artifact
@@ -70,12 +71,16 @@ async def create_artifact(
 @router.get("/", response_model=List[NoteArtifactResponse])
 async def get_artifacts(
     skip: int = Query(0, ge=0, description="Number of artifacts to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of artifacts to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of artifacts to return"
+    ),
     note_id: Optional[int] = Query(None, description="Filter by note ID"),
-    llm_provider_id: Optional[int] = Query(None, description="Filter by LLM provider ID"),
+    llm_provider_id: Optional[int] = Query(
+        None, description="Filter by LLM provider ID"
+    ),
     artifact_type: Optional[str] = Query(None, description="Filter by artifact type"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> List[NoteArtifactResponse]:
     """Get all artifacts with optional filtering.
 
@@ -119,8 +124,7 @@ async def get_artifacts(
 
 @router.get("/{artifact_id}", response_model=NoteArtifactResponse)
 async def get_artifact(
-    artifact_id: int,
-    db: AsyncSession = Depends(get_db)
+    artifact_id: int, db: AsyncSession = Depends(get_db)
 ) -> NoteArtifactResponse:
     """Get a specific artifact by ID.
 
@@ -135,13 +139,15 @@ async def get_artifact(
         HTTPException: If artifact not found
     """
     # Get artifact
-    result = await db.execute(select(NoteArtifact).where(NoteArtifact.id == artifact_id))
+    result = await db.execute(
+        select(NoteArtifact).where(NoteArtifact.id == artifact_id)
+    )
     artifact = result.scalar_one_or_none()
 
     if not artifact:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Artifact with ID {artifact_id} not found"
+            detail=f"Artifact with ID {artifact_id} not found",
         )
 
     return NoteArtifactResponse.model_validate(artifact)
@@ -151,7 +157,7 @@ async def get_artifact(
 async def update_artifact(
     artifact_id: int,
     artifact_data: NoteArtifactUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> NoteArtifactResponse:
     """Update a specific artifact.
 
@@ -167,13 +173,15 @@ async def update_artifact(
         HTTPException: If artifact not found
     """
     # Get existing artifact
-    result = await db.execute(select(NoteArtifact).where(NoteArtifact.id == artifact_id))
+    result = await db.execute(
+        select(NoteArtifact).where(NoteArtifact.id == artifact_id)
+    )
     artifact = result.scalar_one_or_none()
 
     if not artifact:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Artifact with ID {artifact_id} not found"
+            detail=f"Artifact with ID {artifact_id} not found",
         )
 
     # Update artifact
@@ -188,10 +196,7 @@ async def update_artifact(
 
 
 @router.delete("/{artifact_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_artifact(
-    artifact_id: int,
-    db: AsyncSession = Depends(get_db)
-) -> None:
+async def delete_artifact(artifact_id: int, db: AsyncSession = Depends(get_db)) -> None:
     """Delete a specific artifact.
 
     Args:
@@ -202,13 +207,15 @@ async def delete_artifact(
         HTTPException: If artifact not found
     """
     # Get artifact
-    result = await db.execute(select(NoteArtifact).where(NoteArtifact.id == artifact_id))
+    result = await db.execute(
+        select(NoteArtifact).where(NoteArtifact.id == artifact_id)
+    )
     artifact = result.scalar_one_or_none()
 
     if not artifact:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Artifact with ID {artifact_id} not found"
+            detail=f"Artifact with ID {artifact_id} not found",
         )
 
     # Delete artifact
@@ -218,8 +225,7 @@ async def delete_artifact(
 
 @router.post("/generate", response_model=ArtifactGenerationResponse)
 async def generate_artifact(
-    generation_request: ArtifactGenerationRequest,
-    db: AsyncSession = Depends(get_db)
+    generation_request: ArtifactGenerationRequest, db: AsyncSession = Depends(get_db)
 ) -> ArtifactGenerationResponse:
     """Generate a new artifact using an LLM provider.
 
@@ -233,8 +239,8 @@ async def generate_artifact(
     Raises:
         HTTPException: If note or LLM provider not found or generation fails
     """
-    from ..services.artifact_service import ArtifactGenerationService
     from ..llm.base import LLMProviderError
+    from ..services.artifact_service import ArtifactGenerationService
 
     service = ArtifactGenerationService(db)
 
@@ -244,7 +250,7 @@ async def generate_artifact(
             llm_provider_id=generation_request.llm_provider_id,
             artifact_type=generation_request.artifact_type,
             custom_prompt=generation_request.custom_prompt,
-            generation_options=generation_request.generation_options
+            generation_options=generation_request.generation_options,
         )
 
         # Extract generation metadata
@@ -256,30 +262,25 @@ async def generate_artifact(
             artifact_id=artifact.id,
             content=artifact.content,
             generation_time_ms=service_metadata.get("generation_time_ms", 0),
-            tokens_used=llm_response_metadata.get("tokens_used")
+            tokens_used=llm_response_metadata.get("tokens_used"),
         )
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except LLMProviderError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"LLM generation failed: {e}"
+            detail=f"LLM generation failed: {e}",
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Artifact generation failed: {e}"
+            detail=f"Artifact generation failed: {e}",
         )
 
 
 @router.get("/types", response_model=List[str])
-async def get_artifact_types(
-    db: AsyncSession = Depends(get_db)
-) -> List[str]:
+async def get_artifact_types(db: AsyncSession = Depends(get_db)) -> List[str]:
     """Get all unique artifact types in the system.
 
     Args:
@@ -291,7 +292,7 @@ async def get_artifact_types(
     result = await db.execute(
         select(NoteArtifact.artifact_type)
         .distinct()
-        .where(NoteArtifact.is_active == True)
+        .where(NoteArtifact.is_active.is_(True))
         .order_by(NoteArtifact.artifact_type)
     )
     artifact_types = result.scalars().all()

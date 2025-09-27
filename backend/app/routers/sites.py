@@ -9,23 +9,17 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from ..database import get_db
-from ..models import Site, Page
-from ..schemas import (
-    SiteCreate,
-    SiteResponse,
-    SiteUpdate,
-)
+from ..models import Page, Site
+from ..schemas import SiteCreate, SiteResponse, SiteUpdate
 
 router = APIRouter(prefix="/api/sites", tags=["sites"])
 
 
 @router.post("/", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)
 async def create_site(
-    site_data: SiteCreate,
-    db: AsyncSession = Depends(get_db)
+    site_data: SiteCreate, db: AsyncSession = Depends(get_db)
 ) -> SiteResponse:
     """Create a new site.
 
@@ -46,7 +40,7 @@ async def create_site(
     if existing_site.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Site with domain '{site_data.domain}' already exists"
+            detail=f"Site with domain '{site_data.domain}' already exists",
         )
 
     # Create new site
@@ -64,10 +58,12 @@ async def create_site(
 @router.get("/", response_model=List[SiteResponse])
 async def get_sites(
     skip: int = Query(0, ge=0, description="Number of sites to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of sites to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of sites to return"
+    ),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     search: Optional[str] = Query(None, description="Search in domain or user_context"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> List[SiteResponse]:
     """Get all sites with optional filtering.
 
@@ -91,8 +87,8 @@ async def get_sites(
     if search:
         search_term = f"%{search.lower()}%"
         query = query.where(
-            func.lower(Site.domain).like(search_term) |
-            func.lower(Site.user_context).like(search_term)
+            func.lower(Site.domain).like(search_term)
+            | func.lower(Site.user_context).like(search_term)
         )
 
     # Add pagination and ordering
@@ -118,10 +114,7 @@ async def get_sites(
 
 
 @router.get("/{site_id}", response_model=SiteResponse)
-async def get_site(
-    site_id: int,
-    db: AsyncSession = Depends(get_db)
-) -> SiteResponse:
+async def get_site(site_id: int, db: AsyncSession = Depends(get_db)) -> SiteResponse:
     """Get a specific site by ID.
 
     Args:
@@ -141,7 +134,7 @@ async def get_site(
     if not site:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Site with ID {site_id} not found"
+            detail=f"Site with ID {site_id} not found",
         )
 
     # Get page count
@@ -157,9 +150,7 @@ async def get_site(
 
 @router.put("/{site_id}", response_model=SiteResponse)
 async def update_site(
-    site_id: int,
-    site_data: SiteUpdate,
-    db: AsyncSession = Depends(get_db)
+    site_id: int, site_data: SiteUpdate, db: AsyncSession = Depends(get_db)
 ) -> SiteResponse:
     """Update a specific site.
 
@@ -181,7 +172,7 @@ async def update_site(
     if not site:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Site with ID {site_id} not found"
+            detail=f"Site with ID {site_id} not found",
         )
 
     # Check for domain conflicts if domain is being updated
@@ -192,7 +183,7 @@ async def update_site(
         if existing_site.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Site with domain '{site_data.domain}' already exists"
+                detail=f"Site with domain '{site_data.domain}' already exists",
             )
 
     # Update site
@@ -215,10 +206,7 @@ async def update_site(
 
 
 @router.delete("/{site_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_site(
-    site_id: int,
-    db: AsyncSession = Depends(get_db)
-) -> None:
+async def delete_site(site_id: int, db: AsyncSession = Depends(get_db)) -> None:
     """Delete a specific site.
 
     This will cascade delete all associated pages, notes, and artifacts.
@@ -237,7 +225,7 @@ async def delete_site(
     if not site:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Site with ID {site_id} not found"
+            detail=f"Site with ID {site_id} not found",
         )
 
     # Delete site (cascades to pages, notes, artifacts)
@@ -249,8 +237,10 @@ async def delete_site(
 async def get_site_pages(
     site_id: int,
     skip: int = Query(0, ge=0, description="Number of pages to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of pages to return"),
-    db: AsyncSession = Depends(get_db)
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of pages to return"
+    ),
+    db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
     """Get all pages for a specific site.
 
@@ -271,7 +261,7 @@ async def get_site_pages(
     if not site_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Site with ID {site_id} not found"
+            detail=f"Site with ID {site_id} not found",
         )
 
     # Get pages for the site

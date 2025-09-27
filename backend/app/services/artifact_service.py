@@ -5,14 +5,14 @@ and page content using LLM providers.
 """
 
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Note, NoteArtifact, LLMProvider, Page
+from ..llm.base import LLMProviderError, LLMRequest
 from ..llm.provider_manager import provider_manager
-from ..llm.base import LLMRequest, LLMProviderError
+from ..models import LLMProvider, Note, NoteArtifact, Page
 
 
 class ArtifactGenerationService:
@@ -32,7 +32,7 @@ class ArtifactGenerationService:
         llm_provider_id: int,
         artifact_type: str,
         custom_prompt: Optional[str] = None,
-        generation_options: Optional[Dict[str, Any]] = None
+        generation_options: Optional[Dict[str, Any]] = None,
     ) -> NoteArtifact:
         """Generate an artifact for a note.
 
@@ -82,14 +82,18 @@ class ArtifactGenerationService:
 
         # Add page context if available
         if note.page_id:
-            page_result = await self.db.execute(select(Page).where(Page.id == note.page_id))
+            page_result = await self.db.execute(
+                select(Page).where(Page.id == note.page_id)
+            )
             page = page_result.scalar_one_or_none()
             if page:
-                context.update({
-                    "page_url": page.url,
-                    "page_title": page.title,
-                    "page_summary": page.page_summary,
-                })
+                context.update(
+                    {
+                        "page_url": page.url,
+                        "page_title": page.title,
+                        "page_summary": page.page_summary,
+                    }
+                )
 
         start_time = time.time()
 
@@ -100,7 +104,7 @@ class ArtifactGenerationService:
                 artifact_type=artifact_type,
                 content=note.content,
                 custom_prompt=custom_prompt,
-                context=context
+                context=context,
             )
         except Exception as e:
             raise LLMProviderError(f"Failed to generate artifact: {e}")
@@ -142,7 +146,7 @@ class ArtifactGenerationService:
         page_id: int,
         llm_provider_id: int,
         summary_type: str = "general",
-        custom_prompt: Optional[str] = None
+        custom_prompt: Optional[str] = None,
     ) -> str:
         """Generate a summary for a page.
 
@@ -192,7 +196,7 @@ class ArtifactGenerationService:
 
         # Get notes for this page to include in summary
         notes_result = await self.db.execute(
-            select(Note).where(Note.page_id == page_id, Note.is_active == True)
+            select(Note).where(Note.page_id == page_id, Note.is_active.is_(True))
         )
         notes = notes_result.scalars().all()
 
@@ -215,10 +219,7 @@ class ArtifactGenerationService:
         # Generate summary
         try:
             if custom_prompt:
-                request = LLMRequest(
-                    prompt=custom_prompt,
-                    context=context
-                )
+                request = LLMRequest(prompt=custom_prompt, context=context)
                 llm_response = await provider.generate(request)
             else:
                 llm_response = await provider.generate_summary(content, context)
@@ -234,11 +235,11 @@ class ArtifactGenerationService:
 
     async def bulk_generate_artifacts(
         self,
-        note_ids: list[int],
+        note_ids: List[int],
         llm_provider_id: int,
         artifact_type: str,
         custom_prompt: Optional[str] = None,
-        generation_options: Optional[Dict[str, Any]] = None
+        generation_options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Generate artifacts for multiple notes.
 
@@ -263,7 +264,7 @@ class ArtifactGenerationService:
         if not llm_provider:
             raise ValueError(f"LLM provider with ID {llm_provider_id} not found")
 
-        results = {
+        results: Dict[str, Any] = {
             "successful": [],
             "failed": [],
             "total_processed": 0,
@@ -279,18 +280,22 @@ class ArtifactGenerationService:
                     llm_provider_id=llm_provider_id,
                     artifact_type=artifact_type,
                     custom_prompt=custom_prompt,
-                    generation_options=generation_options
+                    generation_options=generation_options,
                 )
-                results["successful"].append({
-                    "note_id": note_id,
-                    "artifact_id": artifact.id,
-                    "content_length": len(artifact.content),
-                })
+                results["successful"].append(
+                    {
+                        "note_id": note_id,
+                        "artifact_id": artifact.id,
+                        "content_length": len(artifact.content),
+                    }
+                )
             except Exception as e:
-                results["failed"].append({
-                    "note_id": note_id,
-                    "error": str(e),
-                })
+                results["failed"].append(
+                    {
+                        "note_id": note_id,
+                        "error": str(e),
+                    }
+                )
 
             results["total_processed"] += 1
 
@@ -299,7 +304,7 @@ class ArtifactGenerationService:
 
         return results
 
-    async def get_artifact_types_for_note(self, note_id: int) -> list[str]:
+    async def get_artifact_types_for_note(self, note_id: int) -> List[str]:
         """Get available artifact types for a note.
 
         Args:
@@ -331,7 +336,7 @@ class ArtifactGenerationService:
         self,
         artifact_id: int,
         custom_prompt: Optional[str] = None,
-        generation_options: Optional[Dict[str, Any]] = None
+        generation_options: Optional[Dict[str, Any]] = None,
     ) -> NoteArtifact:
         """Regenerate an existing artifact.
 
@@ -361,7 +366,7 @@ class ArtifactGenerationService:
             llm_provider_id=existing_artifact.llm_provider_id,
             artifact_type=existing_artifact.artifact_type,
             custom_prompt=custom_prompt,
-            generation_options=generation_options
+            generation_options=generation_options,
         )
 
         # Optionally deactivate the old artifact

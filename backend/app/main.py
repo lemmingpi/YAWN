@@ -7,20 +7,20 @@ necessary routers, middleware, and startup/shutdown events.
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import AsyncGenerator, Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
-from .database import get_db, create_tables
+from .database import create_tables
 from .llm.provider_manager import provider_manager
-from .routers import sites, pages, notes, artifacts, llm_providers, web
+from .routers import artifacts, llm_providers, notes, pages, sites, web
 from .schemas import HealthCheckResponse
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Handle application startup and shutdown.
 
     This function manages the lifecycle of the application,
@@ -36,10 +36,13 @@ async def lifespan(app: FastAPI):
 
         # Load LLM providers from database
         from .database import async_session_maker
+
         async with async_session_maker() as session:
             await provider_manager.load_providers_from_db(session)
             providers = provider_manager.list_providers()
-            print(f"Loaded {len(providers)} LLM providers: {', '.join(providers) if providers else 'none'}")
+            print(
+                f"Loaded {len(providers)} LLM providers: {', '.join(providers) if providers else 'none'}"
+            )
 
     except Exception as e:
         print(f"Startup failed: {e}")
@@ -81,12 +84,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "chrome-extension://*",
-        "http://localhost:3000",  # For development frontend
-        "http://localhost:8000",  # For self-hosted frontend
+        "*",  # Allow all origins for Chrome extension compatibility
     ],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_credentials=False,  # Must be False when allow_origins is "*"
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -105,13 +106,13 @@ app.include_router(web.router)
 
 
 @app.get("/", response_class=RedirectResponse)
-async def root():
+async def root() -> RedirectResponse:
     """Root endpoint redirecting to dashboard."""
     return RedirectResponse(url="/app/dashboard", status_code=302)
 
 
 @app.get("/api", response_model=dict)
-async def api_root() -> dict[str, str]:
+async def api_root() -> Dict[str, str]:
     """API root endpoint with basic information."""
     return {
         "message": "Web Notes API",
@@ -131,6 +132,7 @@ async def health_check() -> HealthCheckResponse:
     try:
         # Test database connection
         from .database import async_session_maker
+
         async with async_session_maker() as session:
             # Simple query to test connection
             await session.execute("SELECT 1")
@@ -140,7 +142,9 @@ async def health_check() -> HealthCheckResponse:
 
     # Get provider status
     providers = provider_manager.list_providers()
-    provider_status = f"{len(providers)} providers loaded" if providers else "No providers loaded"
+    provider_status = (
+        f"{len(providers)} providers loaded" if providers else "No providers loaded"
+    )
 
     status = "healthy" if database_connected else "degraded"
     message = f"API operational, database {'connected' if database_connected else 'disconnected'}, {provider_status}"
@@ -149,7 +153,7 @@ async def health_check() -> HealthCheckResponse:
         status=status,
         message=message,
         timestamp=datetime.utcnow(),
-        database_connected=database_connected
+        database_connected=database_connected,
     )
 
 
@@ -159,6 +163,7 @@ async def detailed_status() -> dict:
     try:
         # Database status
         from .database import async_session_maker
+
         async with async_session_maker() as session:
             await session.execute("SELECT 1")
             database_status = "connected"
@@ -179,7 +184,11 @@ async def detailed_status() -> dict:
         "database": {
             "status": database_status,
             "type": "PostgreSQL",
-            "url": os.getenv("DATABASE_URL", "postgresql://...").split("@")[1] if "@" in os.getenv("DATABASE_URL", "") else "localhost:5432/webnotes",
+            "url": (
+                os.getenv("DATABASE_URL", "postgresql://...").split("@")[1]
+                if "@" in os.getenv("DATABASE_URL", "")
+                else "localhost:5432/webnotes"
+            ),
         },
         "llm_providers": {
             "loaded_count": len(providers),
@@ -197,15 +206,16 @@ async def detailed_status() -> dict:
 
 # Exception handlers
 @app.exception_handler(404)
-async def not_found_handler(request, exc):
+async def not_found_handler(request: Request, exc: HTTPException) -> HTMLResponse:
     """Handle 404 errors for web interface."""
     if request.url.path.startswith("/app/"):
         # For web interface, return HTML 404 page
         from .routers.web import templates
+
         return templates.TemplateResponse(
             "404.html",
             {"request": request, "message": "Page not found"},
-            status_code=404
+            status_code=404,
         )
     else:
         # For API endpoints, return JSON
@@ -222,5 +232,5 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
         reload_dirs=["app"],
-        log_level="info"
+        log_level="info",
     )

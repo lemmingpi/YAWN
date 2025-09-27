@@ -4,7 +4,7 @@ This module provides web routes that serve HTML pages for the
 Web Notes dashboard interface.
 """
 
-from typing import Dict, Any
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import Site, Page, Note, NoteArtifact, LLMProvider
+from ..models import Note, NoteArtifact, Page, Site
 
 router = APIRouter(prefix="/app", tags=["web"])
 
@@ -23,8 +23,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    request: Request, db: AsyncSession = Depends(get_db)
 ) -> HTMLResponse:
     """Main dashboard page showing overview statistics and recent activity.
 
@@ -41,7 +40,7 @@ async def dashboard(
     # Get recent sites (last 5)
     recent_sites_query = (
         select(Site)
-        .where(Site.is_active == True)
+        .where(Site.is_active.is_(True))
         .order_by(Site.created_at.desc())
         .limit(5)
     )
@@ -58,7 +57,7 @@ async def dashboard(
     # Get recent notes (last 5)
     recent_notes_query = (
         select(Note)
-        .where(Note.is_active == True)
+        .where(Note.is_active.is_(True))
         .order_by(Note.created_at.desc())
         .limit(5)
     )
@@ -79,14 +78,13 @@ async def dashboard(
             "stats": stats,
             "recent_sites": recent_sites,
             "recent_notes": recent_notes,
-        }
+        },
     )
 
 
 @router.get("/sites", response_class=HTMLResponse)
 async def sites_page(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    request: Request, db: AsyncSession = Depends(get_db)
 ) -> HTMLResponse:
     """Sites management page.
 
@@ -97,17 +95,12 @@ async def sites_page(
     Returns:
         Rendered sites HTML page
     """
-    return templates.TemplateResponse(
-        "sites.html",
-        {"request": request}
-    )
+    return templates.TemplateResponse("sites.html", {"request": request})
 
 
 @router.get("/sites/{site_id}", response_class=HTMLResponse)
 async def site_detail_page(
-    site_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    site_id: int, request: Request, db: AsyncSession = Depends(get_db)
 ) -> HTMLResponse:
     """Site detail page showing pages and notes for a specific site.
 
@@ -128,20 +121,17 @@ async def site_detail_page(
         return templates.TemplateResponse(
             "404.html",
             {"request": request, "message": f"Site with ID {site_id} not found"},
-            status_code=404
+            status_code=404,
         )
 
     return templates.TemplateResponse(
-        "site_detail.html",
-        {"request": request, "site": site}
+        "site_detail.html", {"request": request, "site": site}
     )
 
 
 @router.get("/pages/{page_id}", response_class=HTMLResponse)
 async def page_detail_page(
-    page_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    page_id: int, request: Request, db: AsyncSession = Depends(get_db)
 ) -> HTMLResponse:
     """Page detail page showing notes and artifacts for a specific page.
 
@@ -161,19 +151,17 @@ async def page_detail_page(
         return templates.TemplateResponse(
             "404.html",
             {"request": request, "message": f"Page with ID {page_id} not found"},
-            status_code=404
+            status_code=404,
         )
 
     return templates.TemplateResponse(
-        "page_detail.html",
-        {"request": request, "page": page}
+        "page_detail.html", {"request": request, "page": page}
     )
 
 
 @router.get("/notes", response_class=HTMLResponse)
 async def notes_page(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    request: Request, db: AsyncSession = Depends(get_db)
 ) -> HTMLResponse:
     """Notes management page.
 
@@ -184,17 +172,12 @@ async def notes_page(
     Returns:
         Rendered notes HTML page
     """
-    return templates.TemplateResponse(
-        "notes.html",
-        {"request": request}
-    )
+    return templates.TemplateResponse("notes.html", {"request": request})
 
 
 @router.get("/notes/{note_id}", response_class=HTMLResponse)
 async def note_detail_page(
-    note_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    note_id: int, request: Request, db: AsyncSession = Depends(get_db)
 ) -> HTMLResponse:
     """Note detail page showing artifacts and details for a specific note.
 
@@ -214,19 +197,17 @@ async def note_detail_page(
         return templates.TemplateResponse(
             "404.html",
             {"request": request, "message": f"Note with ID {note_id} not found"},
-            status_code=404
+            status_code=404,
         )
 
     return templates.TemplateResponse(
-        "note_detail.html",
-        {"request": request, "note": note}
+        "note_detail.html", {"request": request, "note": note}
     )
 
 
 @router.get("/artifacts", response_class=HTMLResponse)
 async def artifacts_page(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    request: Request, db: AsyncSession = Depends(get_db)
 ) -> HTMLResponse:
     """Artifacts management page.
 
@@ -237,16 +218,12 @@ async def artifacts_page(
     Returns:
         Rendered artifacts HTML page
     """
-    return templates.TemplateResponse(
-        "artifacts.html",
-        {"request": request}
-    )
+    return templates.TemplateResponse("artifacts.html", {"request": request})
 
 
 @router.get("/llm-providers", response_class=HTMLResponse)
 async def llm_providers_page(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    request: Request, db: AsyncSession = Depends(get_db)
 ) -> HTMLResponse:
     """LLM providers management page.
 
@@ -257,10 +234,7 @@ async def llm_providers_page(
     Returns:
         Rendered LLM providers HTML page
     """
-    return templates.TemplateResponse(
-        "llm_providers.html",
-        {"request": request}
-    )
+    return templates.TemplateResponse("llm_providers.html", {"request": request})
 
 
 async def get_dashboard_stats(db: AsyncSession) -> Dict[str, Any]:
@@ -273,10 +247,18 @@ async def get_dashboard_stats(db: AsyncSession) -> Dict[str, Any]:
         Dictionary containing dashboard statistics
     """
     # Get total counts
-    sites_count = await db.execute(select(func.count(Site.id)).where(Site.is_active == True))
-    pages_count = await db.execute(select(func.count(Page.id)).where(Page.is_active == True))
-    notes_count = await db.execute(select(func.count(Note.id)).where(Note.is_active == True))
-    artifacts_count = await db.execute(select(func.count(NoteArtifact.id)).where(NoteArtifact.is_active == True))
+    sites_count = await db.execute(
+        select(func.count(Site.id)).where(Site.is_active.is_(True))
+    )
+    pages_count = await db.execute(
+        select(func.count(Page.id)).where(Page.is_active.is_(True))
+    )
+    notes_count = await db.execute(
+        select(func.count(Note.id)).where(Note.is_active.is_(True))
+    )
+    artifacts_count = await db.execute(
+        select(func.count(NoteArtifact.id)).where(NoteArtifact.is_active.is_(True))
+    )
 
     return {
         "total_sites": sites_count.scalar() or 0,

@@ -91,7 +91,8 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 exclude = [
     "^.venv/",
-    "^tests/"
+    "^tests/",
+    "backend/alembic/.*"
 ]
 
 [tool.pytest.ini_options]

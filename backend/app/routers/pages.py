@@ -11,13 +11,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import Page, Site, Note, PageSection
+from ..models import Note, Page, PageSection, Site
 from ..schemas import (
     PageCreate,
     PageResponse,
-    PageUpdate,
     PageSummarizationRequest,
     PageSummarizationResponse,
+    PageUpdate,
 )
 
 router = APIRouter(prefix="/api/pages", tags=["pages"])
@@ -25,8 +25,7 @@ router = APIRouter(prefix="/api/pages", tags=["pages"])
 
 @router.post("/", response_model=PageResponse, status_code=status.HTTP_201_CREATED)
 async def create_page(
-    page_data: PageCreate,
-    db: AsyncSession = Depends(get_db)
+    page_data: PageCreate, db: AsyncSession = Depends(get_db)
 ) -> PageResponse:
     """Create a new page.
 
@@ -45,7 +44,7 @@ async def create_page(
     if not site_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Site with ID {page_data.site_id} not found"
+            detail=f"Site with ID {page_data.site_id} not found",
         )
 
     # Create new page
@@ -64,11 +63,13 @@ async def create_page(
 @router.get("/", response_model=List[PageResponse])
 async def get_pages(
     skip: int = Query(0, ge=0, description="Number of pages to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of pages to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of pages to return"
+    ),
     site_id: Optional[int] = Query(None, description="Filter by site ID"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     search: Optional[str] = Query(None, description="Search in URL, title, or summary"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> List[PageResponse]:
     """Get all pages with optional filtering.
 
@@ -84,6 +85,8 @@ async def get_pages(
         List of pages with note and section counts
     """
     # Build query
+    skip = skip or 0
+    limit = limit or 100
     query = select(Page)
 
     # Apply filters
@@ -96,9 +99,9 @@ async def get_pages(
     if search:
         search_term = f"%{search.lower()}%"
         query = query.where(
-            func.lower(Page.url).like(search_term) |
-            func.lower(Page.title).like(search_term) |
-            func.lower(Page.page_summary).like(search_term)
+            func.lower(Page.url).like(search_term)
+            | func.lower(Page.title).like(search_term)
+            | func.lower(Page.page_summary).like(search_term)
         )
 
     # Add pagination and ordering
@@ -132,10 +135,7 @@ async def get_pages(
 
 
 @router.get("/{page_id}", response_model=PageResponse)
-async def get_page(
-    page_id: int,
-    db: AsyncSession = Depends(get_db)
-) -> PageResponse:
+async def get_page(page_id: int, db: AsyncSession = Depends(get_db)) -> PageResponse:
     """Get a specific page by ID.
 
     Args:
@@ -155,7 +155,7 @@ async def get_page(
     if not page:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Page with ID {page_id} not found"
+            detail=f"Page with ID {page_id} not found",
         )
 
     # Get note count
@@ -178,9 +178,7 @@ async def get_page(
 
 @router.put("/{page_id}", response_model=PageResponse)
 async def update_page(
-    page_id: int,
-    page_data: PageUpdate,
-    db: AsyncSession = Depends(get_db)
+    page_id: int, page_data: PageUpdate, db: AsyncSession = Depends(get_db)
 ) -> PageResponse:
     """Update a specific page.
 
@@ -202,7 +200,7 @@ async def update_page(
     if not page:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Page with ID {page_id} not found"
+            detail=f"Page with ID {page_id} not found",
         )
 
     # Verify site exists if site_id is being updated
@@ -211,7 +209,7 @@ async def update_page(
         if not site_result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Site with ID {page_data.site_id} not found"
+                detail=f"Site with ID {page_data.site_id} not found",
             )
 
     # Update page
@@ -240,10 +238,7 @@ async def update_page(
 
 
 @router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_page(
-    page_id: int,
-    db: AsyncSession = Depends(get_db)
-) -> None:
+async def delete_page(page_id: int, db: AsyncSession = Depends(get_db)) -> None:
     """Delete a specific page.
 
     This will cascade delete all associated notes and artifacts.
@@ -262,7 +257,7 @@ async def delete_page(
     if not page:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Page with ID {page_id} not found"
+            detail=f"Page with ID {page_id} not found",
         )
 
     # Delete page (cascades to notes, artifacts, sections)
@@ -274,9 +269,11 @@ async def delete_page(
 async def get_page_notes(
     page_id: int,
     skip: int = Query(0, ge=0, description="Number of notes to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of notes to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of notes to return"
+    ),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
     """Get all notes for a specific page.
 
@@ -298,7 +295,7 @@ async def get_page_notes(
     if not page_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Page with ID {page_id} not found"
+            detail=f"Page with ID {page_id} not found",
         )
 
     # Build query
@@ -335,8 +332,10 @@ async def get_page_notes(
 async def get_page_sections(
     page_id: int,
     skip: int = Query(0, ge=0, description="Number of sections to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of sections to return"),
-    db: AsyncSession = Depends(get_db)
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of sections to return"
+    ),
+    db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
     """Get all sections for a specific page.
 
@@ -357,7 +356,7 @@ async def get_page_sections(
     if not page_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Page with ID {page_id} not found"
+            detail=f"Page with ID {page_id} not found",
         )
 
     # Get sections for the page
@@ -394,7 +393,7 @@ async def get_page_sections(
 async def summarize_page(
     page_id: int,
     summarization_data: PageSummarizationRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> PageSummarizationResponse:
     """Generate a summary for a page using an LLM provider.
 
@@ -409,9 +408,10 @@ async def summarize_page(
     Raises:
         HTTPException: If page not found or LLM provider not found or generation fails
     """
-    from ..services.artifact_service import ArtifactGenerationService
-    from ..llm.base import LLMProviderError
     import time
+
+    from ..llm.base import LLMProviderError
+    from ..services.artifact_service import ArtifactGenerationService
 
     # Verify page exists
     page_result = await db.execute(select(Page).where(Page.id == page_id))
@@ -419,7 +419,7 @@ async def summarize_page(
     if not page:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Page with ID {page_id} not found"
+            detail=f"Page with ID {page_id} not found",
         )
 
     service = ArtifactGenerationService(db)
@@ -430,7 +430,7 @@ async def summarize_page(
             page_id=page_id,
             llm_provider_id=summarization_data.llm_provider_id,
             summary_type=summarization_data.summary_type,
-            custom_prompt=summarization_data.custom_prompt
+            custom_prompt=summarization_data.custom_prompt,
         )
 
         end_time = time.time()
@@ -440,21 +440,18 @@ async def summarize_page(
             page_id=page_id,
             summary=summary,
             generation_time_ms=generation_time_ms,
-            tokens_used=None  # Could be extracted from LLM response metadata if needed
+            tokens_used=None,  # Could be extracted from LLM response metadata if needed
         )
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except LLMProviderError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Summary generation failed: {e}"
+            detail=f"Summary generation failed: {e}",
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Page summarization failed: {e}"
+            detail=f"Page summarization failed: {e}",
         )

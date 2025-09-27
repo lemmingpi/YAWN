@@ -5,14 +5,15 @@ and common interfaces for content generation.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any, Dict, Optional
 
 
 @dataclass
 class LLMRequest:
     """Represents a request to an LLM provider."""
+
     prompt: str
     max_tokens: Optional[int] = None
     temperature: Optional[float] = None
@@ -23,6 +24,7 @@ class LLMRequest:
 @dataclass
 class LLMResponse:
     """Represents a response from an LLM provider."""
+
     content: str
     tokens_used: Optional[int] = None
     model_name: str = ""
@@ -30,35 +32,40 @@ class LLMResponse:
     generation_time_ms: int = 0
     metadata: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
-    timestamp: datetime = None
+    timestamp: Optional[datetime] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.timestamp is None:
             self.timestamp = datetime.utcnow()
 
 
 class LLMProviderError(Exception):
     """Base exception for LLM provider errors."""
+
     pass
 
 
 class LLMConnectionError(LLMProviderError):
     """Raised when connection to LLM provider fails."""
+
     pass
 
 
 class LLMAuthenticationError(LLMProviderError):
     """Raised when authentication with LLM provider fails."""
+
     pass
 
 
 class LLMRateLimitError(LLMProviderError):
     """Raised when LLM provider rate limit is exceeded."""
+
     pass
 
 
 class LLMContentError(LLMProviderError):
     """Raised when LLM provider returns invalid content."""
+
     pass
 
 
@@ -75,7 +82,7 @@ class BaseLLMProvider(ABC):
         model_name: str,
         max_tokens: int = 4096,
         temperature: float = 0.7,
-        configuration: Optional[Dict[str, Any]] = None
+        configuration: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the LLM provider.
 
@@ -135,9 +142,7 @@ class BaseLLMProvider(ABC):
         pass
 
     async def generate_summary(
-        self,
-        content: str,
-        context: Optional[Dict[str, Any]] = None
+        self, content: str, context: Optional[Dict[str, Any]] = None
     ) -> LLMResponse:
         """Generate a summary of the given content.
 
@@ -159,15 +164,13 @@ Summary:"""
             prompt=prompt,
             max_tokens=min(self.max_tokens, 500),  # Summaries should be concise
             temperature=0.3,  # Lower temperature for more focused summaries
-            context=context
+            context=context,
         )
 
         return await self.generate(request)
 
     async def generate_expansion(
-        self,
-        content: str,
-        context: Optional[Dict[str, Any]] = None
+        self, content: str, context: Optional[Dict[str, Any]] = None
     ) -> LLMResponse:
         """Generate an expanded version of the given content.
 
@@ -189,15 +192,13 @@ Expanded Content:"""
             prompt=prompt,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
-            context=context
+            context=context,
         )
 
         return await self.generate(request)
 
     async def generate_questions(
-        self,
-        content: str,
-        context: Optional[Dict[str, Any]] = None
+        self, content: str, context: Optional[Dict[str, Any]] = None
     ) -> LLMResponse:
         """Generate relevant questions based on the given content.
 
@@ -208,26 +209,27 @@ Expanded Content:"""
         Returns:
             LLM response with generated questions
         """
-        prompt = f"""Based on the following content, generate a list of relevant questions that someone might ask or that would help in understanding the topic better:
+        prompt = (
+            f"""Based on the following content, generate a list of relevant questions """
+            f"""that someone might ask or that would help in understanding the topic better:
 
 Content:
 {content}
 
 Questions:"""
+        )
 
         request = LLMRequest(
             prompt=prompt,
             max_tokens=min(self.max_tokens, 800),
             temperature=0.5,
-            context=context
+            context=context,
         )
 
         return await self.generate(request)
 
     async def generate_action_items(
-        self,
-        content: str,
-        context: Optional[Dict[str, Any]] = None
+        self, content: str, context: Optional[Dict[str, Any]] = None
     ) -> LLMResponse:
         """Generate action items based on the given content.
 
@@ -249,15 +251,13 @@ Action Items:"""
             prompt=prompt,
             max_tokens=min(self.max_tokens, 600),
             temperature=0.4,
-            context=context
+            context=context,
         )
 
         return await self.generate(request)
 
     async def generate_analysis(
-        self,
-        content: str,
-        context: Optional[Dict[str, Any]] = None
+        self, content: str, context: Optional[Dict[str, Any]] = None
     ) -> LLMResponse:
         """Generate an analysis of the given content.
 
@@ -268,18 +268,21 @@ Action Items:"""
         Returns:
             LLM response with analysis
         """
-        prompt = f"""Please provide a detailed analysis of the following content, including key themes, insights, and implications:
+        prompt = (
+            f"""Please provide a detailed analysis of the following content, """
+            f"""including key themes, insights, and implications:
 
 Content:
 {content}
 
 Analysis:"""
+        )
 
         request = LLMRequest(
             prompt=prompt,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
-            context=context
+            context=context,
         )
 
         return await self.generate(request)
@@ -304,5 +307,5 @@ Analysis:"""
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "is_initialized": self._is_initialized,
-            "configuration": self.configuration
+            "configuration": self.configuration,
         }

@@ -11,13 +11,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import Note, Page, NoteArtifact
+from ..models import Note, NoteArtifact, Page
 from ..schemas import (
+    BulkNoteCreate,
+    BulkNoteResponse,
     NoteCreate,
     NoteResponse,
     NoteUpdate,
-    BulkNoteCreate,
-    BulkNoteResponse,
 )
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
@@ -25,8 +25,7 @@ router = APIRouter(prefix="/api/notes", tags=["notes"])
 
 @router.post("/", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)
 async def create_note(
-    note_data: NoteCreate,
-    db: AsyncSession = Depends(get_db)
+    note_data: NoteCreate, db: AsyncSession = Depends(get_db)
 ) -> NoteResponse:
     """Create a new note.
 
@@ -45,7 +44,7 @@ async def create_note(
     if not page_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Page with ID {note_data.page_id} not found"
+            detail=f"Page with ID {note_data.page_id} not found",
         )
 
     # Create new note
@@ -63,12 +62,14 @@ async def create_note(
 @router.get("/", response_model=List[NoteResponse])
 async def get_notes(
     skip: int = Query(0, ge=0, description="Number of notes to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of notes to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of notes to return"
+    ),
     page_id: Optional[int] = Query(None, description="Filter by page ID"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     search: Optional[str] = Query(None, description="Search in note content"),
     server_link_id: Optional[str] = Query(None, description="Filter by server link ID"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> List[NoteResponse]:
     """Get all notes with optional filtering.
 
@@ -124,10 +125,7 @@ async def get_notes(
 
 
 @router.get("/{note_id}", response_model=NoteResponse)
-async def get_note(
-    note_id: int,
-    db: AsyncSession = Depends(get_db)
-) -> NoteResponse:
+async def get_note(note_id: int, db: AsyncSession = Depends(get_db)) -> NoteResponse:
     """Get a specific note by ID.
 
     Args:
@@ -147,7 +145,7 @@ async def get_note(
     if not note:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Note with ID {note_id} not found"
+            detail=f"Note with ID {note_id} not found",
         )
 
     # Get artifact count
@@ -163,9 +161,7 @@ async def get_note(
 
 @router.put("/{note_id}", response_model=NoteResponse)
 async def update_note(
-    note_id: int,
-    note_data: NoteUpdate,
-    db: AsyncSession = Depends(get_db)
+    note_id: int, note_data: NoteUpdate, db: AsyncSession = Depends(get_db)
 ) -> NoteResponse:
     """Update a specific note.
 
@@ -187,7 +183,7 @@ async def update_note(
     if not note:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Note with ID {note_id} not found"
+            detail=f"Note with ID {note_id} not found",
         )
 
     # Verify page exists if page_id is being updated
@@ -196,7 +192,7 @@ async def update_note(
         if not page_result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Page with ID {note_data.page_id} not found"
+                detail=f"Page with ID {note_data.page_id} not found",
             )
 
     # Update note
@@ -219,10 +215,7 @@ async def update_note(
 
 
 @router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_note(
-    note_id: int,
-    db: AsyncSession = Depends(get_db)
-) -> None:
+async def delete_note(note_id: int, db: AsyncSession = Depends(get_db)) -> None:
     """Delete a specific note.
 
     This will cascade delete all associated artifacts.
@@ -241,7 +234,7 @@ async def delete_note(
     if not note:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Note with ID {note_id} not found"
+            detail=f"Note with ID {note_id} not found",
         )
 
     # Delete note (cascades to artifacts)
@@ -253,9 +246,11 @@ async def delete_note(
 async def get_note_artifacts(
     note_id: int,
     skip: int = Query(0, ge=0, description="Number of artifacts to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of artifacts to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of artifacts to return"
+    ),
     artifact_type: Optional[str] = Query(None, description="Filter by artifact type"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
     """Get all artifacts for a specific note.
 
@@ -277,7 +272,7 @@ async def get_note_artifacts(
     if not note_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Note with ID {note_id} not found"
+            detail=f"Note with ID {note_id} not found",
         )
 
     # Build query
@@ -312,8 +307,7 @@ async def get_note_artifacts(
 
 @router.post("/bulk", response_model=BulkNoteResponse)
 async def create_notes_bulk(
-    bulk_data: BulkNoteCreate,
-    db: AsyncSession = Depends(get_db)
+    bulk_data: BulkNoteCreate, db: AsyncSession = Depends(get_db)
 ) -> BulkNoteResponse:
     """Create multiple notes in a single request.
 
@@ -338,11 +332,13 @@ async def create_notes_bulk(
     for i, note_data in enumerate(bulk_data.notes):
         try:
             if note_data.page_id not in existing_page_ids:
-                errors.append({
-                    "index": i,
-                    "error": f"Page with ID {note_data.page_id} not found",
-                    "note_data": note_data.model_dump()
-                })
+                errors.append(
+                    {
+                        "index": i,
+                        "error": f"Page with ID {note_data.page_id} not found",
+                        "note_data": note_data.model_dump(),
+                    }
+                )
                 continue
 
             # Create note
@@ -355,11 +351,9 @@ async def create_notes_bulk(
             created_notes.append(note_response)
 
         except Exception as e:
-            errors.append({
-                "index": i,
-                "error": str(e),
-                "note_data": note_data.model_dump()
-            })
+            errors.append(
+                {"index": i, "error": str(e), "note_data": note_data.model_dump()}
+            )
 
     # Commit all successful creations
     if created_notes:

@@ -4,26 +4,26 @@ This module provides a concrete implementation of the BaseLLMProvider
 for Anthropic's Claude models.
 """
 
-import asyncio
 import os
 import time
 from typing import Any, Dict, Optional
 
 try:
     import anthropic
+
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
 from .base import (
     BaseLLMProvider,
+    LLMAuthenticationError,
+    LLMConnectionError,
+    LLMContentError,
+    LLMProviderError,
+    LLMRateLimitError,
     LLMRequest,
     LLMResponse,
-    LLMProviderError,
-    LLMConnectionError,
-    LLMAuthenticationError,
-    LLMRateLimitError,
-    LLMContentError,
 )
 
 
@@ -37,7 +37,7 @@ class ClaudeProvider(BaseLLMProvider):
         max_tokens: int = 4096,
         temperature: float = 0.7,
         api_key: Optional[str] = None,
-        configuration: Optional[Dict[str, Any]] = None
+        configuration: Optional[Dict[str, Any]] = None,
     ):
         """Initialize Claude provider.
 
@@ -73,12 +73,7 @@ class ClaudeProvider(BaseLLMProvider):
             test_response = await self.client.messages.create(
                 model=self.model_name,
                 max_tokens=10,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": "Hello"
-                    }
-                ]
+                messages=[{"role": "user", "content": "Hello"}],
             )
 
             if not test_response.content:
@@ -106,7 +101,9 @@ class ClaudeProvider(BaseLLMProvider):
             LLMProviderError: If generation fails
         """
         if not self._is_initialized or not self.client:
-            raise LLMProviderError("Claude provider not initialized. Call initialize() first.")
+            raise LLMProviderError(
+                "Claude provider not initialized. Call initialize() first."
+            )
 
         start_time = time.time()
 
@@ -118,14 +115,15 @@ class ClaudeProvider(BaseLLMProvider):
             system_message = request.system_message or "You are a helpful assistant."
 
             # Add user message
-            messages.append({
-                "role": "user",
-                "content": request.prompt
-            })
+            messages.append({"role": "user", "content": request.prompt})
 
             # Use request parameters or fall back to provider defaults
             max_tokens = request.max_tokens or self.max_tokens
-            temperature = request.temperature if request.temperature is not None else self.temperature
+            temperature = (
+                request.temperature
+                if request.temperature is not None
+                else self.temperature
+            )
 
             # Make API call
             response = await self.client.messages.create(
@@ -133,7 +131,7 @@ class ClaudeProvider(BaseLLMProvider):
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system_message,
-                messages=messages
+                messages=messages,
             )
 
             end_time = time.time()
@@ -141,14 +139,18 @@ class ClaudeProvider(BaseLLMProvider):
 
             # Extract content from response
             if response.content and len(response.content) > 0:
-                content = response.content[0].text if hasattr(response.content[0], 'text') else str(response.content[0])
+                content = (
+                    response.content[0].text
+                    if hasattr(response.content[0], "text")
+                    else str(response.content[0])
+                )
             else:
                 raise LLMContentError("Empty response from Claude API")
 
             # Extract token usage if available
             tokens_used = None
-            if hasattr(response, 'usage') and response.usage:
-                tokens_used = getattr(response.usage, 'output_tokens', None)
+            if hasattr(response, "usage") and response.usage:
+                tokens_used = getattr(response.usage, "output_tokens", None)
 
             return LLMResponse(
                 content=content,
@@ -157,11 +159,15 @@ class ClaudeProvider(BaseLLMProvider):
                 provider_name=self.name,
                 generation_time_ms=generation_time_ms,
                 metadata={
-                    "request_id": getattr(response, 'id', None),
-                    "stop_reason": getattr(response, 'stop_reason', None),
-                    "usage": getattr(response, 'usage', None).__dict__ if hasattr(response, 'usage') else None,
+                    "request_id": getattr(response, "id", None),
+                    "stop_reason": getattr(response, "stop_reason", None),
+                    "usage": (
+                        getattr(response, "usage", None).__dict__
+                        if hasattr(response, "usage")
+                        else None
+                    ),
                     "context": request.context,
-                }
+                },
             )
 
         except anthropic.RateLimitError as e:
@@ -188,12 +194,7 @@ class ClaudeProvider(BaseLLMProvider):
             test_response = await self.client.messages.create(
                 model=self.model_name,
                 max_tokens=10,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": "Test"
-                    }
-                ]
+                messages=[{"role": "user", "content": "Test"}],
             )
 
             return bool(test_response.content)
@@ -208,19 +209,21 @@ class ClaudeProvider(BaseLLMProvider):
             Dictionary containing provider information
         """
         info = super().get_provider_info()
-        info.update({
-            "provider_type": "claude",
-            "api_endpoint": "https://api.anthropic.com",
-            "supports_streaming": True,
-            "supports_system_messages": True,
-            "available_models": [
-                "claude-3-opus-20240229",
-                "claude-3-sonnet-20240229",
-                "claude-3-haiku-20240307",
-                "claude-2.1",
-                "claude-2.0",
-            ]
-        })
+        info.update(
+            {
+                "provider_type": "claude",
+                "api_endpoint": "https://api.anthropic.com",
+                "supports_streaming": True,
+                "supports_system_messages": True,
+                "available_models": [
+                    "claude-3-opus-20240229",
+                    "claude-3-sonnet-20240229",
+                    "claude-3-haiku-20240307",
+                    "claude-2.1",
+                    "claude-2.0",
+                ],
+            }
+        )
         return info
 
 
@@ -228,9 +231,7 @@ class ClaudeProviderFactory:
     """Factory for creating Claude provider instances."""
 
     @staticmethod
-    def create_provider(
-        provider_config: Dict[str, Any]
-    ) -> ClaudeProvider:
+    def create_provider(provider_config: Dict[str, Any]) -> ClaudeProvider:
         """Create a Claude provider from configuration.
 
         Args:
@@ -253,7 +254,7 @@ class ClaudeProviderFactory:
             max_tokens=provider_config.get("max_tokens", 4096),
             temperature=provider_config.get("temperature", 0.7),
             api_key=provider_config.get("api_key"),
-            configuration=provider_config.get("configuration", {})
+            configuration=provider_config.get("configuration", {}),
         )
 
     @staticmethod
@@ -273,5 +274,5 @@ class ClaudeProviderFactory:
             "configuration": {
                 "supports_streaming": True,
                 "supports_system_messages": True,
-            }
+            },
         }

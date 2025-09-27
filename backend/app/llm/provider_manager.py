@@ -4,20 +4,20 @@ This module provides a centralized manager for working with
 multiple LLM providers and routing requests appropriately.
 """
 
-import asyncio
-from typing import Any, Dict, List, Optional, Type
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any, Dict, List, Optional
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import LLMProvider as LLMProviderModel
-from .base import BaseLLMProvider, LLMRequest, LLMResponse, LLMProviderError
-from .claude_provider import ClaudeProvider, ClaudeProviderFactory
+from .base import BaseLLMProvider, LLMProviderError, LLMRequest, LLMResponse
+from .claude_provider import ClaudeProviderFactory
 
 
 class LLMProviderManager:
     """Manager for LLM providers."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the provider manager."""
         self._providers: Dict[str, BaseLLMProvider] = {}
         self._provider_factories: Dict[str, Any] = {
@@ -36,7 +36,7 @@ class LLMProviderManager:
         # Get all active providers from database
         result = await db.execute(
             select(LLMProviderModel)
-            .where(LLMProviderModel.is_active == True)
+            .where(LLMProviderModel.is_active.is_(True))
             .order_by(LLMProviderModel.name)
         )
         db_providers = result.scalars().all()
@@ -94,7 +94,9 @@ class LLMProviderManager:
         """
         return self._providers.get(provider_name)
 
-    def get_provider_by_id(self, db_providers: List[LLMProviderModel], provider_id: int) -> Optional[BaseLLMProvider]:
+    def get_provider_by_id(
+        self, db_providers: List[LLMProviderModel], provider_id: int
+    ) -> Optional[BaseLLMProvider]:
         """Get a loaded provider by database ID.
 
         Args:
@@ -130,9 +132,7 @@ class LLMProviderManager:
         return provider.get_provider_info() if provider else None
 
     async def generate_with_provider(
-        self,
-        provider_name: str,
-        request: LLMRequest
+        self, provider_name: str, request: LLMRequest
     ) -> LLMResponse:
         """Generate content using a specific provider.
 
@@ -148,7 +148,9 @@ class LLMProviderManager:
         """
         provider = self.get_provider(provider_name)
         if not provider:
-            raise LLMProviderError(f"Provider '{provider_name}' not found or not loaded")
+            raise LLMProviderError(
+                f"Provider '{provider_name}' not found or not loaded"
+            )
 
         return await provider.generate(request)
 
@@ -158,7 +160,7 @@ class LLMProviderManager:
         artifact_type: str,
         content: str,
         custom_prompt: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         """Generate an artifact using a specific provider.
 
@@ -177,14 +179,13 @@ class LLMProviderManager:
         """
         provider = self.get_provider(provider_name)
         if not provider:
-            raise LLMProviderError(f"Provider '{provider_name}' not found or not loaded")
+            raise LLMProviderError(
+                f"Provider '{provider_name}' not found or not loaded"
+            )
 
         # Use custom prompt if provided, otherwise use type-specific method
         if custom_prompt:
-            request = LLMRequest(
-                prompt=custom_prompt,
-                context=context
-            )
+            request = LLMRequest(prompt=custom_prompt, context=context)
             return await provider.generate(request)
 
         # Route to appropriate generation method based on artifact type
@@ -209,10 +210,7 @@ Content:
 
 {artifact_type.title()}:"""
 
-            request = LLMRequest(
-                prompt=prompt,
-                context=context
-            )
+            request = LLMRequest(prompt=prompt, context=context)
             return await provider.generate(request)
 
     async def test_provider(self, provider_name: str) -> bool:

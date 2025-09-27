@@ -12,19 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..models import LLMProvider, NoteArtifact
-from ..schemas import (
-    LLMProviderCreate,
-    LLMProviderResponse,
-    LLMProviderUpdate,
-)
+from ..schemas import LLMProviderCreate, LLMProviderResponse, LLMProviderUpdate
 
 router = APIRouter(prefix="/api/llm/providers", tags=["llm-providers"])
 
 
-@router.post("/", response_model=LLMProviderResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=LLMProviderResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_llm_provider(
-    provider_data: LLMProviderCreate,
-    db: AsyncSession = Depends(get_db)
+    provider_data: LLMProviderCreate, db: AsyncSession = Depends(get_db)
 ) -> LLMProviderResponse:
     """Create a new LLM provider.
 
@@ -45,7 +42,7 @@ async def create_llm_provider(
     if existing_provider.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"LLM provider with name '{provider_data.name}' already exists"
+            detail=f"LLM provider with name '{provider_data.name}' already exists",
         )
 
     # Create new provider
@@ -63,10 +60,12 @@ async def create_llm_provider(
 @router.get("/", response_model=List[LLMProviderResponse])
 async def get_llm_providers(
     skip: int = Query(0, ge=0, description="Number of providers to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of providers to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of providers to return"
+    ),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     provider_type: Optional[str] = Query(None, description="Filter by provider type"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> List[LLMProviderResponse]:
     """Get all LLM providers with optional filtering.
 
@@ -101,7 +100,9 @@ async def get_llm_providers(
     provider_responses = []
     for provider in providers:
         artifact_count_result = await db.execute(
-            select(func.count(NoteArtifact.id)).where(NoteArtifact.llm_provider_id == provider.id)
+            select(func.count(NoteArtifact.id)).where(
+                NoteArtifact.llm_provider_id == provider.id
+            )
         )
         artifact_count = artifact_count_result.scalar() or 0
 
@@ -114,8 +115,7 @@ async def get_llm_providers(
 
 @router.get("/{provider_id}", response_model=LLMProviderResponse)
 async def get_llm_provider(
-    provider_id: int,
-    db: AsyncSession = Depends(get_db)
+    provider_id: int, db: AsyncSession = Depends(get_db)
 ) -> LLMProviderResponse:
     """Get a specific LLM provider by ID.
 
@@ -136,12 +136,14 @@ async def get_llm_provider(
     if not provider:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"LLM provider with ID {provider_id} not found"
+            detail=f"LLM provider with ID {provider_id} not found",
         )
 
     # Get artifact count
     artifact_count_result = await db.execute(
-        select(func.count(NoteArtifact.id)).where(NoteArtifact.llm_provider_id == provider.id)
+        select(func.count(NoteArtifact.id)).where(
+            NoteArtifact.llm_provider_id == provider.id
+        )
     )
     artifact_count = artifact_count_result.scalar() or 0
 
@@ -154,7 +156,7 @@ async def get_llm_provider(
 async def update_llm_provider(
     provider_id: int,
     provider_data: LLMProviderUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> LLMProviderResponse:
     """Update a specific LLM provider.
 
@@ -176,7 +178,7 @@ async def update_llm_provider(
     if not provider:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"LLM provider with ID {provider_id} not found"
+            detail=f"LLM provider with ID {provider_id} not found",
         )
 
     # Check for name conflicts if name is being updated
@@ -187,7 +189,7 @@ async def update_llm_provider(
         if existing_provider.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"LLM provider with name '{provider_data.name}' already exists"
+                detail=f"LLM provider with name '{provider_data.name}' already exists",
             )
 
     # Update provider
@@ -200,7 +202,9 @@ async def update_llm_provider(
 
     # Get artifact count
     artifact_count_result = await db.execute(
-        select(func.count(NoteArtifact.id)).where(NoteArtifact.llm_provider_id == provider.id)
+        select(func.count(NoteArtifact.id)).where(
+            NoteArtifact.llm_provider_id == provider.id
+        )
     )
     artifact_count = artifact_count_result.scalar() or 0
 
@@ -211,8 +215,7 @@ async def update_llm_provider(
 
 @router.delete("/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_llm_provider(
-    provider_id: int,
-    db: AsyncSession = Depends(get_db)
+    provider_id: int, db: AsyncSession = Depends(get_db)
 ) -> None:
     """Delete a specific LLM provider.
 
@@ -232,7 +235,7 @@ async def delete_llm_provider(
     if not provider:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"LLM provider with ID {provider_id} not found"
+            detail=f"LLM provider with ID {provider_id} not found",
         )
 
     # Delete provider (cascades to artifacts)
@@ -244,9 +247,11 @@ async def delete_llm_provider(
 async def get_provider_artifacts(
     provider_id: int,
     skip: int = Query(0, ge=0, description="Number of artifacts to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of artifacts to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of artifacts to return"
+    ),
     artifact_type: Optional[str] = Query(None, description="Filter by artifact type"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
     """Get all artifacts generated by a specific LLM provider.
 
@@ -264,11 +269,13 @@ async def get_provider_artifacts(
         HTTPException: If provider not found
     """
     # Verify provider exists
-    provider_result = await db.execute(select(LLMProvider).where(LLMProvider.id == provider_id))
+    provider_result = await db.execute(
+        select(LLMProvider).where(LLMProvider.id == provider_id)
+    )
     if not provider_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"LLM provider with ID {provider_id} not found"
+            detail=f"LLM provider with ID {provider_id} not found",
         )
 
     # Build query
@@ -302,9 +309,7 @@ async def get_provider_artifacts(
 
 
 @router.get("/types", response_model=List[str])
-async def get_provider_types(
-    db: AsyncSession = Depends(get_db)
-) -> List[str]:
+async def get_provider_types(db: AsyncSession = Depends(get_db)) -> List[str]:
     """Get all unique provider types in the system.
 
     Args:
@@ -316,7 +321,7 @@ async def get_provider_types(
     result = await db.execute(
         select(LLMProvider.provider_type)
         .distinct()
-        .where(LLMProvider.is_active == True)
+        .where(LLMProvider.is_active.is_(True))
         .order_by(LLMProvider.provider_type)
     )
     provider_types = result.scalars().all()
@@ -333,7 +338,7 @@ async def get_provider_types(
 async def test_llm_provider(
     provider_id: int,
     test_prompt: str = Query(..., description="Test prompt to send to the provider"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Test an LLM provider with a simple prompt.
 
@@ -355,13 +360,13 @@ async def test_llm_provider(
     if not provider:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"LLM provider with ID {provider_id} not found"
+            detail=f"LLM provider with ID {provider_id} not found",
         )
 
     if not provider.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"LLM provider '{provider.name}' is not active"
+            detail=f"LLM provider '{provider.name}' is not active",
         )
 
     # For now, return a placeholder response
@@ -373,5 +378,5 @@ async def test_llm_provider(
         "response": f"Test response from {provider.name} using {provider.model_name}",
         "status": "success",
         "response_time_ms": 250,
-        "tokens_used": 15
+        "tokens_used": 15,
     }
