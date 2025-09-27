@@ -309,14 +309,18 @@ async def get_note_artifacts(
 async def create_notes_bulk(
     bulk_data: BulkNoteCreate, db: AsyncSession = Depends(get_db)
 ) -> BulkNoteResponse:
-    """Create multiple notes in a single request.
+    """Create or update multiple notes in a single request (upsert operation).
+
+    Uses server_link_id as the unique identifier for upsert operations.
+    If a note with the same server_link_id exists, it will be updated.
+    Otherwise, a new note will be created.
 
     Args:
         bulk_data: Bulk note creation data
         db: Database session
 
     Returns:
-        Results of bulk creation with any errors
+        Results of bulk upsert operation with any errors
 
     Raises:
         HTTPException: If any pages not found
@@ -328,6 +332,16 @@ async def create_notes_bulk(
     page_ids = list(set(note.page_id for note in bulk_data.notes))
     page_results = await db.execute(select(Page.id).where(Page.id.in_(page_ids)))
     existing_page_ids = set(page_results.scalars().all())
+
+    # Get all server_link_ids to check for existing notes
+    server_link_ids = [
+        note.server_link_id for note in bulk_data.notes if note.server_link_id
+    ]
+    existing_notes_query = select(Note).where(Note.server_link_id.in_(server_link_ids))
+    existing_notes_result = await db.execute(existing_notes_query)
+    existing_notes = {
+        note.server_link_id: note for note in existing_notes_result.scalars().all()
+    }
 
     for i, note_data in enumerate(bulk_data.notes):
         try:
@@ -341,21 +355,46 @@ async def create_notes_bulk(
                 )
                 continue
 
-            # Create note
-            note = Note(**note_data.model_dump())
-            db.add(note)
-            await db.flush()  # Flush to get ID without committing
+            # Check if note exists by server_link_id
+            existing_note = None
+            if note_data.server_link_id:
+                existing_note = existing_notes.get(note_data.server_link_id)
 
-            note_response = NoteResponse.model_validate(note)
-            note_response.artifacts_count = 0
-            created_notes.append(note_response)
+            if existing_note:
+                # Update existing note
+                update_data = note_data.model_dump(exclude_unset=True)
+                for field, value in update_data.items():
+                    setattr(existing_note, field, value)
+
+                await db.flush()  # Flush to ensure updates are applied
+
+                # Get artifact count for the updated note
+                artifact_count_result = await db.execute(
+                    select(func.count(NoteArtifact.id)).where(
+                        NoteArtifact.note_id == existing_note.id
+                    )
+                )
+                artifact_count = artifact_count_result.scalar() or 0
+
+                note_response = NoteResponse.model_validate(existing_note)
+                note_response.artifacts_count = artifact_count
+                created_notes.append(note_response)
+            else:
+                # Create new note
+                note = Note(**note_data.model_dump())
+                db.add(note)
+                await db.flush()  # Flush to get ID without committing
+
+                note_response = NoteResponse.model_validate(note)
+                note_response.artifacts_count = 0
+                created_notes.append(note_response)
 
         except Exception as e:
             errors.append(
                 {"index": i, "error": str(e), "note_data": note_data.model_dump()}
             )
 
-    # Commit all successful creations
+    # Commit all successful operations
     if created_notes:
         await db.commit()
     else:
