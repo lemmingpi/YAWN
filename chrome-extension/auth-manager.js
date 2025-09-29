@@ -96,6 +96,8 @@ const AuthManager = {
         isAuthenticated: this._authCache.isAuthenticated,
         hasUser: !!this._authCache.user,
         hasToken: !!this._authCache.jwtToken,
+        userEmail: this._authCache.user?.email || "none",
+        tokenExpiry: this._authCache.jwtToken ? this.getTokenExpiry(this._authCache.jwtToken) : "none",
       });
     } catch (error) {
       console.error("[Auth] Failed to load auth state:", error);
@@ -374,6 +376,28 @@ const AuthManager = {
     } catch (error) {
       console.error("[Auth] Failed to parse token:", error);
       return true;
+    }
+  },
+
+  /**
+   * Get token expiry time as readable string
+   * @param {string} token - JWT token
+   * @returns {string} Human readable expiry time or "invalid"
+   */
+  getTokenExpiry(token) {
+    try {
+      if (!token) return "invalid";
+
+      const parts = token.split(".");
+      if (parts.length !== 3) return "invalid";
+
+      const payload = JSON.parse(atob(parts[1]));
+      if (!payload.exp) return "no expiry";
+
+      const expiryDate = new Date(payload.exp * 1000);
+      return expiryDate.toLocaleString();
+    } catch (error) {
+      return "invalid";
     }
   },
 

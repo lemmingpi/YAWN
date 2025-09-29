@@ -162,6 +162,13 @@ const ServerAPI = {
    */
   async fetchNotesForPage(url) {
     try {
+      // Check if user is authenticated before making the request
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        console.log("[Web Notes] User not authenticated, skipping server note fetch");
+        return [];
+      }
+
       const encodedUrl = encodeURIComponent(url);
       const response = await this.makeRequest(`/notes/by-url?url=${encodedUrl}&is_active=true`);
       const notes = await response.json();
@@ -169,6 +176,12 @@ const ServerAPI = {
       console.log(`[Web Notes] Fetched ${notes.length} notes for URL ${url}`);
       return notes;
     } catch (error) {
+      // Handle authentication errors gracefully
+      if (error.message && (error.message.includes("HTTP 401") || error.message.includes("HTTP 403"))) {
+        console.log("[Web Notes] Authentication failed, skipping server note fetch:", error.message);
+        return [];
+      }
+
       console.error("[Web Notes] Failed to fetch notes for page:", error);
       throw error;
     }
@@ -182,6 +195,12 @@ const ServerAPI = {
    */
   async createNote(url, noteData) {
     try {
+      // Check authentication before attempting to create note
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot create note on server");
+      }
+
       const serverNoteData = this.convertToServerFormatWithURL(noteData, url);
 
       const response = await this.makeRequest("/notes/with-url", {
@@ -194,6 +213,17 @@ const ServerAPI = {
 
       return createdNote;
     } catch (error) {
+      // Handle authentication errors gracefully
+      if (
+        error.message &&
+        (error.message.includes("HTTP 401") ||
+          error.message.includes("HTTP 403") ||
+          error.message.includes("not authenticated"))
+      ) {
+        console.log("[Web Notes] Authentication failed during note creation:", error.message);
+        throw new Error("AUTHENTICATION_REQUIRED");
+      }
+
       console.error("[Web Notes] Failed to create note:", error);
       throw error;
     }
@@ -207,6 +237,12 @@ const ServerAPI = {
    */
   async updateNote(serverId, noteData) {
     try {
+      // Check authentication before attempting to update note
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot update note on server");
+      }
+
       const serverNoteData = this.convertToServerUpdateFormat(noteData);
 
       const response = await this.makeRequest(`/notes/${serverId}`, {
@@ -219,6 +255,17 @@ const ServerAPI = {
 
       return updatedNote;
     } catch (error) {
+      // Handle authentication errors gracefully
+      if (
+        error.message &&
+        (error.message.includes("HTTP 401") ||
+          error.message.includes("HTTP 403") ||
+          error.message.includes("not authenticated"))
+      ) {
+        console.log("[Web Notes] Authentication failed during note update:", error.message);
+        throw new Error("AUTHENTICATION_REQUIRED");
+      }
+
       console.error("[Web Notes] Failed to update note:", error);
       throw error;
     }
@@ -231,12 +278,29 @@ const ServerAPI = {
    */
   async deleteNote(serverId) {
     try {
+      // Check authentication before attempting to delete note
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot delete note on server");
+      }
+
       await this.makeRequest(`/notes/${serverId}`, {
         method: "DELETE",
       });
 
       console.log(`[Web Notes] Deleted note ${serverId} from server`);
     } catch (error) {
+      // Handle authentication errors gracefully
+      if (
+        error.message &&
+        (error.message.includes("HTTP 401") ||
+          error.message.includes("HTTP 403") ||
+          error.message.includes("not authenticated"))
+      ) {
+        console.log("[Web Notes] Authentication failed during note deletion:", error.message);
+        throw new Error("AUTHENTICATION_REQUIRED");
+      }
+
       console.error("[Web Notes] Failed to delete note:", error);
       throw error;
     }
@@ -250,6 +314,12 @@ const ServerAPI = {
    */
   async bulkSyncNotes(url, notes) {
     try {
+      // Check authentication before attempting bulk sync
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot sync notes to server");
+      }
+
       const serverNotesData = notes.map(note => this.convertToServerFormatWithURL(note, url));
 
       const response = await this.makeRequest("/notes/bulk-with-url", {
@@ -264,6 +334,17 @@ const ServerAPI = {
 
       return result;
     } catch (error) {
+      // Handle authentication errors gracefully
+      if (
+        error.message &&
+        (error.message.includes("HTTP 401") ||
+          error.message.includes("HTTP 403") ||
+          error.message.includes("not authenticated"))
+      ) {
+        console.log("[Web Notes] Authentication failed during bulk sync:", error.message);
+        throw new Error("AUTHENTICATION_REQUIRED");
+      }
+
       console.error("[Web Notes] Failed to bulk sync notes:", error);
       throw error;
     }
