@@ -9,21 +9,20 @@ from app.auth import (
     ALGORITHM,
     AuthenticationError,
     create_access_token,
-    create_user_from_chrome_token,
+    create_user_from_google_token,
     get_token_expiry_seconds,
     SECRET_KEY,
-    verify_chrome_token,
+    verify_google_id_token,
     verify_token,
 )
 from app.models import User
-from app.schemas import TokenData
-from fastapi import HTTPException, status
+from fastapi import status
 
 
 class TestAuthenticationUtilities:
     """Test cases for authentication utility functions."""
 
-    def test_create_access_token(self):
+    def test_create_access_token(self) -> None:
         """Test JWT token creation."""
         data = {"sub": "123", "email": "test@example.com"}
         token = create_access_token(data)
@@ -34,7 +33,7 @@ class TestAuthenticationUtilities:
         assert payload["email"] == "test@example.com"
         assert "exp" in payload
 
-    def test_create_access_token_with_custom_expiry(self):
+    def test_create_access_token_with_custom_expiry(self) -> None:
         """Test JWT token creation with custom expiry."""
         data = {"sub": "123"}
         expires_delta = timedelta(minutes=30)
@@ -49,7 +48,7 @@ class TestAuthenticationUtilities:
         assert time_diff < 10
 
     @pytest.mark.asyncio
-    async def test_verify_token_valid(self):
+    async def test_verify_token_valid(self) -> None:
         """Test token verification with valid token."""
         data = {
             "sub": "123",
@@ -65,7 +64,7 @@ class TestAuthenticationUtilities:
         assert token_data.email == "test@example.com"
 
     @pytest.mark.asyncio
-    async def test_verify_token_invalid(self):
+    async def test_verify_token_invalid(self) -> None:
         """Test token verification with invalid token."""
         invalid_token = "invalid.token.here"
 
@@ -75,7 +74,7 @@ class TestAuthenticationUtilities:
         assert "Invalid token" in str(exc_info.value.message)
 
     @pytest.mark.asyncio
-    async def test_verify_token_expired(self):
+    async def test_verify_token_expired(self) -> None:
         """Test token verification with expired token."""
         data = {"sub": "123"}
         expired_token = create_access_token(data, timedelta(minutes=-30))
@@ -84,7 +83,7 @@ class TestAuthenticationUtilities:
             await verify_token(expired_token)
 
     @pytest.mark.asyncio
-    async def test_verify_token_missing_user_id(self):
+    async def test_verify_token_missing_user_id(self) -> None:
         """Test token verification with missing user ID."""
         # Create token without 'sub' field
         payload = {
@@ -100,7 +99,9 @@ class TestAuthenticationUtilities:
 
     @pytest.mark.asyncio
     @patch("app.auth.httpx.AsyncClient")
-    async def test_verify_chrome_token_valid(self, mock_client, mock_chrome_token_data):
+    async def test_verify_google_id_token_valid(
+        self, mock_client: AsyncMock, mock_chrome_token_data: dict
+    ) -> None:
         """Test Chrome token verification with valid token."""
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -110,14 +111,16 @@ class TestAuthenticationUtilities:
         mock_client_instance.get.return_value = mock_response
         mock_client.return_value.__aenter__.return_value = mock_client_instance
 
-        result = await verify_chrome_token("valid_chrome_token")
+        result = verify_google_id_token("valid_chrome_token")
 
         assert result == mock_chrome_token_data
         mock_client_instance.get.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("app.auth.httpx.AsyncClient")
-    async def test_verify_chrome_token_invalid_response(self, mock_client):
+    async def test_verify_google_id_token_invalid_response(
+        self, mock_client: AsyncMock
+    ) -> None:
         """Test Chrome token verification with invalid response."""
         mock_response = AsyncMock()
         mock_response.status_code = 400
@@ -127,14 +130,16 @@ class TestAuthenticationUtilities:
         mock_client.return_value.__aenter__.return_value = mock_client_instance
 
         with pytest.raises(AuthenticationError) as exc_info:
-            await verify_chrome_token("invalid_chrome_token")
+            verify_google_id_token("invalid_chrome_token")
 
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
         assert "Invalid Chrome Identity token" in str(exc_info.value.message)
 
     @pytest.mark.asyncio
     @patch("app.auth.httpx.AsyncClient")
-    async def test_verify_chrome_token_unverified_email(self, mock_client):
+    async def test_verify_google_id_token_unverified_email(
+        self, mock_client: AsyncMock
+    ) -> None:
         """Test Chrome token verification with unverified email."""
         token_data = {
             "sub": "123",
@@ -151,19 +156,22 @@ class TestAuthenticationUtilities:
         mock_client.return_value.__aenter__.return_value = mock_client_instance
 
         with pytest.raises(AuthenticationError) as exc_info:
-            await verify_chrome_token("token_with_unverified_email")
+            verify_google_id_token("token_with_unverified_email")
 
         assert "Email address not verified" in str(exc_info.value.message)
 
     @pytest.mark.asyncio
-    @patch("app.auth.verify_chrome_token")
-    async def test_create_user_from_chrome_token_new_user(
-        self, mock_verify, async_session, mock_chrome_token_data
-    ):
+    @patch("app.auth.verify_google_id_token")
+    async def test_create_user_from_google_token_new_user(
+        self,
+        mock_verify: AsyncMock,
+        async_session: AsyncMock,
+        mock_chrome_token_data: dict,
+    ) -> None:
         """Test creating new user from Chrome token."""
         mock_verify.return_value = mock_chrome_token_data
 
-        user = await create_user_from_chrome_token(
+        user = await create_user_from_google_token(
             "chrome_token", "Custom Display Name", async_session
         )
 
@@ -174,17 +182,21 @@ class TestAuthenticationUtilities:
         assert user.is_active
 
     @pytest.mark.asyncio
-    @patch("app.auth.verify_chrome_token")
-    async def test_create_user_from_chrome_token_existing_user(
-        self, mock_verify, async_session, test_user, mock_chrome_token_data
-    ):
+    @patch("app.auth.verify_google_id_token")
+    async def test_create_user_from_google_token_existing_user(
+        self,
+        mock_verify: AsyncMock,
+        async_session: AsyncMock,
+        test_user: User,
+        mock_chrome_token_data: dict,
+    ) -> None:
         """Test updating existing user from Chrome token."""
         # Use the same chrome_user_id as the test_user
         mock_chrome_token_data["sub"] = test_user.chrome_user_id
         mock_chrome_token_data["email"] = "updated@example.com"
         mock_verify.return_value = mock_chrome_token_data
 
-        user = await create_user_from_chrome_token(
+        user = await create_user_from_google_token(
             "chrome_token", "Updated Display Name", async_session
         )
 
@@ -192,7 +204,7 @@ class TestAuthenticationUtilities:
         assert user.email == "updated@example.com"
         assert user.display_name == "Updated Display Name"
 
-    def test_get_token_expiry_seconds(self):
+    def test_get_token_expiry_seconds(self) -> None:
         """Test getting token expiry in seconds."""
         expiry_seconds = get_token_expiry_seconds()
         assert expiry_seconds == 60 * 60  # 60 minutes * 60 seconds

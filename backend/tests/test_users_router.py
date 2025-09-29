@@ -13,10 +13,13 @@ class TestUserRouter:
     """Test cases for user router endpoints."""
 
     @pytest.mark.asyncio
-    @patch("app.routers.users.create_user_from_chrome_token")
+    @patch("app.routers.users.create_user_from_google_token")
     async def test_register_user_success(
-        self, mock_create_user, async_client: AsyncClient, mock_chrome_token_data
-    ):
+        self,
+        mock_create_user: AsyncMock,
+        async_client: AsyncClient,
+        mock_chrome_token_data: dict,
+    ) -> None:
         """Test successful user registration."""
         # Mock user creation
         mock_user = User(
@@ -42,10 +45,10 @@ class TestUserRouter:
         assert data["user"]["display_name"] == "Test User"
 
     @pytest.mark.asyncio
-    @patch("app.routers.users.create_user_from_chrome_token")
+    @patch("app.routers.users.create_user_from_google_token")
     async def test_register_user_authentication_error(
-        self, mock_create_user, async_client: AsyncClient
-    ):
+        self, mock_create_user: AsyncMock, async_client: AsyncClient
+    ) -> None:
         """Test user registration with authentication error."""
         from app.auth import AuthenticationError
 
@@ -59,10 +62,13 @@ class TestUserRouter:
         assert "Invalid token" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    @patch("app.routers.users.create_user_from_chrome_token")
+    @patch("app.routers.users.create_user_from_google_token")
     async def test_login_user_success(
-        self, mock_create_user, async_client: AsyncClient, mock_chrome_token_data
-    ):
+        self,
+        mock_create_user: AsyncMock,
+        async_client: AsyncClient,
+        mock_chrome_token_data: dict,
+    ) -> None:
         """Test successful user login."""
         # Mock user creation/retrieval
         mock_user = User(
@@ -88,7 +94,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_get_current_user_profile_success(
         self, async_client: AsyncClient, test_user: User
-    ):
+    ) -> None:
         """Test getting current user profile."""
         # Create access token for test user
         token = create_access_token(
@@ -112,7 +118,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_get_current_user_profile_unauthorized(
         self, async_client: AsyncClient
-    ):
+    ) -> None:
         """Test getting current user profile without authentication."""
         response = await async_client.get("/api/users/me")
 
@@ -121,7 +127,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_get_current_user_profile_invalid_token(
         self, async_client: AsyncClient
-    ):
+    ) -> None:
         """Test getting current user profile with invalid token."""
         response = await async_client.get(
             "/api/users/me", headers={"Authorization": "Bearer invalid_token"}
@@ -132,7 +138,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_update_current_user_profile_success(
         self, async_client: AsyncClient, test_user: User
-    ):
+    ) -> None:
         """Test updating current user profile."""
         token = create_access_token(
             {
@@ -155,7 +161,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_list_users_admin_success(
         self, async_client: AsyncClient, test_admin_user: User
-    ):
+    ) -> None:
         """Test listing users as admin."""
         token = create_access_token(
             {
@@ -176,7 +182,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_list_users_non_admin_forbidden(
         self, async_client: AsyncClient, test_user: User
-    ):
+    ) -> None:
         """Test listing users as non-admin user."""
         token = create_access_token(
             {
@@ -195,7 +201,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_get_user_by_id_admin_success(
         self, async_client: AsyncClient, test_admin_user: User, test_user: User
-    ):
+    ) -> None:
         """Test getting user by ID as admin."""
         token = create_access_token(
             {
@@ -217,7 +223,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_get_user_by_id_not_found(
         self, async_client: AsyncClient, test_admin_user: User
-    ):
+    ) -> None:
         """Test getting non-existent user by ID."""
         token = create_access_token(
             {
@@ -236,7 +242,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_update_user_by_id_admin_success(
         self, async_client: AsyncClient, test_admin_user: User, test_user: User
-    ):
+    ) -> None:
         """Test updating user by ID as admin."""
         token = create_access_token(
             {
@@ -260,7 +266,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_delete_user_by_id_admin_success(
         self, async_client: AsyncClient, test_admin_user: User, test_user: User
-    ):
+    ) -> None:
         """Test deleting user by ID as admin."""
         token = create_access_token(
             {
@@ -279,7 +285,7 @@ class TestUserRouter:
     @pytest.mark.asyncio
     async def test_delete_own_account_forbidden(
         self, async_client: AsyncClient, test_admin_user: User
-    ):
+    ) -> None:
         """Test that admin cannot delete their own account."""
         token = create_access_token(
             {
