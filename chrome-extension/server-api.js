@@ -558,60 +558,28 @@ const ServerAPI = {
   // ===== SHARING API ENDPOINTS =====
 
   /**
-   * Share a note with a user
-   * @param {string} noteId - Note ID
-   * @param {string} userEmail - User email to share with
-   * @param {string} permissionLevel - Permission level (VIEW, EDIT, ADMIN)
-   * @returns {Promise<Object>} Created share
-   */
-  async shareNoteWithUser(noteId, userEmail, permissionLevel) {
-    try {
-      if (!noteId || !userEmail || !permissionLevel) {
-        throw new Error("Note ID, user email, and permission level are required");
-      }
-
-      const response = await this.makeRequest("/sharing/notes", {
-        method: "POST",
-        body: JSON.stringify({
-          note_id: noteId,
-          user_email: userEmail.toLowerCase().trim(),
-          permission_level: permissionLevel.toUpperCase(),
-        }),
-      });
-
-      const share = await response.json();
-      console.log(`[Web Notes] Shared note ${noteId} with ${userEmail} (${permissionLevel})`);
-      return share;
-    } catch (error) {
-      console.error("[Web Notes] Failed to share note:", error);
-      throw error;
-    }
-  },
-
-  /**
    * Share a page with a user
-   * @param {string} pageUrl - Page URL
+   * @param {number} pageId - Page ID
    * @param {string} userEmail - User email to share with
-   * @param {string} permissionLevel - Permission level (VIEW, EDIT, ADMIN)
+   * @param {string} permissionLevel - Permission level (view, edit, admin)
    * @returns {Promise<Object>} Created share
    */
-  async sharePageWithUser(pageUrl, userEmail, permissionLevel) {
+  async sharePageWithUser(pageId, userEmail, permissionLevel) {
     try {
-      if (!pageUrl || !userEmail || !permissionLevel) {
-        throw new Error("Page URL, user email, and permission level are required");
+      if (!pageId || !userEmail || !permissionLevel) {
+        throw new Error("Page ID, user email, and permission level are required");
       }
 
-      const response = await this.makeRequest("/sharing/pages", {
+      const response = await this.makeRequest(`/pages/${pageId}/share`, {
         method: "POST",
         body: JSON.stringify({
-          page_url: pageUrl,
           user_email: userEmail.toLowerCase().trim(),
-          permission_level: permissionLevel.toUpperCase(),
+          permission_level: permissionLevel.toLowerCase(),
         }),
       });
 
       const share = await response.json();
-      console.log(`[Web Notes] Shared page ${pageUrl} with ${userEmail} (${permissionLevel})`);
+      console.log(`[Web Notes] Shared page ${pageId} with ${userEmail} (${permissionLevel})`);
       return share;
     } catch (error) {
       console.error("[Web Notes] Failed to share page:", error);
@@ -621,28 +589,27 @@ const ServerAPI = {
 
   /**
    * Share a site with a user
-   * @param {string} domain - Site domain
+   * @param {number} siteId - Site ID
    * @param {string} userEmail - User email to share with
-   * @param {string} permissionLevel - Permission level (VIEW, EDIT, ADMIN)
+   * @param {string} permissionLevel - Permission level (view, edit, admin)
    * @returns {Promise<Object>} Created share
    */
-  async shareSiteWithUser(domain, userEmail, permissionLevel) {
+  async shareSiteWithUser(siteId, userEmail, permissionLevel) {
     try {
-      if (!domain || !userEmail || !permissionLevel) {
-        throw new Error("Domain, user email, and permission level are required");
+      if (!siteId || !userEmail || !permissionLevel) {
+        throw new Error("Site ID, user email, and permission level are required");
       }
 
-      const response = await this.makeRequest("/sharing/sites", {
+      const response = await this.makeRequest(`/sites/${siteId}/share`, {
         method: "POST",
         body: JSON.stringify({
-          domain: domain.toLowerCase(),
           user_email: userEmail.toLowerCase().trim(),
-          permission_level: permissionLevel.toUpperCase(),
+          permission_level: permissionLevel.toLowerCase(),
         }),
       });
 
       const share = await response.json();
-      console.log(`[Web Notes] Shared site ${domain} with ${userEmail} (${permissionLevel})`);
+      console.log(`[Web Notes] Shared site ${siteId} with ${userEmail} (${permissionLevel})`);
       return share;
     } catch (error) {
       console.error("[Web Notes] Failed to share site:", error);
@@ -651,43 +618,20 @@ const ServerAPI = {
   },
 
   /**
-   * Get shares for a note
-   * @param {string} noteId - Note ID
-   * @returns {Promise<Array>} Array of shares
-   */
-  async getNoteShares(noteId) {
-    try {
-      if (!noteId) {
-        throw new Error("Note ID is required");
-      }
-
-      const response = await this.makeRequest(`/sharing/notes/${encodeURIComponent(noteId)}`);
-      const shares = await response.json();
-
-      console.log(`[Web Notes] Retrieved ${shares.length} shares for note ${noteId}`);
-      return shares;
-    } catch (error) {
-      console.error("[Web Notes] Failed to get note shares:", error);
-      throw error;
-    }
-  },
-
-  /**
    * Get shares for a page
-   * @param {string} pageUrl - Page URL
+   * @param {number} pageId - Page ID
    * @returns {Promise<Array>} Array of shares
    */
-  async getPageShares(pageUrl) {
+  async getPageShares(pageId) {
     try {
-      if (!pageUrl) {
-        throw new Error("Page URL is required");
+      if (!pageId) {
+        throw new Error("Page ID is required");
       }
 
-      const encodedUrl = encodeURIComponent(pageUrl);
-      const response = await this.makeRequest(`/sharing/pages?url=${encodedUrl}`);
+      const response = await this.makeRequest(`/pages/${pageId}/shares`);
       const shares = await response.json();
 
-      console.log(`[Web Notes] Retrieved ${shares.length} shares for page ${pageUrl}`);
+      console.log(`[Web Notes] Retrieved ${shares.length} shares for page ${pageId}`);
       return shares;
     } catch (error) {
       console.error("[Web Notes] Failed to get page shares:", error);
@@ -697,19 +641,19 @@ const ServerAPI = {
 
   /**
    * Get shares for a site
-   * @param {string} domain - Site domain
+   * @param {number} siteId - Site ID
    * @returns {Promise<Array>} Array of shares
    */
-  async getSiteShares(domain) {
+  async getSiteShares(siteId) {
     try {
-      if (!domain) {
-        throw new Error("Domain is required");
+      if (!siteId) {
+        throw new Error("Site ID is required");
       }
 
-      const response = await this.makeRequest(`/sharing/sites/${encodeURIComponent(domain)}`);
+      const response = await this.makeRequest(`/sites/${siteId}/shares`);
       const shares = await response.json();
 
-      console.log(`[Web Notes] Retrieved ${shares.length} shares for site ${domain}`);
+      console.log(`[Web Notes] Retrieved ${shares.length} shares for site ${siteId}`);
       return shares;
     } catch (error) {
       console.error("[Web Notes] Failed to get site shares:", error);
@@ -719,15 +663,15 @@ const ServerAPI = {
 
   /**
    * Get all shares for current user
-   * @returns {Promise<Object>} User shares organized by type
+   * @returns {Promise<Object>} User shares organized by type (shared_sites, shared_pages)
    */
-  async getUserShares() {
+  async getMyShares() {
     try {
-      const response = await this.makeRequest("/sharing/user");
+      const response = await this.makeRequest("/my-shares");
       const shares = await response.json();
 
       console.log(
-        `[Web Notes] Retrieved user shares: ${shares.notes?.length || 0} notes, ${shares.pages?.length || 0} pages, ${shares.sites?.length || 0} sites`
+        `[Web Notes] Retrieved user shares: ${shares.shared_pages?.length || 0} pages, ${shares.shared_sites?.length || 0} sites`
       );
       return shares;
     } catch (error) {
@@ -737,204 +681,200 @@ const ServerAPI = {
   },
 
   /**
-   * Update share permission
-   * @param {string} shareType - Type of share (note, page, site)
-   * @param {string} resourceId - Resource identifier
-   * @param {string} userId - User ID
-   * @param {string} newPermission - New permission level
+   * Update share permission for a page
+   * @param {number} pageId - Page ID
+   * @param {number} userId - User ID
+   * @param {string} newPermission - New permission level (view, edit, admin)
+   * @param {boolean} isActive - Whether the share is active
    * @returns {Promise<Object>} Updated share
    */
-  async updateSharePermission(shareType, resourceId, userId, newPermission) {
+  async updatePageSharePermission(pageId, userId, newPermission, isActive = true) {
     try {
-      if (!shareType || !resourceId || !userId || !newPermission) {
-        throw new Error("Share type, resource ID, user ID, and new permission are required");
+      if (!pageId || !userId || !newPermission) {
+        throw new Error("Page ID, user ID, and new permission are required");
       }
 
-      let endpoint;
-      let body;
+      const body = {
+        permission_level: newPermission.toLowerCase(),
+        is_active: isActive,
+      };
 
-      switch (shareType) {
-        case "note":
-          endpoint = `/sharing/notes/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
-          body = { permission_level: newPermission.toUpperCase() };
-          break;
-        case "page":
-          endpoint = `/sharing/pages/users/${encodeURIComponent(userId)}`;
-          body = {
-            page_url: resourceId,
-            permission_level: newPermission.toUpperCase(),
-          };
-          break;
-        case "site":
-          endpoint = `/sharing/sites/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
-          body = { permission_level: newPermission.toUpperCase() };
-          break;
-        default:
-          throw new Error(`Invalid share type: ${shareType}`);
-      }
-
-      const response = await this.makeRequest(endpoint, {
-        method: "PUT",
+      const response = await this.makeRequest(`/pages/${pageId}/share/${userId}`, {
+        method: "PATCH",
         body: JSON.stringify(body),
       });
 
       const updatedShare = await response.json();
-      console.log(`[Web Notes] Updated ${shareType} share permission for user ${userId} to ${newPermission}`);
+      console.log(`[Web Notes] Updated page share permission for user ${userId} to ${newPermission}`);
       return updatedShare;
     } catch (error) {
-      console.error("[Web Notes] Failed to update share permission:", error);
+      console.error("[Web Notes] Failed to update page share permission:", error);
       throw error;
     }
   },
 
   /**
-   * Remove a share
-   * @param {string} shareType - Type of share (note, page, site)
-   * @param {string} resourceId - Resource identifier
-   * @param {string} userId - User ID
-   * @returns {Promise<void>}
+   * Update share permission for a site
+   * @param {number} siteId - Site ID
+   * @param {number} userId - User ID
+   * @param {string} newPermission - New permission level (view, edit, admin)
+   * @param {boolean} isActive - Whether the share is active
+   * @returns {Promise<Object>} Updated share
    */
-  async removeShare(shareType, resourceId, userId) {
+  async updateSiteSharePermission(siteId, userId, newPermission, isActive = true) {
     try {
-      if (!shareType || !resourceId || !userId) {
-        throw new Error("Share type, resource ID, and user ID are required");
+      if (!siteId || !userId || !newPermission) {
+        throw new Error("Site ID, user ID, and new permission are required");
       }
 
-      let endpoint;
+      const body = {
+        permission_level: newPermission.toLowerCase(),
+        is_active: isActive,
+      };
 
-      switch (shareType) {
-        case "note":
-          endpoint = `/sharing/notes/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
-          break;
-        case "page":
-          endpoint = `/sharing/pages/users/${encodeURIComponent(userId)}?url=${encodeURIComponent(resourceId)}`;
-          break;
-        case "site":
-          endpoint = `/sharing/sites/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
-          break;
-        default:
-          throw new Error(`Invalid share type: ${shareType}`);
-      }
-
-      await this.makeRequest(endpoint, {
-        method: "DELETE",
-      });
-
-      console.log(`[Web Notes] Removed ${shareType} share for user ${userId}`);
-    } catch (error) {
-      console.error("[Web Notes] Failed to remove share:", error);
-      throw error;
-    }
-  },
-
-  /**
-   * Generate shareable link for a resource
-   * @param {string} shareType - Type of share (note, page, site)
-   * @param {string} resourceId - Resource identifier
-   * @returns {Promise<string>} Shareable link
-   */
-  async generateShareLink(shareType, resourceId) {
-    try {
-      if (!shareType || !resourceId) {
-        throw new Error("Share type and resource ID are required");
-      }
-
-      let endpoint;
-      let body;
-
-      switch (shareType) {
-        case "note":
-          endpoint = "/sharing/links/notes";
-          body = { note_id: resourceId };
-          break;
-        case "page":
-          endpoint = "/sharing/links/pages";
-          body = { page_url: resourceId };
-          break;
-        case "site":
-          endpoint = "/sharing/links/sites";
-          body = { domain: resourceId };
-          break;
-        default:
-          throw new Error(`Invalid share type: ${shareType}`);
-      }
-
-      const response = await this.makeRequest(endpoint, {
-        method: "POST",
+      const response = await this.makeRequest(`/sites/${siteId}/share/${userId}`, {
+        method: "PATCH",
         body: JSON.stringify(body),
       });
 
-      const result = await response.json();
-      console.log(`[Web Notes] Generated share link for ${shareType}: ${resourceId}`);
-      return result.share_link;
+      const updatedShare = await response.json();
+      console.log(`[Web Notes] Updated site share permission for user ${userId} to ${newPermission}`);
+      return updatedShare;
     } catch (error) {
-      console.error("[Web Notes] Failed to generate share link:", error);
+      console.error("[Web Notes] Failed to update site share permission:", error);
       throw error;
     }
   },
 
   /**
-   * Check sharing status for a resource
-   * @param {string} shareType - Type of share (note, page, site)
-   * @param {string} resourceId - Resource identifier
-   * @returns {Promise<Object>} Sharing status
+   * Remove a page share
+   * @param {number} pageId - Page ID
+   * @param {number} userId - User ID
+   * @returns {Promise<void>}
    */
-  async getSharingStatus(shareType, resourceId) {
+  async removePageShare(pageId, userId) {
     try {
-      if (!shareType || !resourceId) {
-        throw new Error("Share type and resource ID are required");
+      if (!pageId || !userId) {
+        throw new Error("Page ID and user ID are required");
       }
 
-      let endpoint;
+      await this.makeRequest(`/pages/${pageId}/share/${userId}`, {
+        method: "DELETE",
+      });
 
-      switch (shareType) {
-        case "note":
-          endpoint = `/sharing/status/notes/${encodeURIComponent(resourceId)}`;
-          break;
-        case "page":
-          endpoint = `/sharing/status/pages?url=${encodeURIComponent(resourceId)}`;
-          break;
-        case "site":
-          endpoint = `/sharing/status/sites/${encodeURIComponent(resourceId)}`;
-          break;
-        default:
-          throw new Error(`Invalid share type: ${shareType}`);
-      }
-
-      const response = await this.makeRequest(endpoint);
-      const status = await response.json();
-
-      console.log(`[Web Notes] Retrieved sharing status for ${shareType}: ${resourceId}`);
-      return status;
+      console.log(`[Web Notes] Removed page share for user ${userId}`);
     } catch (error) {
-      console.error("[Web Notes] Failed to get sharing status:", error);
+      console.error("[Web Notes] Failed to remove page share:", error);
       throw error;
     }
   },
 
   /**
-   * Validate user email for sharing
-   * @param {string} email - Email to validate
-   * @returns {Promise<Object>} Validation result
+   * Remove a site share
+   * @param {number} siteId - Site ID
+   * @param {number} userId - User ID
+   * @returns {Promise<void>}
    */
-  async validateUserEmail(email) {
+  async removeSiteShare(siteId, userId) {
     try {
-      if (!email) {
-        throw new Error("Email is required");
+      if (!siteId || !userId) {
+        throw new Error("Site ID and user ID are required");
       }
 
-      const response = await this.makeRequest("/users/validate-email", {
+      await this.makeRequest(`/sites/${siteId}/share/${userId}`, {
+        method: "DELETE",
+      });
+
+      console.log(`[Web Notes] Removed site share for user ${userId}`);
+    } catch (error) {
+      console.error("[Web Notes] Failed to remove site share:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Invite a user to share a resource (pre-registration)
+   * @param {string} userEmail - Email of user to invite
+   * @param {string} resourceType - Type of resource (site or page)
+   * @param {number} resourceId - Resource ID
+   * @param {string} permissionLevel - Permission level (view, edit, admin)
+   * @param {string} invitationMessage - Optional invitation message
+   * @returns {Promise<Object>} Invitation response
+   */
+  async inviteUser(userEmail, resourceType, resourceId, permissionLevel, invitationMessage = null) {
+    try {
+      if (!userEmail || !resourceType || !resourceId || !permissionLevel) {
+        throw new Error("Email, resource type, resource ID, and permission level are required");
+      }
+
+      const response = await this.makeRequest("/invite", {
         method: "POST",
         body: JSON.stringify({
-          email: email.toLowerCase().trim(),
+          user_email: userEmail.toLowerCase().trim(),
+          resource_type: resourceType.toLowerCase(),
+          resource_id: resourceId,
+          permission_level: permissionLevel.toLowerCase(),
+          invitation_message: invitationMessage,
         }),
       });
 
-      const result = await response.json();
-      console.log(`[Web Notes] Validated email ${email}: ${result.is_valid ? "valid" : "invalid"}`);
-      return result;
+      const invite = await response.json();
+      console.log(`[Web Notes] Invited ${userEmail} to ${resourceType} ${resourceId}`);
+      return invite;
     } catch (error) {
-      console.error("[Web Notes] Failed to validate email:", error);
+      console.error("[Web Notes] Failed to invite user:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Bulk share a page with multiple users
+   * @param {number} pageId - Page ID
+   * @param {Array} shareRequests - Array of {user_email, permission_level} objects
+   * @returns {Promise<Array>} Array of created shares
+   */
+  async bulkSharePage(pageId, shareRequests) {
+    try {
+      if (!pageId || !shareRequests || !Array.isArray(shareRequests)) {
+        throw new Error("Page ID and share requests array are required");
+      }
+
+      const response = await this.makeRequest(`/pages/${pageId}/share/bulk`, {
+        method: "POST",
+        body: JSON.stringify(shareRequests),
+      });
+
+      const shares = await response.json();
+      console.log(`[Web Notes] Bulk shared page ${pageId} with ${shares.length} users`);
+      return shares;
+    } catch (error) {
+      console.error("[Web Notes] Failed to bulk share page:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Bulk share a site with multiple users
+   * @param {number} siteId - Site ID
+   * @param {Array} shareRequests - Array of {user_email, permission_level} objects
+   * @returns {Promise<Array>} Array of created shares
+   */
+  async bulkShareSite(siteId, shareRequests) {
+    try {
+      if (!siteId || !shareRequests || !Array.isArray(shareRequests)) {
+        throw new Error("Site ID and share requests array are required");
+      }
+
+      const response = await this.makeRequest(`/sites/${siteId}/share/bulk`, {
+        method: "POST",
+        body: JSON.stringify(shareRequests),
+      });
+
+      const shares = await response.json();
+      console.log(`[Web Notes] Bulk shared site ${siteId} with ${shares.length} users`);
+      return shares;
+    } catch (error) {
+      console.error("[Web Notes] Failed to bulk share site:", error);
       throw error;
     }
   },
