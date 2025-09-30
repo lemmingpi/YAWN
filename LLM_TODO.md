@@ -12,17 +12,17 @@
 - Migrations: 7d6eb6277e6d, 90896c04e8d6
 - Cost tracking fields added
 
-### 🔄 Phase 1.2: Cost Tracking Service (NEXT)
+### ✅ Phase 1.2: Cost Tracking Service (COMPLETE)
 - Create backend/app/services/cost_tracker.py
 - Implement calculate_cost() with model pricing
 - Models: Gemini 2.0 Flash, Claude 3.5, GPT-4
 
-### 📋 Phase 1.3: Gemini Provider
+### ✅ Phase 1.3: Gemini Provider (COMPLETE)
 - backend/app/services/gemini_provider.py
 - Use google-generativeai package
 - Implement rate limiting and error handling
 
-### 📋 Phase 2.1: Context Assembly Service
+### ✅ Phase 2.1: Context Assembly Service (COMPLETE)
 - backend/app/services/context_builder.py
 - Build prompts from note + page_section_html + highlighted_text
 - Template system for different artifact types
