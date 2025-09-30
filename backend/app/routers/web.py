@@ -223,6 +223,15 @@ async def note_detail_page(
             status_code=404,
         )
 
+    # Get artifact count for this note
+    artifact_count_result = await db.execute(
+        select(func.count(NoteArtifact.id)).where(NoteArtifact.note_id == note.id)
+    )
+    artifacts_count = artifact_count_result.scalar() or 0
+
+    # Add artifacts_count as a dynamic attribute
+    note.artifacts_count = artifacts_count
+
     return templates.TemplateResponse(
         "note_detail.html",
         {"request": request, "note": note, "google_client_id": GOOGLE_CLIENT_ID},
