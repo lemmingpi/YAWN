@@ -32,15 +32,15 @@
 - Include site/page metadata
 - Smart truncation for token limits
 
-### 📋 Phase 3.1: Generate Endpoint
+### ✅ Phase 3.1: Generate Endpoint (COMPLETE)
 - POST /api/artifacts/generate/note/{note_id}
-- Parameters: artifact_type, user_description, generation_mode
-- Return: artifact content + cost estimate
+- Parameters: artifact_type, llm_provider_id, custom_prompt
+- Return: artifact content + cost + tokens + metadata
 
-### 📋 Phase 3.2: Preview Endpoint
+### ✅ Phase 3.2: Preview Endpoint (COMPLETE)
 - POST /api/artifacts/preview/note/{note_id}
 - Show prompt without generating
-- Return token count and cost estimate
+- Return token count and cost estimate + context summary
 
 ### 📋 Phase 3.3: Paste Endpoint
 - POST /api/artifacts/paste
