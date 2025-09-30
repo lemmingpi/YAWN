@@ -444,6 +444,37 @@ class ArtifactPreviewResponse(BaseModel):
     context_summary: dict = Field(..., description="Summary of available context")
 
 
+class ArtifactPasteRequest(BaseModel):
+    """Schema for manually pasted artifact content."""
+
+    note_id: int = Field(..., description="ID of the note this artifact is for")
+    artifact_type: str = Field(
+        ..., min_length=1, max_length=50, description="Type of artifact"
+    )
+    content: str = Field(..., min_length=1, description="Pasted artifact content")
+    source_model: Optional[str] = Field(
+        None, description="Model used (if known, e.g., 'ChatGPT', 'Claude', 'Gemini')"
+    )
+    prompt_used: Optional[str] = Field(
+        None, description="Prompt that was used (if available)"
+    )
+    user_notes: Optional[str] = Field(
+        None, max_length=500, description="Optional user notes about this artifact"
+    )
+
+
+class ArtifactPasteResponse(BaseModel):
+    """Schema for pasted artifact response."""
+
+    artifact_id: int = Field(..., description="ID of the created artifact")
+    note_id: int = Field(..., description="ID of the associated note")
+    artifact_type: str = Field(..., description="Type of artifact")
+    generation_source: str = Field(
+        default="user_pasted", description="Source of generation"
+    )
+    created_at: datetime = Field(..., description="When the artifact was created")
+
+
 # Page summarization request schemas
 class PageSummarizationRequest(BaseModel):
     """Schema for page summarization requests."""

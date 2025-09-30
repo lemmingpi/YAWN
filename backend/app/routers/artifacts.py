@@ -16,6 +16,8 @@ from ..models import LLMProvider, Note, NoteArtifact, Page
 from ..schemas import (
     ArtifactGenerationRequest,
     ArtifactGenerationResponse,
+    ArtifactPasteRequest,
+    ArtifactPasteResponse,
     ArtifactPreviewRequest,
     ArtifactPreviewResponse,
     NoteArtifactCreate,
@@ -520,6 +522,73 @@ async def preview_artifact(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Preview failed: {str(e)}",
         )
+
+
+@router.post("/paste", response_model=ArtifactPasteResponse)
+async def paste_artifact(
+    request: ArtifactPasteRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ArtifactPasteResponse:
+    """Save manually pasted artifact content.
+
+    Allows users to generate artifacts outside the system (ChatGPT, Claude, etc.)
+    and paste them in for storage and tracking.
+
+    Args:
+        request: Pasted artifact data
+        db: Database session
+
+    Returns:
+        Created artifact metadata
+
+    Raises:
+        HTTPException: If note not found
+    """
+    from datetime import datetime, timezone
+
+    # Verify note exists
+    result = await db.execute(select(Note).where(Note.id == request.note_id))
+    note = result.scalar_one_or_none()
+
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Note with ID {request.note_id} not found",
+        )
+
+    # Create artifact with user_pasted source
+    generation_metadata = {
+        "source": "user_pasted",
+        "source_model": request.source_model,
+        "user_notes": request.user_notes,
+        "pasted_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    artifact = NoteArtifact(
+        note_id=request.note_id,
+        artifact_type=request.artifact_type,
+        content=request.content,
+        prompt_used=request.prompt_used,
+        generation_source="user_pasted",
+        generation_metadata=generation_metadata,
+        llm_provider_id=None,  # No provider for pasted content
+        input_tokens=None,  # Unknown for pasted content
+        output_tokens=None,
+        cost_usd=None,
+        generated_at=datetime.now(timezone.utc),
+    )
+
+    db.add(artifact)
+    await db.commit()
+    await db.refresh(artifact)
+
+    return ArtifactPasteResponse(
+        artifact_id=artifact.id,
+        note_id=artifact.note_id,
+        artifact_type=artifact.artifact_type,
+        generation_source=artifact.generation_source,
+        created_at=artifact.created_at,
+    )
 
 
 @router.get("/types", response_model=List[str])
