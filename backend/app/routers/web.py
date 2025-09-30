@@ -4,6 +4,7 @@ This module provides web routes that serve HTML pages for the
 Web Notes dashboard interface.
 """
 
+import os
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Request
@@ -19,6 +20,9 @@ router = APIRouter(prefix="/app", tags=["web"])
 
 # Initialize Jinja2 templates
 templates = Jinja2Templates(directory="app/templates")
+
+# Get Google Client ID from environment
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -78,6 +82,7 @@ async def dashboard(
             "stats": stats,
             "recent_sites": recent_sites,
             "recent_notes": recent_notes,
+            "google_client_id": GOOGLE_CLIENT_ID,
         },
     )
 
@@ -95,7 +100,9 @@ async def sites_page(
     Returns:
         Rendered sites HTML page
     """
-    return templates.TemplateResponse("sites.html", {"request": request})
+    return templates.TemplateResponse(
+        "sites.html", {"request": request, "google_client_id": GOOGLE_CLIENT_ID}
+    )
 
 
 @router.get("/sites/{site_id}", response_class=HTMLResponse)
@@ -120,12 +127,17 @@ async def site_detail_page(
         # Return 404 page or redirect
         return templates.TemplateResponse(
             "404.html",
-            {"request": request, "message": f"Site with ID {site_id} not found"},
+            {
+                "request": request,
+                "message": f"Site with ID {site_id} not found",
+                "google_client_id": GOOGLE_CLIENT_ID,
+            },
             status_code=404,
         )
 
     return templates.TemplateResponse(
-        "site_detail.html", {"request": request, "site": site}
+        "site_detail.html",
+        {"request": request, "site": site, "google_client_id": GOOGLE_CLIENT_ID},
     )
 
 
@@ -150,12 +162,17 @@ async def page_detail_page(
     if not page:
         return templates.TemplateResponse(
             "404.html",
-            {"request": request, "message": f"Page with ID {page_id} not found"},
+            {
+                "request": request,
+                "message": f"Page with ID {page_id} not found",
+                "google_client_id": GOOGLE_CLIENT_ID,
+            },
             status_code=404,
         )
 
     return templates.TemplateResponse(
-        "page_detail.html", {"request": request, "page": page}
+        "page_detail.html",
+        {"request": request, "page": page, "google_client_id": GOOGLE_CLIENT_ID},
     )
 
 
@@ -172,7 +189,9 @@ async def notes_page(
     Returns:
         Rendered notes HTML page
     """
-    return templates.TemplateResponse("notes.html", {"request": request})
+    return templates.TemplateResponse(
+        "notes.html", {"request": request, "google_client_id": GOOGLE_CLIENT_ID}
+    )
 
 
 @router.get("/notes/{note_id}", response_class=HTMLResponse)
@@ -196,12 +215,17 @@ async def note_detail_page(
     if not note:
         return templates.TemplateResponse(
             "404.html",
-            {"request": request, "message": f"Note with ID {note_id} not found"},
+            {
+                "request": request,
+                "message": f"Note with ID {note_id} not found",
+                "google_client_id": GOOGLE_CLIENT_ID,
+            },
             status_code=404,
         )
 
     return templates.TemplateResponse(
-        "note_detail.html", {"request": request, "note": note}
+        "note_detail.html",
+        {"request": request, "note": note, "google_client_id": GOOGLE_CLIENT_ID},
     )
 
 
@@ -218,7 +242,9 @@ async def artifacts_page(
     Returns:
         Rendered artifacts HTML page
     """
-    return templates.TemplateResponse("artifacts.html", {"request": request})
+    return templates.TemplateResponse(
+        "artifacts.html", {"request": request, "google_client_id": GOOGLE_CLIENT_ID}
+    )
 
 
 @router.get("/llm-providers", response_class=HTMLResponse)
@@ -234,7 +260,10 @@ async def llm_providers_page(
     Returns:
         Rendered LLM providers HTML page
     """
-    return templates.TemplateResponse("llm_providers.html", {"request": request})
+    return templates.TemplateResponse(
+        "llm_providers.html",
+        {"request": request, "google_client_id": GOOGLE_CLIENT_ID},
+    )
 
 
 async def get_dashboard_stats(db: AsyncSession) -> Dict[str, Any]:

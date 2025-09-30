@@ -317,7 +317,7 @@ class SiteDetailManager {
     async loadStats() {
         try {
             // Load pages stats
-            const pagesResponse = await fetch(`/api/pages?site_id=${this.siteId}&limit=1000`);
+            const pagesResponse = await authenticatedFetch(`/api/pages?site_id=${this.siteId}&limit=1000`);
             const pages = await pagesResponse.json();
             document.getElementById('totalPages').textContent = pages.length;
 
@@ -329,7 +329,7 @@ class SiteDetailManager {
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
             for (const page of pages) {
-                const notesResponse = await fetch(`/api/notes?page_id=${page.id}&limit=1000`);
+                const notesResponse = await authenticatedFetch(`/api/notes?page_id=${page.id}&limit=1000`);
                 const notes = await notesResponse.json();
                 totalNotes += notes.length;
 
@@ -361,7 +361,7 @@ class SiteDetailManager {
             });
             if (search) params.append('search', search);
 
-            const response = await fetch(`/api/pages?${params}`);
+            const response = await authenticatedFetch(`/api/pages?${params}`);
             const pages = await response.json();
 
             this.renderPages(pages);
@@ -416,7 +416,7 @@ class SiteDetailManager {
             const search = document.getElementById('notesSearch').value.trim();
 
             // First get all pages for this site
-            const pagesResponse = await fetch(`/api/pages?site_id=${this.siteId}&limit=1000`);
+            const pagesResponse = await authenticatedFetch(`/api/pages?site_id=${this.siteId}&limit=1000`);
             const pages = await pagesResponse.json();
 
             let allNotes = [];
@@ -427,7 +427,7 @@ class SiteDetailManager {
                 });
                 if (search) params.append('search', search);
 
-                const notesResponse = await fetch(`/api/notes?${params}`);
+                const notesResponse = await authenticatedFetch(`/api/notes?${params}`);
                 const notes = await notesResponse.json();
 
                 // Add page info to each note
@@ -489,13 +489,13 @@ class SiteDetailManager {
     async loadActivity() {
         try {
             // Get recent activity for this site
-            const pagesResponse = await fetch(`/api/pages?site_id=${this.siteId}&limit=1000`);
+            const pagesResponse = await authenticatedFetch(`/api/pages?site_id=${this.siteId}&limit=1000`);
             const pages = await pagesResponse.json();
 
             let activities = [];
 
             for (const page of pages) {
-                const notesResponse = await fetch(`/api/notes?page_id=${page.id}&limit=50`);
+                const notesResponse = await authenticatedFetch(`/api/notes?page_id=${page.id}&limit=50`);
                 const notes = await notesResponse.json();
 
                 notes.forEach(note => {
@@ -581,7 +581,7 @@ class SiteDetailManager {
         const isActive = document.getElementById('editSiteActive').checked;
 
         try {
-            const response = await fetch(`/api/sites/${this.siteId}`, {
+            const response = await authenticatedFetch(`/api/sites/${this.siteId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

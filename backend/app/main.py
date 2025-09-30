@@ -12,7 +12,8 @@ from typing import AsyncGenerator, Dict
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 # Load environment variables from file specified by ENV_FILE (fallback to ".env")
 load_dotenv(os.getenv("ENV_FILE", ".env"))
@@ -126,8 +127,14 @@ app.include_router(sharing.router)
 # Include web dashboard router
 app.include_router(web.router)
 
-# Static files for web interface (if needed)
-# app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# Static files for web interface
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> FileResponse:
+    """Serve favicon."""
+    return FileResponse("app/static/favicon.ico")
 
 
 @app.get("/", response_class=RedirectResponse)

@@ -243,7 +243,7 @@ class SitesManager {
             if (status === 'active') params.append('is_active', 'true');
             if (status === 'inactive') params.append('is_active', 'false');
 
-            const response = await fetch(`/api/sites?${params}`);
+            const response = await authenticatedFetch(`/api/sites?${params}`);
             const sites = await response.json();
 
             this.renderSites(sites);
@@ -329,7 +329,7 @@ class SitesManager {
         const userContext = document.getElementById('siteContext').value.trim();
 
         try {
-            const response = await fetch('/api/sites/', {
+            const response = await authenticatedFetch('/api/sites/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -358,7 +358,7 @@ class SitesManager {
 
     async editSite(siteId) {
         try {
-            const response = await fetch(`/api/sites/${siteId}`);
+            const response = await authenticatedFetch(`/api/sites/${siteId}`);
             const site = await response.json();
 
             document.getElementById('editSiteId').value = site.id;
@@ -383,7 +383,7 @@ class SitesManager {
         const isActive = document.getElementById('editSiteActive').checked;
 
         try {
-            const response = await fetch(`/api/sites/${siteId}`, {
+            const response = await authenticatedFetch(`/api/sites/${siteId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -416,7 +416,7 @@ class SitesManager {
         }
 
         try {
-            const response = await fetch(`/api/sites/${siteId}`, {
+            const response = await authenticatedFetch(`/api/sites/${siteId}`, {
                 method: 'DELETE'
             });
 

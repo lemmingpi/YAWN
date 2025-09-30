@@ -331,7 +331,7 @@ class NoteDetailManager {
 
     async loadPageInfo() {
         try {
-            const response = await fetch(`/api/pages/${this.pageId}`);
+            const response = await authenticatedFetch(`/api/pages/${this.pageId}`);
             const page = await response.json();
 
             document.getElementById('pageInfo').innerHTML = `
@@ -367,7 +367,7 @@ class NoteDetailManager {
 
     async loadArtifacts() {
         try {
-            const response = await fetch(`/api/notes/${this.noteId}/artifacts`);
+            const response = await authenticatedFetch(`/api/notes/${this.noteId}/artifacts`);
             const artifacts = await response.json();
 
             this.renderArtifacts(artifacts);
@@ -448,7 +448,7 @@ class NoteDetailManager {
 
     async loadLLMProviders() {
         try {
-            const response = await fetch('/api/llm-providers/');
+            const response = await authenticatedFetch('/api/llm-providers/');
             const providers = await response.json();
 
             const select = document.getElementById('llmProvider');
@@ -479,7 +479,7 @@ class NoteDetailManager {
         };
 
         try {
-            const response = await fetch(`/api/notes/${this.noteId}`, {
+            const response = await authenticatedFetch(`/api/notes/${this.noteId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -528,7 +528,7 @@ class NoteDetailManager {
                 requestData.custom_prompt = customPrompt;
             }
 
-            const response = await fetch(`/api/artifacts/generate/note/${this.noteId}`, {
+            const response = await authenticatedFetch(`/api/artifacts/generate/note/${this.noteId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -584,7 +584,7 @@ async function deleteNote() {
     }
 
     try {
-        const response = await fetch(`/api/notes/{{ note.id }}`, {
+        const response = await authenticatedFetch(`/api/notes/{{ note.id }}`, {
             method: 'DELETE'
         });
 
@@ -603,7 +603,7 @@ async function deleteNote() {
 
 async function copyArtifact(artifactId) {
     try {
-        const response = await fetch(`/api/artifacts/${artifactId}`);
+        const response = await authenticatedFetch(`/api/artifacts/${artifactId}`);
         const artifact = await response.json();
 
         await navigator.clipboard.writeText(artifact.content);
@@ -625,7 +625,7 @@ async function deleteArtifact(artifactId) {
     }
 
     try {
-        const response = await fetch(`/api/artifacts/${artifactId}`, {
+        const response = await authenticatedFetch(`/api/artifacts/${artifactId}`, {
             method: 'DELETE'
         });
 

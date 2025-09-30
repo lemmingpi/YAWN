@@ -343,7 +343,7 @@ class NotesManager {
 
     async loadSites() {
         try {
-            const response = await fetch('/api/sites?limit=1000');
+            const response = await authenticatedFetch('/api/sites?limit=1000');
             const sites = await response.json();
 
             const siteFilter = document.getElementById('siteFilter');
@@ -360,7 +360,7 @@ class NotesManager {
 
     async loadPages() {
         try {
-            const response = await fetch('/api/pages?limit=1000');
+            const response = await authenticatedFetch('/api/pages?limit=1000');
             const pages = await response.json();
 
             const pageSelect = document.getElementById('notePage');
@@ -391,7 +391,7 @@ class NotesManager {
             const siteId = document.getElementById('siteFilter').value;
             if (siteId) {
                 // Get pages for this site first
-                const pagesResponse = await fetch(`/api/pages?site_id=${siteId}&limit=1000`);
+                const pagesResponse = await authenticatedFetch(`/api/pages?site_id=${siteId}&limit=1000`);
                 const pages = await pagesResponse.json();
                 if (pages.length > 0) {
                     params.append('page_id', pages.map(p => p.id).join(','));
@@ -402,7 +402,7 @@ class NotesManager {
             if (status === 'active') params.append('is_active', 'true');
             if (status === 'inactive') params.append('is_active', 'false');
 
-            const response = await fetch(`/api/notes?${params}`);
+            const response = await authenticatedFetch(`/api/notes?${params}`);
             const notes = await response.json();
 
             // Filter by artifacts if needed
@@ -587,7 +587,7 @@ class NotesManager {
         };
 
         try {
-            const response = await fetch('/api/notes/', {
+            const response = await authenticatedFetch('/api/notes/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -673,7 +673,7 @@ async function bulkAction(action) {
         // For now, implement delete action (others would need bulk API endpoints)
         if (action === 'delete') {
             for (const noteId of noteIds) {
-                await fetch(`/api/notes/${noteId}`, { method: 'DELETE' });
+                await authenticatedFetch(`/api/notes/${noteId}`, { method: 'DELETE' });
             }
         }
 
