@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import LLMProvider, Note, NoteArtifact
+from ..models import LLMProvider, Note, NoteArtifact, Page
 from ..schemas import (
     ArtifactGenerationRequest,
     ArtifactGenerationResponse,
@@ -294,14 +294,15 @@ async def generate_note_artifact(
     request: NoteArtifactGenerationRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ArtifactGenerationResponse:
-    """Generate an artifact for a specific note using an LLM provider.
+    """Generate an artifact for a specific note using LLM.
 
-    This is a convenience endpoint that wraps the generic /generate endpoint
-    for easier frontend integration with note detail pages.
+    Uses the new Gemini provider, context builder, and cost tracking services.
+
+    Requires GOOGLE_AI_API_KEY environment variable to be set.
 
     Args:
         note_id: Note ID to generate artifact for
-        request: Artifact generation request data
+        request: Artifact generation request data (artifact_type, user_instructions)
         db: Database session
 
     Returns:
@@ -310,86 +311,115 @@ async def generate_note_artifact(
     Raises:
         HTTPException: If note or LLM provider not found or generation fails
 
-    TODO: Add webhook support for async generation notifications
-    TODO: Add hook system for custom pre/post-generation processing
-    TODO: Add rate limiting per user/note
-    TODO: Add generation queue for long-running requests
     """
-    from ..llm.base import LLMProviderError
-    from ..services.artifact_service import ArtifactGenerationService
+    import time
+    from datetime import datetime, timezone
 
-    # TODO: Pre-generation hook placeholder
-    # This is where you could call custom hooks before generation:
-    # - Validate user permissions
-    # - Check rate limits
-    # - Modify generation parameters
-    # - Log generation request
-    # Example:
-    # await call_pre_generation_hooks(note_id, request.llm_provider_id, request.artifact_type)
+    from sqlalchemy.orm import selectinload
 
-    service = ArtifactGenerationService(db)
+    from ..services.context_builder import ArtifactType, ContextBuilder
+    from ..services.gemini_provider import (
+        create_gemini_provider,
+        GeminiProviderError,
+        RateLimitError,
+    )
+
+    start_time = time.time()
 
     try:
-        # Verify note exists first
-        note_result = await db.execute(select(Note).where(Note.id == note_id))
-        note = note_result.scalar_one_or_none()
+        # Fetch note with all relationships
+        result = await db.execute(
+            select(Note)
+            .options(selectinload(Note.page).selectinload(Page.site))
+            .where(Note.id == note_id)
+        )
+        note = result.scalar_one_or_none()
+
         if not note:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Note with ID {note_id} not found",
             )
 
-        artifact = await service.generate_note_artifact(
-            note_id=note_id,
-            llm_provider_id=request.llm_provider_id,
-            artifact_type=request.artifact_type,
-            custom_prompt=request.custom_prompt,
+        # Validate artifact type
+        try:
+            artifact_type_enum = ArtifactType(request.artifact_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid artifact type: {request.artifact_type}. "
+                f"Valid types: {[t.value for t in ArtifactType]}",
+            )
+
+        # Build context and prompt
+        context_builder = ContextBuilder()
+        prompt = context_builder.build_prompt(
+            note=note,
+            artifact_type=artifact_type_enum,
+            user_instructions=request.custom_prompt,
         )
 
-        # Extract generation metadata
-        generation_metadata = artifact.generation_metadata or {}
-        llm_response_metadata = generation_metadata.get("llm_response", {})
-        service_metadata = generation_metadata.get("service_metadata", {})
+        # Generate using Gemini
+        provider = await create_gemini_provider()
+        generation_result = await provider.generate_content(
+            prompt=prompt,
+            max_output_tokens=4096,
+            temperature=0.7,
+        )
 
-        response = ArtifactGenerationResponse(
+        # Calculate generation time
+        generation_time_ms = int((time.time() - start_time) * 1000)
+
+        # Create artifact record
+        artifact = NoteArtifact(
+            note_id=note_id,
+            artifact_type=request.artifact_type,
+            content=generation_result["content"],
+            llm_provider_id=request.llm_provider_id,  # Use provided or default
+            input_tokens=generation_result["input_tokens"],
+            output_tokens=generation_result["output_tokens"],
+            cost_usd=generation_result["cost"],
+            generation_metadata={
+                "model": generation_result["model"],
+                "temperature": 0.7,
+                "max_output_tokens": 4096,
+                "generation_time_ms": generation_time_ms,
+                "prompt_length": len(prompt),
+            },
+            generated_at=datetime.now(timezone.utc),
+        )
+
+        db.add(artifact)
+        await db.commit()
+        await db.refresh(artifact)
+
+        return ArtifactGenerationResponse(
             artifact_id=artifact.id,
             content=artifact.content,
-            generation_time_ms=service_metadata.get("generation_time_ms", 0),
-            tokens_used=llm_response_metadata.get("tokens_used"),
+            generation_time_ms=generation_time_ms,
+            tokens_used=generation_result["input_tokens"]
+            + generation_result["output_tokens"],
         )
 
-        # TODO: Post-generation hook placeholder
-        # This is where you could call custom hooks after generation:
-        # - Send webhook notifications
-        # - Update analytics/metrics
-        # - Trigger follow-up actions
-        # - Cache results
-        # Example:
-        # await call_post_generation_hooks(artifact, response)
-
-        # TODO: Webhook notification placeholder
-        # If webhooks are configured, send async notification:
-        # await send_webhook_notification({
-        #     "event": "artifact.generated",
-        #     "note_id": note_id,
-        #     "artifact_id": artifact.id,
-        #     "artifact_type": artifact_type,
-        #     "timestamp": datetime.utcnow().isoformat()
-        # })
-
-        return response
-
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except LLMProviderError as e:
+    except RateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded: {str(e)}",
+        )
+    except GeminiProviderError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"LLM generation failed: {e}",
+            detail=f"LLM generation failed: {str(e)}",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Artifact generation failed: {e}",
+            detail=f"Artifact generation failed: {str(e)}",
         )
 
 
