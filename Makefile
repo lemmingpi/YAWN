@@ -102,7 +102,7 @@ dev: check-env ## Start development server with auto-reload
 	@echo "$(YELLOW)Docs:   http://localhost:8000/docs$(NC)"
 	@echo "$(YELLOW)Press Ctrl+C to stop$(NC)"
 	@echo ""
-	cd backend && $(PYTHON) -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --log-level info
+	cd backend && export ENV_FILE=env/env.dev && $(PYTHON) -m app.main --reload --log-level info
 
 test: check-env ## Run test suite with coverage
 	@echo "$(BLUE)Running test suite...$(NC)"

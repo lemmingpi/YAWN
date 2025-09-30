@@ -1,10 +1,14 @@
 <svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  <rect width="16" height="16" rx="3" fill="url(#grad)"/>
-  <text x="8" y="12" font-family="Arial, sans-serif" font-size="10" fill="white" text-anchor="middle">📝</text>
+  <!-- Background circle -->
+  <circle cx="8" cy="8" r="7.5" fill="#4A90E2" stroke="#2E5C8A" stroke-width="0.5"/>
+
+  <!-- Yawning mouth -->
+  <ellipse cx="8" cy="9" rx="3.5" ry="2.5" fill="#1a1a1a"/>
+
+  <!-- Sleepy eyes -->
+  <ellipse cx="6" cy="6" rx="1" ry="0.5" fill="#1a1a1a"/>
+  <ellipse cx="10" cy="6" rx="1" ry="0.5" fill="#1a1a1a"/>
+
+  <!-- Small Z -->
+  <text x="12" y="4" font-family="Arial, sans-serif" font-size="2" font-weight="bold" fill="#FFD700">Z</text>
 </svg>

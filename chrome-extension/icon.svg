@@ -6,8 +6,13 @@
   <ellipse cx="64" cy="72" rx="28" ry="20" fill="#1a1a1a"/>
 
   <!-- Sleepy eyes (half-closed) -->
-  <ellipse cx="48" cy="48" rx="8" ry="4" fill="#1a1a1a"/>
-  <ellipse cx="80" cy="48" rx="8" ry="4" fill="#1a1a1a"/>
+  <g>
+    <!-- Left eye -->
+    <ellipse cx="48" cy="48" rx="8" ry="4" fill="#1a1a1a"/>
+
+    <!-- Right eye -->
+    <ellipse cx="80" cy="48" rx="8" ry="4" fill="#1a1a1a"/>
+  </g>
 
   <!-- Notepad lines inside mouth (representing notes) -->
   <g opacity="0.3">
@@ -16,7 +21,7 @@
     <line x1="44" y1="80" x2="70" y2="80" stroke="#ffffff" stroke-width="2"/>
   </g>
 
-  <!-- Z's for sleepiness -->
+  <!-- Small "Z" for sleepiness -->
   <text x="96" y="32" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#FFD700">Z</text>
   <text x="102" y="24" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#FFD700" opacity="0.7">Z</text>
 </svg>

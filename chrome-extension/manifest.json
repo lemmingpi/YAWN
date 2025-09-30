@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Web Notes",
+  "name": "YAWN - Yet Another Web Note",
   "version": "1.0.0",
-  "description": "Sticky notes for web pages",
+  "description": "Yet Another Web Note - Sticky notes for web pages",
   "permissions": ["activeTab", "storage", "scripting", "contextMenus", "identity"],
   "host_permissions": ["http://localhost:8000/*", "https://*/*"],
   "action": {
@@ -38,5 +38,9 @@
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"
+  },
+  "oauth2": {
+    "client_id": "1040678620671-oe3ka3cuk6v5hm9s62hibhgtf983ktoo.apps.googleusercontent.com",
+    "scopes": ["openid", "email", "profile"]
   }
 }

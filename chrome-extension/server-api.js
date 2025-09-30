@@ -570,7 +570,7 @@ const ServerAPI = {
         throw new Error("Note ID, user email, and permission level are required");
       }
 
-      const response = await this.makeRequest("/shares/notes", {
+      const response = await this.makeRequest("/sharing/notes", {
         method: "POST",
         body: JSON.stringify({
           note_id: noteId,
@@ -601,7 +601,7 @@ const ServerAPI = {
         throw new Error("Page URL, user email, and permission level are required");
       }
 
-      const response = await this.makeRequest("/shares/pages", {
+      const response = await this.makeRequest("/sharing/pages", {
         method: "POST",
         body: JSON.stringify({
           page_url: pageUrl,
@@ -632,7 +632,7 @@ const ServerAPI = {
         throw new Error("Domain, user email, and permission level are required");
       }
 
-      const response = await this.makeRequest("/shares/sites", {
+      const response = await this.makeRequest("/sharing/sites", {
         method: "POST",
         body: JSON.stringify({
           domain: domain.toLowerCase(),
@@ -661,7 +661,7 @@ const ServerAPI = {
         throw new Error("Note ID is required");
       }
 
-      const response = await this.makeRequest(`/shares/notes/${encodeURIComponent(noteId)}`);
+      const response = await this.makeRequest(`/sharing/notes/${encodeURIComponent(noteId)}`);
       const shares = await response.json();
 
       console.log(`[Web Notes] Retrieved ${shares.length} shares for note ${noteId}`);
@@ -684,7 +684,7 @@ const ServerAPI = {
       }
 
       const encodedUrl = encodeURIComponent(pageUrl);
-      const response = await this.makeRequest(`/shares/pages?url=${encodedUrl}`);
+      const response = await this.makeRequest(`/sharing/pages?url=${encodedUrl}`);
       const shares = await response.json();
 
       console.log(`[Web Notes] Retrieved ${shares.length} shares for page ${pageUrl}`);
@@ -706,7 +706,7 @@ const ServerAPI = {
         throw new Error("Domain is required");
       }
 
-      const response = await this.makeRequest(`/shares/sites/${encodeURIComponent(domain)}`);
+      const response = await this.makeRequest(`/sharing/sites/${encodeURIComponent(domain)}`);
       const shares = await response.json();
 
       console.log(`[Web Notes] Retrieved ${shares.length} shares for site ${domain}`);
@@ -723,7 +723,7 @@ const ServerAPI = {
    */
   async getUserShares() {
     try {
-      const response = await this.makeRequest("/shares/user");
+      const response = await this.makeRequest("/sharing/user");
       const shares = await response.json();
 
       console.log(
@@ -755,18 +755,18 @@ const ServerAPI = {
 
       switch (shareType) {
         case "note":
-          endpoint = `/shares/notes/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
+          endpoint = `/sharing/notes/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
           body = { permission_level: newPermission.toUpperCase() };
           break;
         case "page":
-          endpoint = `/shares/pages/users/${encodeURIComponent(userId)}`;
+          endpoint = `/sharing/pages/users/${encodeURIComponent(userId)}`;
           body = {
             page_url: resourceId,
             permission_level: newPermission.toUpperCase(),
           };
           break;
         case "site":
-          endpoint = `/shares/sites/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
+          endpoint = `/sharing/sites/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
           body = { permission_level: newPermission.toUpperCase() };
           break;
         default:
@@ -804,13 +804,13 @@ const ServerAPI = {
 
       switch (shareType) {
         case "note":
-          endpoint = `/shares/notes/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
+          endpoint = `/sharing/notes/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
           break;
         case "page":
-          endpoint = `/shares/pages/users/${encodeURIComponent(userId)}?url=${encodeURIComponent(resourceId)}`;
+          endpoint = `/sharing/pages/users/${encodeURIComponent(userId)}?url=${encodeURIComponent(resourceId)}`;
           break;
         case "site":
-          endpoint = `/shares/sites/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
+          endpoint = `/sharing/sites/${encodeURIComponent(resourceId)}/users/${encodeURIComponent(userId)}`;
           break;
         default:
           throw new Error(`Invalid share type: ${shareType}`);
@@ -844,15 +844,15 @@ const ServerAPI = {
 
       switch (shareType) {
         case "note":
-          endpoint = "/shares/links/notes";
+          endpoint = "/sharing/links/notes";
           body = { note_id: resourceId };
           break;
         case "page":
-          endpoint = "/shares/links/pages";
+          endpoint = "/sharing/links/pages";
           body = { page_url: resourceId };
           break;
         case "site":
-          endpoint = "/shares/links/sites";
+          endpoint = "/sharing/links/sites";
           body = { domain: resourceId };
           break;
         default:
@@ -889,13 +889,13 @@ const ServerAPI = {
 
       switch (shareType) {
         case "note":
-          endpoint = `/shares/status/notes/${encodeURIComponent(resourceId)}`;
+          endpoint = `/sharing/status/notes/${encodeURIComponent(resourceId)}`;
           break;
         case "page":
-          endpoint = `/shares/status/pages?url=${encodeURIComponent(resourceId)}`;
+          endpoint = `/sharing/status/pages?url=${encodeURIComponent(resourceId)}`;
           break;
         case "site":
-          endpoint = `/shares/status/sites/${encodeURIComponent(resourceId)}`;
+          endpoint = `/sharing/status/sites/${encodeURIComponent(resourceId)}`;
           break;
         default:
           throw new Error(`Invalid share type: ${shareType}`);

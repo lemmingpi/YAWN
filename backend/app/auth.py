@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
+import httpx
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -44,8 +45,78 @@ class AuthenticationError(Exception):
         super().__init__(self.message)
 
 
+async def verify_chrome_identity_token(access_token: str) -> Dict[str, Any]:
+    """Verify Chrome Identity access token by calling Google's userinfo API.
+
+    Chrome Identity API returns OAuth2 access tokens, not ID tokens.
+    This function exchanges the access token for user information.
+
+    Args:
+        access_token: Chrome Identity OAuth2 access token
+
+    Returns:
+        Dict containing user information from Google
+
+    Raises:
+        AuthenticationError: If token verification fails
+    """
+    try:
+        # Call Google's userinfo endpoint with the access token
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10.0,
+            )
+
+            if response.status_code != 200:
+                raise AuthenticationError(
+                    f"Failed to verify token with Google: {response.status_code}",
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            user_info = response.json()
+
+            # Ensure required fields are present
+            if not user_info.get("email"):
+                raise AuthenticationError(
+                    "Email not provided by Google",
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            # Ensure email is verified
+            if not user_info.get("verified_email", False):
+                raise AuthenticationError(
+                    "Email address not verified with Google",
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            return user_info
+
+    except httpx.TimeoutException:
+        raise AuthenticationError(
+            "Timeout verifying token with Google",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    except httpx.HTTPError as e:
+        raise AuthenticationError(
+            f"HTTP error verifying token: {str(e)}",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    except Exception as e:
+        if isinstance(e, AuthenticationError):
+            raise
+        raise AuthenticationError(
+            f"Token verification failed: {str(e)}",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
 def verify_google_id_token(id_token_str: str) -> Dict[str, Any]:
     """Verify Google ID token using Google Auth library.
+
+    DEPRECATED: Use verify_chrome_identity_token for Chrome extensions.
+    This function is kept for backward compatibility with ID token flows.
 
     Args:
         id_token_str: Google ID token to verify
@@ -234,10 +305,13 @@ async def get_current_admin_user(
 async def create_user_from_google_token(
     google_id_token: str, display_name_override: Optional[str], session: AsyncSession
 ) -> User:
-    """Create or update user from Google ID token.
+    """Create or update user from Google/Chrome token.
+
+    Supports both Chrome Identity access tokens and Google ID tokens.
+    Chrome Identity tokens are verified via Google's userinfo API.
 
     Args:
-        google_id_token: Google ID token
+        google_id_token: Chrome Identity access token or Google ID token
         display_name_override: Optional display name override
         session: Database session
 
@@ -247,10 +321,15 @@ async def create_user_from_google_token(
     Raises:
         AuthenticationError: If token verification fails
     """
-    # Verify Google ID token and get user info
-    token_data = verify_google_id_token(google_id_token)
+    # Try Chrome Identity access token first (most common for extensions)
+    try:
+        token_data = await verify_chrome_identity_token(google_id_token)
+        chrome_user_id = token_data["id"]  # Chrome Identity uses "id" field
+    except AuthenticationError:
+        # Fallback to ID token verification for backward compatibility
+        token_data = verify_google_id_token(google_id_token)
+        chrome_user_id = token_data["sub"]  # ID tokens use "sub" field
 
-    chrome_user_id = token_data["sub"]
     email = token_data["email"]
     display_name = display_name_override or token_data.get("name", email.split("@")[0])
 

@@ -9,15 +9,33 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncGenerator, Dict
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from .database import create_tables
-from .llm.provider_manager import provider_manager
-from .middleware import RequestLoggingMiddleware, SecurityHeadersMiddleware
-from .routers import artifacts, llm_providers, notes, pages, sharing, sites, users, web
-from .schemas import HealthCheckResponse
+# Load environment variables from file specified by ENV_FILE (fallback to ".env")
+load_dotenv(os.getenv("ENV_FILE", ".env"))
+
+# Import settings after loading env so pydantic's BaseSettings picks up values
+from .config import settings  # noqa: E402
+from .database import create_tables  # noqa: E402
+from .llm.provider_manager import provider_manager  # noqa: E402
+from .middleware import (  # noqa: E402
+    RequestLoggingMiddleware,
+    SecurityHeadersMiddleware,
+)
+from .routers import (  # noqa: E402
+    artifacts,
+    llm_providers,
+    notes,
+    pages,
+    sharing,
+    sites,
+    users,
+    web,
+)
+from .schemas import HealthCheckResponse  # noqa: E402
 
 
 @asynccontextmanager
@@ -192,7 +210,10 @@ async def detailed_status() -> dict:
             "status": database_status,
             "type": "PostgreSQL",
             "url": (
-                os.getenv("DATABASE_URL", "postgresql://...").split("@")[1]
+                os.getenv(
+                    "DATABASE_URL",
+                    "postgresql+asyncpg://postgres:abcd@localhost:5432/webnotes",
+                ).split("@")[1]
                 if "@" in os.getenv("DATABASE_URL", "")
                 else "localhost:5432/webnotes"
             ),
@@ -232,12 +253,13 @@ async def not_found_handler(request: Request, exc: HTTPException) -> HTMLRespons
 if __name__ == "__main__":
     import uvicorn
 
-    # Development server configuration
+    print("Starting development server...")
+    # Development server configuration (use settings)
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
+        host=settings.HOST,
+        port=int(settings.PORT),
+        reload=bool(settings.DEBUG),
         reload_dirs=["app"],
         log_level="info",
     )

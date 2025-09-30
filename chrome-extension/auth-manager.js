@@ -196,7 +196,7 @@ const AuthManager = {
       this._authCache = {
         isAuthenticated: true,
         user: authResult.user,
-        jwtToken: authResult.token,
+        jwtToken: authResult.access_token,
         lastCheck: Date.now(),
       };
 
@@ -254,7 +254,11 @@ const AuthManager = {
         },
         token => {
           if (chrome.runtime.lastError) {
-            console.error("[Auth] Failed to get Google token:", chrome.runtime.lastError);
+            console.error(
+              "[Auth] Failed to get Google token:",
+              chrome.runtime.lastError.message || chrome.runtime.lastError
+            );
+            console.error("[Auth] Full error object:", chrome.runtime.lastError);
             resolve(null);
           } else {
             console.log("[Auth] Got Google token successfully");
@@ -286,7 +290,7 @@ const AuthManager = {
             Accept: "application/json",
           },
           body: JSON.stringify({
-            google_token: googleToken,
+            chrome_token: googleToken,
           }),
         });
       } catch (error) {
@@ -310,12 +314,12 @@ const AuthManager = {
 
       const result = await response.json();
 
-      if (!result.token || !result.user) {
+      if (!result.access_token || !result.user) {
         throw new Error("Invalid authentication response from server");
       }
 
       return {
-        token: result.token,
+        access_token: result.access_token,
         user: result.user,
       };
     } catch (error) {
@@ -543,7 +547,7 @@ const AuthManager = {
       this._authCache = {
         isAuthenticated: true,
         user: authResult.user,
-        jwtToken: authResult.token,
+        jwtToken: authResult.access_token,
         lastCheck: Date.now(),
       };
 
