@@ -400,8 +400,11 @@ document.addEventListener("DOMContentLoaded", async function () {
       signOutBtn.addEventListener("click", handleSignOut);
     }
 
-    // Set up authentication state listener
+    // Wait for AuthManager to initialize before updating UI
     if (typeof AuthManager !== "undefined") {
+      await AuthManager.initialize();
+
+      // Set up authentication state listener
       AuthManager.addAuthListener(async (event, data) => {
         console.log("[Popup] Auth state changed:", event, data);
         await updateUserStatus();

@@ -38,11 +38,28 @@ const AuthManager = {
   // Event listeners for authentication state changes
   _listeners: new Set(),
 
+  // Initialization promise
+  _initPromise: null,
+
   /**
    * Initialize authentication manager
    * @returns {Promise<void>}
    */
   async initialize() {
+    // Return existing promise if already initializing
+    if (this._initPromise) {
+      return this._initPromise;
+    }
+
+    this._initPromise = this._doInitialize();
+    return this._initPromise;
+  },
+
+  /**
+   * Internal initialization implementation
+   * @returns {Promise<void>}
+   */
+  async _doInitialize() {
     try {
       console.log("[Auth] Initializing authentication manager");
 

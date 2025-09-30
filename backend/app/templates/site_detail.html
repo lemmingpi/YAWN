@@ -384,9 +384,9 @@ class SiteDetailManager {
         tbody.innerHTML = pages.map(page => `
             <tr>
                 <td>
-                    <div class="fw-semibold">
+                    <a href="/app/pages/${page.id}" class="fw-semibold">
                         ${this.escapeHtml(page.title || 'Untitled Page')}
-                    </div>
+                    </a>
                 </td>
                 <td>
                     <a href="${this.escapeHtml(page.url)}" target="_blank" class="text-decoration-none">
@@ -395,7 +395,7 @@ class SiteDetailManager {
                     </a>
                 </td>
                 <td>
-                    <span class="badge bg-success">${page.note_count || 0}</span>
+                    <span class="badge bg-success">${page.notes_count || 0}</span>
                 </td>
                 <td>
                     <small class="text-muted">

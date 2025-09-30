@@ -224,39 +224,34 @@
   <body>
     <div class="header">
       <div class="logo">🗒️</div>
-      <h1>Web Notes</h1>
+      <h1>YAWN - Yet Another Web Notes App</h1>
       <div class="subtitle">Sticky notes for web pages</div>
+      <div class="version">Version 1.0.0</div>
     </div>
 
     <div class="content">
-      <div class="version">Version 1.0.0</div>
-
-      <button class="button" id="clear-stats">Clear Stats</button>
-
-      <div class="status">
-        <strong>Status:</strong>
-        Extension loaded successfully!
-      </div>
-
-      <div class="status" id="storage-stats">
-        <strong>Storage Stats:</strong>
-        <div id="stats-content">Loading...</div>
-      </div>
-
       <div class="config-section">
-        <strong>User Account:</strong>
+        <strong>(Optional) To sync to server you must login:</strong>
         <div class="user-status" id="user-status">
           <div id="signed-out-view">
             <div class="user-info">Not signed in - using local storage only</div>
+            <label>
+              <input type="checkbox" id="use-chrome-sync" />
+              Sync notes using Chrome Sync (no server needed)
+            </label>
             <button class="button" id="sign-in-btn">Sign In with Google</button>
           </div>
           <div id="signed-in-view" style="display: none">
             <div class="user-info">
-              <div id="user-name">Loading...</div>
               <div id="user-email">Loading...</div>
             </div>
             <button class="button" id="sign-out-btn">Sign Out</button>
           </div>
+        </div>
+        <strong>Configuration:</strong>
+        <div class="config-item">
+          <label for="sync-server-url">Sync Server URL:</label>
+          <input type="text" id="sync-server-url" placeholder="https://your-server.com/api" />
         </div>
       </div>
 
@@ -279,17 +274,13 @@
         </div>
       </div>
 
-      <div class="config-section">
-        <strong>Configuration:</strong>
-        <div class="config-item">
-          <label for="sync-server-url">Sync Server URL:</label>
-          <input type="text" id="sync-server-url" placeholder="https://your-server.com/api" />
-        </div>
-        <div class="config-item">
-          <label>
-            <input type="checkbox" id="use-chrome-sync" />
-            Use Chrome Sync
-          </label>
+      <div class="status">
+        <strong>Status:</strong>
+        Extension loaded successfully!
+        <button class="button" id="clear-stats">Clear Stats</button>
+        <div class="status" id="storage-stats">
+          <strong>Storage Stats:</strong>
+          <div id="stats-content">Loading...</div>
         </div>
       </div>
 
