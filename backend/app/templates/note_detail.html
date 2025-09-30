@@ -14,14 +14,14 @@
     </nav>
 
     <!-- Note Header -->
-    <div class="content-wrapper p-4 mb-4">
+    <div class="content-wrapper p-3 mb-3">
         <div class="row align-items-start">
             <div class="col-md-8">
-                <div class="d-flex align-items-start mb-3">
+                <div class="d-flex align-items-start mb-2">
                     <i class="bi bi-sticky display-6 text-primary me-3 mt-1"></i>
                     <div class="flex-grow-1">
-                        <h1 class="h3 mb-2">Note #{{ note.id }}</h1>
-                        <div class="mb-3">
+                        <h1 class="h4 mb-2">Note #{{ note.id }}</h1>
+                        <div class="mb-2">
                             <span class="badge {{ 'bg-success' if note.is_active else 'bg-secondary' }} me-2">
                                 {{ 'Active' if note.is_active else 'Inactive' }}
                             </span>
@@ -32,8 +32,8 @@
                             <span class="badge bg-info">Synced</span>
                             {% endif %}
                         </div>
-                        <div class="note-content-display p-3 bg-light rounded">
-                            <p class="mb-0">{{ note.content }}</p>
+                        <div class="note-content-display p-2 bg-light rounded">
+                            <p class="mb-0 small">{{ note.content }}</p>
                         </div>
                     </div>
                 </div>
@@ -41,29 +41,29 @@
                 <!-- Note Metadata -->
                 <div class="row text-muted small">
                     <div class="col-md-6">
-                        <p class="mb-1"><strong>Created:</strong> {{ note.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
-                        <p class="mb-1"><strong>Last Updated:</strong> {{ note.updated_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                        <p class="mb-1"><strong>Created:</strong> {{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</p>
+                        <p class="mb-0"><strong>Updated:</strong> {{ note.updated_at.strftime('%b %d, %Y %I:%M %p') }}</p>
                     </div>
                     <div class="col-md-6">
-                        <p class="mb-1"><strong>Position:</strong> X: {{ note.position_x }}, Y: {{ note.position_y }}</p>
+                        <p class="mb-1"><strong>Position:</strong> ({{ note.position_x }}, {{ note.position_y }})</p>
                         {% if note.server_link_id %}
-                        <p class="mb-1"><strong>Server Link ID:</strong> {{ note.server_link_id }}</p>
+                        <p class="mb-0"><strong>Server Link:</strong> {{ note.server_link_id }}</p>
                         {% endif %}
                     </div>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="d-grid gap-2">
-                    <button class="btn btn-outline-primary" onclick="editNote()">
+                    <button class="btn btn-sm btn-outline-primary" onclick="editNote()">
                         <i class="bi bi-pencil me-1"></i>Edit Note
                     </button>
-                    <button class="btn btn-outline-success" onclick="generateArtifact()" id="generateBtn">
+                    <button class="btn btn-sm btn-outline-success" onclick="generateArtifact()" id="generateBtn">
                         <i class="bi bi-magic me-1"></i>Generate Artifact
                     </button>
-                    <a href="{{ note.page_url if note.page_url else '#' }}" target="_blank" class="btn btn-outline-info" {{ 'disabled' if not note.page_url else '' }}>
+                    <a href="{{ note.page_url if note.page_url else '#' }}" target="_blank" class="btn btn-sm btn-outline-info" {{ 'disabled' if not note.page_url else '' }}>
                         <i class="bi bi-box-arrow-up-right me-1"></i>View Page
                     </a>
-                    <button class="btn btn-outline-danger" onclick="deleteNote()">
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteNote()">
                         <i class="bi bi-trash me-1"></i>Delete Note
                     </button>
                 </div>
@@ -72,68 +72,80 @@
     </div>
 
     <!-- Page Information -->
-    <div class="content-wrapper p-4 mb-4">
-        <h5 class="mb-3">
-            <i class="bi bi-file-earmark text-primary me-2"></i>Page Information
-        </h5>
-        <div id="pageInfo">
-            <div class="text-center py-3">
-                <div class="spinner-border spinner-border-sm text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
+    <div class="content-wrapper p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#pageInfoCollapse">
+            <h6 class="mb-0">
+                <i class="bi bi-file-earmark text-primary me-2"></i>Page Information
+            </h6>
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div id="pageInfoCollapse" class="collapse">
+            <hr class="my-2">
+            <div id="pageInfo">
+                <div class="text-center py-2">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span class="ms-2">Loading page information...</span>
                 </div>
-                <span class="ms-2">Loading page information...</span>
             </div>
         </div>
     </div>
 
     <!-- Technical Details -->
-    <div class="content-wrapper p-4 mb-4">
-        <h5 class="mb-3">
-            <i class="bi bi-code-square text-primary me-2"></i>Technical Details
-        </h5>
-        <div class="row">
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label class="form-label text-muted">Element Selector</label>
-                    <code class="d-block p-2 bg-light rounded">
-                        {{ note.element_selector or 'Not specified' }}
-                    </code>
+    <div class="content-wrapper p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#technicalDetailsCollapse">
+            <h6 class="mb-0">
+                <i class="bi bi-code-square text-primary me-2"></i>Technical Details
+            </h6>
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div id="technicalDetailsCollapse" class="collapse">
+            <hr class="my-2">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-2">
+                        <label class="form-label text-muted small mb-1">Element Selector</label>
+                        <code class="d-block p-2 bg-light rounded small">
+                            {{ note.element_selector or 'Not specified' }}
+                        </code>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label text-muted small mb-1">Anchor Data</label>
+                        <pre class="bg-light p-2 rounded small mb-0">{{ note.anchor_data or 'No anchor data' }}</pre>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label text-muted">Anchor Data</label>
-                    <pre class="bg-light p-2 rounded small">{{ note.anchor_data or 'No anchor data' }}</pre>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label class="form-label text-muted">Element XPath</label>
-                    <code class="d-block p-2 bg-light rounded">
-                        {{ note.element_xpath or 'Not specified' }}
-                    </code>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label text-muted">Position Offset</label>
-                    <code class="d-block p-2 bg-light rounded">
-                        X: {{ note.offset_x or 0 }}, Y: {{ note.offset_y or 0 }}
-                    </code>
+                <div class="col-md-6">
+                    <div class="mb-2">
+                        <label class="form-label text-muted small mb-1">Element XPath</label>
+                        <code class="d-block p-2 bg-light rounded small">
+                            {{ note.element_xpath or 'Not specified' }}
+                        </code>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label text-muted small mb-1">Position Offset</label>
+                        <code class="d-block p-2 bg-light rounded small">
+                            X: {{ note.offset_x or 0 }}, Y: {{ note.offset_y or 0 }}
+                        </code>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Artifacts Section -->
-    <div class="content-wrapper p-4">
+    <div class="content-wrapper p-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">
+            <h6 class="mb-0">
                 <i class="bi bi-magic text-primary me-2"></i>Generated Artifacts
-            </h5>
+            </h6>
             <button class="btn btn-primary btn-sm" onclick="generateArtifact()">
                 <i class="bi bi-plus-circle me-1"></i>Generate New
             </button>
         </div>
 
         <div id="artifactsContainer">
-            <div class="text-center py-3">
+            <div class="text-center py-2">
                 <div class="spinner-border spinner-border-sm text-primary" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
@@ -350,7 +362,7 @@ class NoteDetailManager {
                         </small>
                     </div>
                     <div class="col-md-4 text-end">
-                        <span class="badge bg-info">${page.note_count || 0} notes on this page</span>
+                        <span class="badge bg-info">${page.notes_count || 0} notes on this page</span>
                     </div>
                 </div>
             `;
