@@ -422,6 +422,28 @@ class ArtifactGenerationResponse(BaseModel):
     tokens_used: Optional[int] = Field(None, description="Number of tokens used")
 
 
+class ArtifactPreviewRequest(BaseModel):
+    """Schema for artifact preview requests (no generation)."""
+
+    artifact_type: str = Field(
+        ..., min_length=1, max_length=50, description="Type of artifact to preview"
+    )
+    custom_prompt: Optional[str] = Field(None, description="Custom user instructions")
+
+
+class ArtifactPreviewResponse(BaseModel):
+    """Schema for artifact preview responses."""
+
+    prompt: str = Field(..., description="Full prompt that would be sent to LLM")
+    estimated_input_tokens: int = Field(..., description="Estimated input token count")
+    estimated_output_tokens: int = Field(
+        default=1000, description="Estimated output token count (default assumption)"
+    )
+    estimated_cost_usd: float = Field(..., description="Estimated cost in USD")
+    model: str = Field(..., description="Model that would be used")
+    context_summary: dict = Field(..., description="Summary of available context")
+
+
 # Page summarization request schemas
 class PageSummarizationRequest(BaseModel):
     """Schema for page summarization requests."""

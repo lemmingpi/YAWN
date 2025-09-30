@@ -16,6 +16,8 @@ from ..models import LLMProvider, Note, NoteArtifact, Page
 from ..schemas import (
     ArtifactGenerationRequest,
     ArtifactGenerationResponse,
+    ArtifactPreviewRequest,
+    ArtifactPreviewResponse,
     NoteArtifactCreate,
     NoteArtifactResponse,
     NoteArtifactUpdate,
@@ -420,6 +422,103 @@ async def generate_note_artifact(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Artifact generation failed: {str(e)}",
+        )
+
+
+@router.post("/preview/note/{note_id}", response_model=ArtifactPreviewResponse)
+async def preview_artifact(
+    note_id: int,
+    request: ArtifactPreviewRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ArtifactPreviewResponse:
+    """Preview artifact generation without actually generating.
+
+    Shows the prompt that would be sent to the LLM and estimates cost.
+    Useful for users to review before committing to generation.
+
+    Args:
+        note_id: Note ID to preview artifact for
+        request: Preview request with artifact_type and optional custom_prompt
+        db: Database session
+
+    Returns:
+        Preview with prompt, token estimates, and cost
+
+    Raises:
+        HTTPException: If note not found or artifact type invalid
+    """
+    from sqlalchemy.orm import selectinload
+
+    from ..services.context_builder import ArtifactType, ContextBuilder
+    from ..services.cost_tracker import estimate_cost, LLMModel
+
+    try:
+        # Fetch note with relationships
+        result = await db.execute(
+            select(Note)
+            .options(selectinload(Note.page).selectinload(Page.site))
+            .where(Note.id == note_id)
+        )
+        note = result.scalar_one_or_none()
+
+        if not note:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Note with ID {note_id} not found",
+            )
+
+        # Validate artifact type
+        try:
+            artifact_type_enum = ArtifactType(request.artifact_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid artifact type: {request.artifact_type}. "
+                f"Valid types: {[t.value for t in ArtifactType]}",
+            )
+
+        # Build context and prompt
+        context_builder = ContextBuilder()
+        prompt = context_builder.build_prompt(
+            note=note,
+            artifact_type=artifact_type_enum,
+            user_instructions=request.custom_prompt,
+        )
+
+        # Get context summary
+        context_summary = context_builder.build_context_summary(note)
+
+        # Estimate tokens
+        estimated_input_tokens = context_builder.estimate_token_count(prompt)
+        estimated_output_tokens = 1000  # Default assumption
+
+        # Calculate estimated cost (using Gemini 2.0 Flash)
+        model = LLMModel.GEMINI_2_FLASH
+        estimated_cost = estimate_cost(
+            model=model,
+            estimated_input_tokens=estimated_input_tokens,
+            estimated_output_tokens=estimated_output_tokens,
+            use_cache=False,  # Conservative estimate without caching
+        )
+
+        return ArtifactPreviewResponse(
+            prompt=prompt,
+            estimated_input_tokens=estimated_input_tokens,
+            estimated_output_tokens=estimated_output_tokens,
+            estimated_cost_usd=float(estimated_cost),
+            model=model,
+            context_summary=context_summary,
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Preview failed: {str(e)}",
         )
 
 
