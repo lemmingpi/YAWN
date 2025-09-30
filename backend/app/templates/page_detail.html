@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title or 'Page' }} - Page Details - Web Notes Dashboard{% endblock %}
+
+{% block content %}
+<div class="col-12">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/app/dashboard">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="/app/sites/{{ page.site_id }}">Site</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ page.title or 'Page' }}</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="content-wrapper p-4 mb-4">
+        <div class="row align-items-start">
+            <div class="col-md-8">
+                <div class="d-flex align-items-start mb-3">
+                    <i class="bi bi-file-earmark display-6 text-primary me-3 mt-1"></i>
+                    <div class="flex-grow-1">
+                        <h1 class="h3 mb-2">{{ page.title or 'Untitled Page' }}</h1>
+                        <p class="text-muted mb-2">
+                            <a href="{{ page.url }}" target="_blank" class="text-decoration-none">
+                                {{ page.url }}
+                                <i class="bi bi-box-arrow-up-right ms-1"></i>
+                            </a>
+                        </p>
+                        <div class="mb-3">
+                            <span class="badge {{ 'bg-success' if page.is_active else 'bg-secondary' }}">
+                                {{ 'Active' if page.is_active else 'Inactive' }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Page Metadata -->
+                <div class="row text-muted small mb-3">
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Created:</strong> {{ page.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                        <p class="mb-1"><strong>Last Updated:</strong> {{ page.updated_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Page ID:</strong> {{ page.id }}</p>
+                        <p class="mb-1"><strong>Site ID:</strong> {{ page.site_id }}</p>
+                    </div>
+                </div>
+
+                {% if page.page_summary %}
+                <div class="mb-3">
+                    <h6 class="text-muted">Page Summary:</h6>
+                    <p class="mb-0">{{ page.page_summary }}</p>
+                </div>
+                {% endif %}
+
+                {% if page.user_context %}
+                <div class="mb-3">
+                    <h6 class="text-muted">User Context:</h6>
+                    <p class="mb-0">{{ page.user_context }}</p>
+                </div>
+                {% endif %}
+            </div>
+            <div class="col-md-4">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary" onclick="editPage()">
+                        <i class="bi bi-pencil me-1"></i>Edit Page
+                    </button>
+                    <a href="{{ page.url }}" target="_blank" class="btn btn-outline-info">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Visit Page
+                    </a>
+                    <a href="/app/sites/{{ page.site_id }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-globe me-1"></i>View Site
+                    </a>
+                    <button class="btn btn-outline-danger" onclick="deletePage()">
+                        <i class="bi bi-trash me-1"></i>Delete Page
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card stats-card text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-sticky display-4 mb-2"></i>
+                    <h3 class="card-title mb-1" id="totalNotes">0</h3>
+                    <p class="card-text">Total Notes</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-magic display-4 mb-2"></i>
+                    <h3 class="card-title mb-1" id="totalArtifacts">0</h3>
+                    <p class="card-text">Total Artifacts</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card text-white h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-calendar-event display-4 mb-2"></i>
+                    <h3 class="card-title mb-1" id="recentActivity">0</h3>
+                    <p class="card-text">Recent Notes (7d)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes Section -->
+    <div class="content-wrapper p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">
+                <i class="bi bi-sticky text-primary me-2"></i>Notes on this Page
+            </h5>
+            <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" class="form-control" id="notesSearch" placeholder="Search notes...">
+            </div>
+        </div>
+
+        <div class="row" id="notesContainer">
+            <div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Loading notes...</span>
+            </div>
+        </div>
+
+        <div id="notesEmpty" class="text-center py-4 d-none">
+            <i class="bi bi-sticky display-1 text-muted"></i>
+            <h6 class="mt-2 text-muted">No notes found for this page</h6>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Page Modal -->
+<div class="modal fade" id="editPageModal" tabindex="-1" aria-labelledby="editPageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editPageModalLabel">Edit Page</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editPageForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editPageUrl" class="form-label">URL <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="editPageUrl" value="{{ page.url }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editPageTitle" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="editPageTitle" value="{{ page.title or '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="editPageSummary" class="form-label">Page Summary</label>
+                        <textarea class="form-control" id="editPageSummary" rows="3">{{ page.page_summary or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editPageContext" class="form-label">User Context</label>
+                        <textarea class="form-control" id="editPageContext" rows="3">{{ page.user_context or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editPageActive" {{ 'checked' if page.is_active else '' }}>
+                            <label class="form-check-label" for="editPageActive">
+                                Active Page
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle me-1"></i>Update Page
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.note-card {
+    transition: all 0.2s ease;
+    height: 100%;
+}
+
+.note-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.note-content {
+    max-height: 150px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+class PageDetailManager {
+    constructor() {
+        this.pageId = {{ page.id }};
+        this.siteId = {{ page.site_id }};
+
+        this.initializeEventListeners();
+        this.loadStats();
+        this.loadNotes();
+    }
+
+    initializeEventListeners() {
+        // Search input
+        document.getElementById('notesSearch').addEventListener('input',
+            this.debounce(() => this.loadNotes(), 300));
+
+        // Edit page form
+        document.getElementById('editPageForm').addEventListener('submit', (e) => this.handleEditPage(e));
+    }
+
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    async loadStats() {
+        try {
+            const notesResponse = await authenticatedFetch(`/api/notes?page_id=${this.pageId}&limit=1000`);
+            const notes = await notesResponse.json();
+
+            document.getElementById('totalNotes').textContent = notes.length;
+
+            // Calculate artifacts count and recent activity
+            let totalArtifacts = 0;
+            let recentNotes = 0;
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+            for (const note of notes) {
+                totalArtifacts += note.artifacts_count || 0;
+                if (new Date(note.created_at) > sevenDaysAgo) {
+                    recentNotes++;
+                }
+            }
+
+            document.getElementById('totalArtifacts').textContent = totalArtifacts;
+            document.getElementById('recentActivity').textContent = recentNotes;
+
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+
+    async loadNotes() {
+        try {
+            const search = document.getElementById('notesSearch').value.trim();
+            const params = new URLSearchParams({
+                page_id: this.pageId,
+                limit: 100
+            });
+            if (search) params.append('search', search);
+
+            const response = await authenticatedFetch(`/api/notes?${params}`);
+            const notes = await response.json();
+
+            this.renderNotes(notes);
+        } catch (error) {
+            console.error('Error loading notes:', error);
+        }
+    }
+
+    renderNotes(notes) {
+        const container = document.getElementById('notesContainer');
+        const emptyState = document.getElementById('notesEmpty');
+
+        if (notes.length === 0) {
+            container.innerHTML = '';
+            emptyState.classList.remove('d-none');
+            return;
+        }
+
+        emptyState.classList.add('d-none');
+        container.innerHTML = notes.map(note => `
+            <div class="col-md-6 mb-3">
+                <div class="card note-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="badge bg-success">${note.artifacts_count || 0} artifacts</span>
+                            <small class="text-muted">
+                                ${new Date(note.created_at).toLocaleDateString()}
+                            </small>
+                        </div>
+                        <div class="note-content mb-3">
+                            ${this.escapeHtml(note.content)}
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                Position: (${note.position_x}, ${note.position_y})
+                            </small>
+                            <a href="/app/notes/${note.id}" class="btn btn-sm btn-outline-primary">
+                                View Details
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async handleEditPage(e) {
+        e.preventDefault();
+
+        const pageData = {
+            url: document.getElementById('editPageUrl').value.trim(),
+            title: document.getElementById('editPageTitle').value.trim() || null,
+            page_summary: document.getElementById('editPageSummary').value.trim() || null,
+            user_context: document.getElementById('editPageContext').value.trim() || null,
+            is_active: document.getElementById('editPageActive').checked
+        };
+
+        try {
+            const response = await authenticatedFetch(`/api/pages/${this.pageId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(pageData)
+            });
+
+            if (response.ok) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editPageModal'));
+                modal.hide();
+                location.reload(); // Reload to show updated data
+            } else {
+                const error = await response.json();
+                alert('Error: ' + (error.detail || 'Failed to update page'));
+            }
+        } catch (error) {
+            console.error('Error updating page:', error);
+            alert('Error: Failed to update page');
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+}
+
+// Global functions for buttons
+function editPage() {
+    const modal = new bootstrap.Modal(document.getElementById('editPageModal'));
+    modal.show();
+}
+
+async function deletePage() {
+    if (!confirm('Are you sure you want to delete this page? This will also delete all associated notes and artifacts.')) {
+        return;
+    }
+
+    try {
+        const response = await authenticatedFetch(`/api/pages/{{ page.id }}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            alert('Page deleted successfully');
+            window.location.href = '/app/sites/{{ page.site_id }}';
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.detail || 'Failed to delete page'));
+        }
+    } catch (error) {
+        console.error('Error deleting page:', error);
+        alert('Error: Failed to delete page');
+    }
+}
+
+// Initialize page detail manager when page loads
+let pageDetailManager;
+document.addEventListener('DOMContentLoaded', function() {
+    pageDetailManager = new PageDetailManager();
+});
+</script>
+{% endblock %}

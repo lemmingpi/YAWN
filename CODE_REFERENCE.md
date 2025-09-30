@@ -17,10 +17,29 @@ notes/
 │   ├── shared-utils.js         # Constants and utilities
 │   └── README.md               # Installation guide
 ├── 📂 backend/                  # FastAPI backend source code
-│   └── app/main.py             # FastAPI application entry point
+│   ├── app/
+│   │   ├── main.py             # FastAPI application entry point
+│   │   ├── routers/
+│   │   │   ├── web.py          # HTML page routes (dashboard, sites, pages, notes)
+│   │   │   ├── sites.py        # REST API for sites management
+│   │   │   ├── pages.py        # REST API for pages management
+│   │   │   ├── notes.py        # REST API for notes management
+│   │   │   └── artifacts.py    # REST API for artifacts management
+│   │   ├── templates/
+│   │   │   ├── base.html       # Base template with navigation
+│   │   │   ├── dashboard.html  # Main dashboard page
+│   │   │   ├── sites.html      # Sites list page
+│   │   │   ├── site_detail.html # Site detail with pages/notes tabs
+│   │   │   ├── page_detail.html # Page detail with notes list
+│   │   │   ├── notes.html      # Notes list page
+│   │   │   ├── note_detail.html # Note detail with artifacts
+│   │   │   └── 404.html        # Not found page
+│   │   ├── models.py           # SQLAlchemy database models
+│   │   ├── schemas.py          # Pydantic validation schemas
+│   │   └── database.py         # Database connection and session
 ├── 📂 tests/                    # Test suite
 │   ├── conftest.py             # Pytest fixtures
-│   └── test_main.py            # FastAPI endpoint tests
+│   └── test_*.py               # Test files
 ├── 📂 scripts/                  # Development automation
 │   ├── dev.sh                  # Universal development server
 │   └── package-extension.sh    # Chrome Web Store packaging script
@@ -62,9 +81,22 @@ notes/
 - `toggleColorDropdown(menu)` - Shows/hides color dropdown
 - Integrated into edit mode toolbar for background color selection
 
-### Backend API (main.py)
-- `GET /` - Hello world endpoint
-- `GET /api/health` - Health check
+### Backend API Routes
+
+#### Web Routes (web.py) - HTML Pages
+- `GET /app/dashboard` - Main dashboard with stats and recent activity
+- `GET /app/sites` - Sites management page
+- `GET /app/sites/{site_id}` - Site detail page with pages/notes tabs
+- `GET /app/pages/{page_id}` - Page detail page with notes list
+- `GET /app/notes` - Notes management page
+- `GET /app/notes/{note_id}` - Note detail page with artifacts
+
+#### REST API Routes
+- **Sites** (`/api/sites`) - Create, read, update, delete sites
+  - Includes `pages_count` and `notes_count` in responses
+- **Pages** (`/api/pages`) - Manage pages on sites
+- **Notes** (`/api/notes`) - Manage notes on pages
+- **Artifacts** (`/api/artifacts`) - AI-generated artifacts from notes
 - CORS enabled for chrome-extension:// origins
 - FastAPI app with uvicorn server on localhost:8000
 

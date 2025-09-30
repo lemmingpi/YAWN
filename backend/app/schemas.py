@@ -124,6 +124,9 @@ class SiteResponse(SiteBase, TimestampSchema):
     pages_count: Optional[int] = Field(
         None, description="Number of pages associated with this site"
     )
+    notes_count: Optional[int] = Field(
+        None, description="Number of notes associated with this site"
+    )
 
     class Config:
         from_attributes = True

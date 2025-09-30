@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import Page, Site
+from ..models import Note, Page, Site
 from ..schemas import SiteCreate, SiteResponse, SiteUpdate
 
 router = APIRouter(prefix="/api/sites", tags=["sites"])
@@ -49,9 +49,10 @@ async def create_site(
     await db.commit()
     await db.refresh(site)
 
-    # Add pages count
+    # Add pages count and notes count
     result = SiteResponse.model_validate(site)
     result.pages_count = 0  # New site has no pages yet
+    result.notes_count = 0  # New site has no notes yet
     return result
 
 
@@ -98,16 +99,26 @@ async def get_sites(
     result = await db.execute(query)
     sites = result.scalars().all()
 
-    # Get page counts for each site
+    # Get page counts and note counts for each site
     site_responses = []
     for site in sites:
+        # Get page count
         page_count_result = await db.execute(
             select(func.count(Page.id)).where(Page.site_id == site.id)
         )
         page_count = page_count_result.scalar() or 0
 
+        # Get note count across all pages of this site
+        note_count_result = await db.execute(
+            select(func.count(Note.id))
+            .join(Page, Note.page_id == Page.id)
+            .where(Page.site_id == site.id)
+        )
+        note_count = note_count_result.scalar() or 0
+
         site_response = SiteResponse.model_validate(site)
         site_response.pages_count = page_count
+        site_response.notes_count = note_count
         site_responses.append(site_response)
 
     return site_responses
@@ -143,8 +154,17 @@ async def get_site(site_id: int, db: AsyncSession = Depends(get_db)) -> SiteResp
     )
     page_count = page_count_result.scalar() or 0
 
+    # Get note count
+    note_count_result = await db.execute(
+        select(func.count(Note.id))
+        .join(Page, Note.page_id == Page.id)
+        .where(Page.site_id == site.id)
+    )
+    note_count = note_count_result.scalar() or 0
+
     site_response = SiteResponse.model_validate(site)
     site_response.pages_count = page_count
+    site_response.notes_count = note_count
     return site_response
 
 
@@ -200,8 +220,17 @@ async def update_site(
     )
     page_count = page_count_result.scalar() or 0
 
+    # Get note count
+    note_count_result = await db.execute(
+        select(func.count(Note.id))
+        .join(Page, Note.page_id == Page.id)
+        .where(Page.site_id == site.id)
+    )
+    note_count = note_count_result.scalar() or 0
+
     site_response = SiteResponse.model_validate(site)
     site_response.pages_count = page_count
+    site_response.notes_count = note_count
     return site_response
 
 
