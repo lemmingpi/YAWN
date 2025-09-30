@@ -23,6 +23,8 @@ from ..schemas import (
     NoteArtifactCreate,
     NoteArtifactResponse,
     NoteArtifactUpdate,
+    UsageResponse,
+    UsageSummary,
 )
 
 router = APIRouter(prefix="/api/artifacts", tags=["artifacts"])
@@ -588,6 +590,110 @@ async def paste_artifact(
         artifact_type=artifact.artifact_type,
         generation_source=artifact.generation_source,
         created_at=artifact.created_at,
+    )
+
+
+@router.get("/usage", response_model=UsageResponse)
+async def get_usage(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    db: AsyncSession = Depends(get_db),
+) -> UsageResponse:
+    """Get usage statistics and cost breakdown.
+
+    Returns aggregated statistics for artifact generation including:
+    - Total artifacts generated
+    - Total cost (USD)
+    - Total tokens consumed
+    - Breakdown by type, source, and model
+
+    Args:
+        start_date: Optional start date filter
+        end_date: Optional end date filter
+        db: Database session
+
+    Returns:
+        Usage statistics and breakdowns
+    """
+    from datetime import datetime
+
+    # Build query
+    query = select(NoteArtifact).where(NoteArtifact.is_active.is_(True))
+
+    period_start = None
+    period_end = None
+
+    # Apply date filters if provided
+    if start_date:
+        period_start = datetime.fromisoformat(start_date)
+        query = query.where(NoteArtifact.generated_at >= period_start)
+
+    if end_date:
+        period_end = datetime.fromisoformat(end_date)
+        query = query.where(NoteArtifact.generated_at <= period_end)
+
+    # Execute query
+    result = await db.execute(query)
+    artifacts = result.scalars().all()
+
+    # Calculate totals
+    total_artifacts = len(artifacts)
+    total_cost = sum(a.cost_usd or 0 for a in artifacts)
+    total_input_tokens = sum(a.input_tokens or 0 for a in artifacts)
+    total_output_tokens = sum(a.output_tokens or 0 for a in artifacts)
+
+    # Breakdown by type
+    by_type = {}
+    for artifact in artifacts:
+        type_key = artifact.artifact_type
+        if type_key not in by_type:
+            by_type[type_key] = {"count": 0, "cost_usd": 0}
+        by_type[type_key]["count"] += 1
+        by_type[type_key]["cost_usd"] += artifact.cost_usd or 0
+
+    # Breakdown by source
+    by_source = {}
+    for artifact in artifacts:
+        source_key = artifact.generation_source or "unknown"
+        if source_key not in by_source:
+            by_source[source_key] = {"count": 0, "cost_usd": 0}
+        by_source[source_key]["count"] += 1
+        by_source[source_key]["cost_usd"] += artifact.cost_usd or 0
+
+    # Breakdown by model
+    by_model = {}
+    for artifact in artifacts:
+        if artifact.generation_metadata:
+            model_key = artifact.generation_metadata.get("model", "unknown")
+        else:
+            model_key = "unknown"
+
+        if model_key not in by_model:
+            by_model[model_key] = {
+                "count": 0,
+                "cost_usd": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+            }
+        by_model[model_key]["count"] += 1
+        by_model[model_key]["cost_usd"] += artifact.cost_usd or 0
+        by_model[model_key]["input_tokens"] += artifact.input_tokens or 0
+        by_model[model_key]["output_tokens"] += artifact.output_tokens or 0
+
+    summary = UsageSummary(
+        total_artifacts=total_artifacts,
+        total_cost_usd=total_cost,
+        total_input_tokens=total_input_tokens,
+        total_output_tokens=total_output_tokens,
+        by_type=by_type,
+        by_source=by_source,
+        by_model=by_model,
+    )
+
+    return UsageResponse(
+        period_start=period_start,
+        period_end=period_end,
+        summary=summary,
     )
 
 

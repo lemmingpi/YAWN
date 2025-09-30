@@ -475,6 +475,28 @@ class ArtifactPasteResponse(BaseModel):
     created_at: datetime = Field(..., description="When the artifact was created")
 
 
+class UsageSummary(BaseModel):
+    """Summary of artifact generation usage."""
+
+    total_artifacts: int = Field(..., description="Total number of artifacts generated")
+    total_cost_usd: float = Field(..., description="Total cost in USD")
+    total_input_tokens: int = Field(..., description="Total input tokens consumed")
+    total_output_tokens: int = Field(..., description="Total output tokens generated")
+    by_type: dict = Field(..., description="Breakdown by artifact type")
+    by_source: dict = Field(..., description="Breakdown by generation source")
+    by_model: dict = Field(..., description="Breakdown by LLM model")
+
+
+class UsageResponse(BaseModel):
+    """Response for usage endpoint."""
+
+    period_start: Optional[datetime] = Field(
+        None, description="Start of period queried"
+    )
+    period_end: Optional[datetime] = Field(None, description="End of period queried")
+    summary: UsageSummary = Field(..., description="Usage summary")
+
+
 # Page summarization request schemas
 class PageSummarizationRequest(BaseModel):
     """Schema for page summarization requests."""
