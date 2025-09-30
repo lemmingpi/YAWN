@@ -8,6 +8,10 @@ from sqlalchemy import engine_from_config, pool
 # Add the app directory to sys.path so we can import our models
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
+from app import (  # noqa: E402, F401 - Import to register models with Base.metadata
+    models,
+)
+
 # Import our models and Base (after path modification)
 from app.database import Base  # noqa: E402
 
