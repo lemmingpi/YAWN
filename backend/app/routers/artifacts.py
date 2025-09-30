@@ -7,6 +7,7 @@ Artifacts are LLM-generated content based on notes and page sections.
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -264,6 +265,119 @@ async def generate_artifact(
             generation_time_ms=service_metadata.get("generation_time_ms", 0),
             tokens_used=llm_response_metadata.get("tokens_used"),
         )
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except LLMProviderError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"LLM generation failed: {e}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Artifact generation failed: {e}",
+        )
+
+
+class NoteArtifactGenerationRequest(BaseModel):
+    """Request model for note-specific artifact generation."""
+
+    llm_provider_id: int
+    artifact_type: str
+    custom_prompt: Optional[str] = None
+
+
+@router.post("/generate/note/{note_id}", response_model=ArtifactGenerationResponse)
+async def generate_note_artifact(
+    note_id: int,
+    request: NoteArtifactGenerationRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ArtifactGenerationResponse:
+    """Generate an artifact for a specific note using an LLM provider.
+
+    This is a convenience endpoint that wraps the generic /generate endpoint
+    for easier frontend integration with note detail pages.
+
+    Args:
+        note_id: Note ID to generate artifact for
+        request: Artifact generation request data
+        db: Database session
+
+    Returns:
+        Generated artifact data and metadata
+
+    Raises:
+        HTTPException: If note or LLM provider not found or generation fails
+
+    TODO: Add webhook support for async generation notifications
+    TODO: Add hook system for custom pre/post-generation processing
+    TODO: Add rate limiting per user/note
+    TODO: Add generation queue for long-running requests
+    """
+    from ..llm.base import LLMProviderError
+    from ..services.artifact_service import ArtifactGenerationService
+
+    # TODO: Pre-generation hook placeholder
+    # This is where you could call custom hooks before generation:
+    # - Validate user permissions
+    # - Check rate limits
+    # - Modify generation parameters
+    # - Log generation request
+    # Example:
+    # await call_pre_generation_hooks(note_id, request.llm_provider_id, request.artifact_type)
+
+    service = ArtifactGenerationService(db)
+
+    try:
+        # Verify note exists first
+        note_result = await db.execute(select(Note).where(Note.id == note_id))
+        note = note_result.scalar_one_or_none()
+        if not note:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Note with ID {note_id} not found",
+            )
+
+        artifact = await service.generate_note_artifact(
+            note_id=note_id,
+            llm_provider_id=request.llm_provider_id,
+            artifact_type=request.artifact_type,
+            custom_prompt=request.custom_prompt,
+        )
+
+        # Extract generation metadata
+        generation_metadata = artifact.generation_metadata or {}
+        llm_response_metadata = generation_metadata.get("llm_response", {})
+        service_metadata = generation_metadata.get("service_metadata", {})
+
+        response = ArtifactGenerationResponse(
+            artifact_id=artifact.id,
+            content=artifact.content,
+            generation_time_ms=service_metadata.get("generation_time_ms", 0),
+            tokens_used=llm_response_metadata.get("tokens_used"),
+        )
+
+        # TODO: Post-generation hook placeholder
+        # This is where you could call custom hooks after generation:
+        # - Send webhook notifications
+        # - Update analytics/metrics
+        # - Trigger follow-up actions
+        # - Cache results
+        # Example:
+        # await call_post_generation_hooks(artifact, response)
+
+        # TODO: Webhook notification placeholder
+        # If webhooks are configured, send async notification:
+        # await send_webhook_notification({
+        #     "event": "artifact.generated",
+        #     "note_id": note_id,
+        #     "artifact_id": artifact.id,
+        #     "artifact_type": artifact_type,
+        #     "timestamp": datetime.utcnow().isoformat()
+        # })
+
+        return response
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

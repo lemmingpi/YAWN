@@ -97,6 +97,10 @@ notes/
 - **Pages** (`/api/pages`) - Manage pages on sites
 - **Notes** (`/api/notes`) - Manage notes on pages
 - **Artifacts** (`/api/artifacts`) - AI-generated artifacts from notes
+  - `POST /api/artifacts/generate/note/{note_id}` - Generate artifact for specific note
+  - Includes TODO placeholders for webhooks and hook system integration
+  - Pre-generation hooks: permissions, rate limiting, parameter modification
+  - Post-generation hooks: notifications, analytics, caching
 - CORS enabled for chrome-extension:// origins
 - FastAPI app with uvicorn server on localhost:8000
 
