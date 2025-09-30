@@ -1,13 +1,15 @@
 """SQLAlchemy database models for Web Notes API."""
 
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     func,
     Index,
@@ -184,6 +186,10 @@ class Note(Base, TimestampMixin):
         String(100), index=True, nullable=True
     )
 
+    # Context fields for artifact generation
+    highlighted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    page_section_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Foreign Keys
     page_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("pages.id", ondelete="CASCADE"), nullable=False, index=True
@@ -239,7 +245,7 @@ class NoteArtifact(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     artifact_type: Mapped[str] = mapped_column(
         String(50), nullable=False
-    )  # 'summary', 'expansion', etc.
+    )  # 'summary', 'expansion', 'scene_image', 'other', etc.
     content: Mapped[str] = mapped_column(Text, nullable=False)
     prompt_used: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     generation_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
@@ -247,20 +253,35 @@ class NoteArtifact(Base, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Image and URL support
+    artifact_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    # Cost tracking
+    cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # Generation source: 'app_supplied', 'user_pasted', 'user_api_key', 'browser_native'
+    generation_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # For "Other" artifact type
+    user_type_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    artifact_subtype: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
     # Foreign Keys
     note_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    llm_provider_id: Mapped[int] = mapped_column(
+    llm_provider_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("llm_providers.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
     # Relationships
     note: Mapped["Note"] = relationship("Note", back_populates="artifacts")
-    llm_provider: Mapped["LLMProvider"] = relationship(
+    llm_provider: Mapped[Optional["LLMProvider"]] = relationship(
         "LLMProvider", back_populates="artifacts"
     )
 
@@ -289,6 +310,76 @@ class PageSection(Base, TimestampMixin):
 
     # Relationships
     page: Mapped["Page"] = relationship("Page", back_populates="page_sections")
+
+
+class UsageCost(Base, TimestampMixin):
+    """Track aggregated usage costs per user/provider/day."""
+
+    __tablename__ = "usage_costs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    total_requests: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_cost_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    total_input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Foreign Keys
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    llm_provider_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("llm_providers.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User")
+    llm_provider: Mapped[Optional["LLMProvider"]] = relationship("LLMProvider")
+
+    # Indexes for performance
+    __table_args__ = (
+        Index("idx_usage_costs_user_date", "user_id", "date"),
+        Index("idx_usage_costs_provider", "llm_provider_id"),
+    )
+
+
+class OtherArtifactRequest(Base, TimestampMixin):
+    """Track 'Other' artifact requests to inform future dropdown options."""
+
+    __tablename__ = "other_artifact_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_description: Mapped[str] = mapped_column(Text, nullable=False)
+    custom_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Analysis fields (populated manually or via LLM)
+    category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    should_add_to_dropdown: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    similar_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    # Foreign Keys
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    artifact_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("note_artifacts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User")
+    artifact: Mapped[Optional["NoteArtifact"]] = relationship("NoteArtifact")
+
+    # Indexes for analysis
+    __table_args__ = (
+        Index("idx_other_requests_category", "category"),
+        Index("idx_other_requests_user", "user_id"),
+    )
 
 
 class UserSiteShare(Base, TimestampMixin):
