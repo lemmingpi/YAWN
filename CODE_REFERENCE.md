@@ -20,17 +20,29 @@ notes/
 │   │   ├── schemas.py       # Pydantic validation
 │   │   ├── database.py      # Database connection
 │   │   ├── auth.py          # JWT + Google OAuth2
+│   │   ├── config.py        # Settings (DATABASE_URL, JWT_SECRET_KEY, etc.)
 │   │   ├── routers/
 │   │   │   ├── web.py       # HTML pages (dashboard, sites, pages, notes)
 │   │   │   ├── sites.py     # REST API sites
 │   │   │   ├── pages.py     # REST API pages
 │   │   │   ├── notes.py     # REST API notes
-│   │   │   ├── artifacts.py # REST API artifacts (stubbed)
+│   │   │   ├── artifacts.py # REST API artifacts (generate endpoint)
 │   │   │   └── sharing.py   # Sharing system (13 endpoints)
+│   │   ├── services/        # Business logic services
+│   │   │   ├── cost_tracker.py      # LLM cost calculation
+│   │   │   ├── gemini_provider.py   # Gemini API integration
+│   │   │   └── context_builder.py   # Prompt assembly
 │   │   └── templates/       # Jinja2 HTML templates
-│   └── alembic/            # Database migrations
-├── tests/                   # Test suite
-└── docs/                    # Documentation
+│   ├── alembic/            # Database migrations
+│   ├── requirements.txt    # Backend-specific dependencies
+│   └── seed_llm_providers.py # Seed LLM provider data
+├── requirements/           # Root requirements structure
+│   ├── base.txt           # Core production dependencies (USE THIS)
+│   ├── dev.txt            # Development dependencies
+│   └── production.txt     # Production-only dependencies
+├── requirements.txt       # Points to requirements/base.txt
+├── tests/                 # Test suite
+└── docs/                  # Documentation
 
 ```
 
@@ -73,23 +85,54 @@ notes/
 
 **API Routes**
 - `/api/sites|pages|notes` - CRUD operations
-- `/api/artifacts/generate` - LLM generation (TODO)
+- `/api/artifacts/generate/note/{note_id}` - LLM artifact generation
 - `/api/sharing/*` - 13 sharing endpoints
 - `/app/*` - Web UI pages
+
+**Services (backend/app/services/)**
+- `cost_tracker.py` - Token cost calculation for LLM APIs
+  - `calculate_cost()` - Precise cost calculation with caching discounts
+  - `estimate_cost()` - Preview costs before generation
+  - Supports: Gemini 2.0 Flash, Claude 3.5 Sonnet, GPT-4 Turbo, GPT-4o
+- `gemini_provider.py` - Google Gemini API integration
+  - `create_gemini_provider()` - Factory with GOOGLE_AI_API_KEY
+  - `generate_content()` - Async generation with retry/rate limiting
+  - `estimate_tokens()` - Token counting with fallback
+- `context_builder.py` - Prompt assembly from note context
+  - `build_prompt()` - Assemble context from note/page/site
+  - `build_context_summary()` - Preview available context
+  - 7 artifact types: summary, analysis, questions, action_items, code_snippet, explanation, outline
 
 ## Database
 - Alembic migrations in `backend/alembic/versions/`
 - Latest: 90896c04e8d6 (database sync)
 - Multi-tenant with user_id foreign keys
 - Temporal versioning ready (nearform/temporal_tables)
+- LLM Providers seeded: Gemini 2.0 Flash (active), Claude 3.5 Sonnet, GPT-4 Turbo, GPT-4o
+
+## Environment Variables
+- `GOOGLE_AI_API_KEY` - Required for Gemini provider (artifact generation)
+- `DATABASE_URL` - Default: sqlite+aiosqlite:///./notes.db
+- `JWT_SECRET_KEY` - JWT signing key (change in production)
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` - OAuth2 credentials
 
 ## Commands
 ```bash
+# Setup and installation
+pip install -r requirements/base.txt      # Install production dependencies
+pip install -r requirements/dev.txt       # Install with dev tools
+python backend/seed_llm_providers.py      # Seed LLM provider data
+
+# Development
 make setup      # Environment setup
 make dev        # Start server (localhost:8000)
 make test       # Run tests with coverage
 make lint       # Code quality checks
 make format     # Auto-format code
+
+# Database
+cd backend && alembic upgrade head       # Run migrations
+cd backend && alembic current            # Check current revision
 ```
 
 ## Security
