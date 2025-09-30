@@ -14,15 +14,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models import LLMProvider, Note, NoteArtifact, Page
 from ..schemas import (
+    AnalyticsResponse,
+    AnalyticsSummary,
     ArtifactGenerationRequest,
     ArtifactGenerationResponse,
     ArtifactPasteRequest,
     ArtifactPasteResponse,
     ArtifactPreviewRequest,
     ArtifactPreviewResponse,
+    DailyCost,
     NoteArtifactCreate,
     NoteArtifactResponse,
     NoteArtifactUpdate,
+    TypePopularity,
     UsageResponse,
     UsageSummary,
 )
@@ -694,6 +698,130 @@ async def get_usage(
         period_start=period_start,
         period_end=period_end,
         summary=summary,
+    )
+
+
+@router.get("/analytics", response_model=AnalyticsResponse)
+async def get_analytics(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    db: AsyncSession = Depends(get_db),
+) -> AnalyticsResponse:
+    """Get analytics data for artifact generation.
+
+    Provides insights into:
+    - Generation success rates (API vs pasted)
+    - Popular artifact types
+    - Daily cost trends
+
+    Args:
+        start_date: Optional start date for filtering (YYYY-MM-DD)
+        end_date: Optional end date for filtering (YYYY-MM-DD)
+        db: Database session
+
+    Returns:
+        Analytics data with success rates, popular types, and cost trends
+    """
+    from collections import defaultdict
+    from datetime import datetime
+
+    # Build query
+    query = select(NoteArtifact).where(NoteArtifact.is_active.is_(True))
+
+    period_start = None
+    period_end = None
+
+    # Apply date filters if provided
+    if start_date:
+        try:
+            period_start = datetime.strptime(start_date, "%Y-%m-%d")
+            query = query.where(NoteArtifact.created_at >= period_start)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid start_date format. Use YYYY-MM-DD",
+            )
+
+    if end_date:
+        try:
+            period_end = datetime.strptime(end_date, "%Y-%m-%d")
+            # Add one day to include the entire end_date
+            from datetime import timedelta
+
+            end_datetime = period_end + timedelta(days=1)
+            query = query.where(NoteArtifact.created_at < end_datetime)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid end_date format. Use YYYY-MM-DD",
+            )
+
+    # Execute query
+    result = await db.execute(query)
+    artifacts = result.scalars().all()
+
+    # Calculate success metrics
+    total_artifacts = len(artifacts)
+    api_generated = sum(
+        1
+        for a in artifacts
+        if a.generation_source in ("gemini", "claude", "openai", "api")
+    )
+    pasted = sum(1 for a in artifacts if a.generation_source == "user_pasted")
+
+    # Calculate success rate (assuming API generations are attempts)
+    success_rate = (api_generated / total_artifacts * 100) if total_artifacts > 0 else 0
+
+    # Popular types
+    type_counts: dict = defaultdict(int)
+    for artifact in artifacts:
+        type_counts[artifact.artifact_type] += 1
+
+    # Sort by count and calculate percentages
+    popular_types = []
+    for artifact_type, count in sorted(
+        type_counts.items(), key=lambda x: x[1], reverse=True
+    ):
+        percentage = (count / total_artifacts * 100) if total_artifacts > 0 else 0
+        popular_types.append(
+            TypePopularity(
+                artifact_type=artifact_type,
+                count=count,
+                percentage=round(percentage, 2),
+            )
+        )
+
+    # Daily cost trends
+    daily_data: dict = defaultdict(lambda: {"cost": 0.0, "count": 0})
+    for artifact in artifacts:
+        date_str = artifact.created_at.strftime("%Y-%m-%d")
+        daily_data[date_str]["cost"] += artifact.cost_usd or 0
+        daily_data[date_str]["count"] += 1
+
+    # Sort by date and create DailyCost objects
+    daily_costs = []
+    for date_str in sorted(daily_data.keys()):
+        daily_costs.append(
+            DailyCost(
+                date=date_str,
+                cost=round(daily_data[date_str]["cost"], 4),
+                count=daily_data[date_str]["count"],
+            )
+        )
+
+    analytics = AnalyticsSummary(
+        total_artifacts=total_artifacts,
+        successful_generations=api_generated,
+        pasted_artifacts=pasted,
+        success_rate=round(success_rate, 2),
+        popular_types=popular_types,
+        daily_costs=daily_costs,
+    )
+
+    return AnalyticsResponse(
+        period_start=period_start,
+        period_end=period_end,
+        analytics=analytics,
     )
 
 

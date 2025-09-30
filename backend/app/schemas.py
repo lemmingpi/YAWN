@@ -497,6 +497,49 @@ class UsageResponse(BaseModel):
     summary: UsageSummary = Field(..., description="Usage summary")
 
 
+class TypePopularity(BaseModel):
+    """Popularity metrics for an artifact type."""
+
+    artifact_type: str = Field(..., description="Type of artifact")
+    count: int = Field(..., description="Number of artifacts")
+    percentage: float = Field(..., description="Percentage of total")
+
+
+class DailyCost(BaseModel):
+    """Daily cost metrics."""
+
+    date: str = Field(..., description="Date (YYYY-MM-DD)")
+    cost: float = Field(..., description="Cost in USD")
+    count: int = Field(..., description="Number of artifacts")
+
+
+class AnalyticsSummary(BaseModel):
+    """Analytics summary data."""
+
+    total_artifacts: int = Field(..., description="Total artifacts generated")
+    successful_generations: int = Field(
+        ..., description="Number of successful API generations"
+    )
+    pasted_artifacts: int = Field(..., description="Number of user-pasted artifacts")
+    success_rate: float = Field(
+        ..., description="Success rate for API generations (percentage)"
+    )
+    popular_types: List[TypePopularity] = Field(
+        ..., description="Most popular artifact types"
+    )
+    daily_costs: List[DailyCost] = Field(..., description="Daily cost trends")
+
+
+class AnalyticsResponse(BaseModel):
+    """Response for analytics endpoint."""
+
+    period_start: Optional[datetime] = Field(
+        None, description="Start of period queried"
+    )
+    period_end: Optional[datetime] = Field(None, description="End of period queried")
+    analytics: AnalyticsSummary = Field(..., description="Analytics data")
+
+
 # Page summarization request schemas
 class PageSummarizationRequest(BaseModel):
     """Schema for page summarization requests."""
