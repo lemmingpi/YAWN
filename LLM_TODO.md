@@ -47,12 +47,12 @@
 - Accept pasted LLM responses
 - Parse and store with proper attribution
 
-### 📋 Phase 3.4: Usage Endpoint
+### ✅ Phase 3.4: Usage Endpoint (COMPLETE)
 - GET /api/artifacts/usage
 - Daily/monthly cost aggregation
 - Per-user and per-type breakdown
 
-### 📋 Phase 3.5: Analytics Endpoint
+### ✅ Phase 3.5: Analytics Endpoint (COMPLETE)
 - GET /api/artifacts/analytics
 - Generation success rates
 - Popular artifact types
