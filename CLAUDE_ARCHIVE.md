@@ -1,8 +1,27 @@
 # Historical Session Archive
 
-This file contains detailed session summaries for reference and historical context. It is loaded on-demand only when researching past implementation decisions.
+This file contains detailed session summaries for reference and historical context. Load on-demand when researching past implementation decisions.
 
-## Latest Session Summary (2025-01-24) - Enhanced URL Matching & Drag-Edit Improvements
+## Latest Session Summary (2025-09-30) - LLM Artifact Generation Database Schema
+
+### Major Accomplishments - Session 6
+- **LLM Artifact Generation Phase 1.1 Complete** - Database schema for artifact generation with cost tracking
+- **Alembic Configuration Fixed** - Proper model change detection now working
+- **Database Sync** - Models and migrations fully synchronized
+
+### Technical Implementation - Session 6
+- Extended Note model: added highlighted_text, page_section_html fields
+- Enhanced NoteArtifact: artifact_url, cost tracking (USD + tokens), generation_source, artifact_subtype
+- New models: UsageCost (daily aggregation), OtherArtifactRequest (tracking)
+- Migrations: 7d6eb6277e6d (schema additions), 90896c04e8d6 (sync with models)
+
+### Files Modified - Session 6
+- backend/app/models.py - Extended models for artifact generation
+- backend/alembic/env.py - Fixed to import models for proper change detection
+- backend/alembic/versions/7d6eb6277e6d_*.py - Artifact schema migration
+- backend/alembic/versions/90896c04e8d6_*.py - Database sync migration
+
+## Previous Session Summary (2025-01-24) - Enhanced URL Matching & Drag-Edit Improvements
 
 ### Major Accomplishments - Session 5
 1. **Enhanced URL Matching System** - Implemented URL normalization that ignores anchor fragments (#) while preserving query parameters for better note visibility across page navigation
