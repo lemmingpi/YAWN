@@ -21,12 +21,22 @@ This optimized structure reduces always-loaded context while maintaining complet
     - Security: CSS injection prevention, XPath validation, memory management
     - Manual testing: Full editing workflow and text selection verified
 
+- ✅ **Database Schema for Artifact Generation** (Phase 1.1 Complete)
+    - Location: `backend/app/models.py`, `backend/alembic/`
+    - Added fields to Note: highlighted_text, page_section_html
+    - Extended NoteArtifact: artifact_url, cost tracking (cost_usd, input/output tokens), generation_source, user_type_description, artifact_subtype
+    - New models: UsageCost (daily cost aggregation), OtherArtifactRequest (track "Other" type requests)
+    - Migrations: 7d6eb6277e6d (schema additions), 90896c04e8d6 (sync with models)
+    - Status: Database in sync, alembic check passing ✅
+    - Commits: 833711e, 6e82f09
+
 ### Architecture Foundation
 - ✅ Project specification defined (PROJECT_SPEC.md)
 - ✅ Git workflow and standards established
 - ✅ Chrome extension manifest v3 structure
-- 🔄 Backend API (hello world only)
-- 🔄 Database schema not implemented
+- ✅ Database schema for multi-user + artifact generation
+- 🔄 Backend API (basic CRUD for sites/pages/notes, artifact endpoints stubbed)
+- 🔄 LLM integration not implemented yet
 - 🔄 Cloud deployment not configured
 
 ### Technical Decisions Made
@@ -69,19 +79,42 @@ This optimized structure reduces always-loaded context while maintaining complet
 ## Current Session Goals
 
 ### Recent Accomplishments ✅
-- Enhanced URL matching and drag-edit interaction improvements (PR #9)
-- Rich text markdown toolbar implementation (PR #10)
-- Note deletion and CSS styling features
-- **Text selection capture and highlighting** with security hardening (PR #13)
-- **Critical security fixes**: CSS injection prevention, XPath validation, memory management
-- Documentation optimization and context management
+- **LLM Artifact Generation - Phase 1.1 Complete** (Database Schema)
+  - Database schema updated with artifact generation support
+  - Added cost tracking fields and models
+  - Added support for "Other" artifact type with tracking
+  - Fixed Alembic configuration to properly detect model changes
+  - Database now in sync with models (alembic check passing)
+
+### Active Implementation: LLM Artifact Generation (Hybrid Strategy)
+**Plan Created:** 18-phase implementation for artifact generation with 3-tier approach:
+- **Tier 1 (Default):** App-supplied LLM (Gemini 2.0 Flash) - Zero friction, instant results
+- **Tier 2 (Fallback):** Copy/Paste Prompt - Works with any LLM, user controls cost
+- **Tier 3 (Power Users):** User API Keys / Browser LLM - Advanced options, unlimited usage
+
+**Implementation Progress:**
+- ✅ Phase 1.1: Database Schema Updates (COMPLETE)
+  - Models updated: Note, NoteArtifact, UsageCost, OtherArtifactRequest
+  - Migrations created and applied
+  - Database in sync with models
+- 🔄 Phase 1.2: Cost Tracking Service (NEXT)
+  - Create backend/app/services/cost_tracker.py
+  - Implement calculate_cost() with pricing for Gemini/Claude/GPT-4
+- 🔄 Phase 1.3: Gemini Provider Implementation
+- 📋 Phase 2.1-2.2: Enhanced Context Assembly
+- 📋 Phase 3.1-3.5: Backend API Endpoints (generate, preview, paste, usage, analytics)
+- 📋 Phase 4.1-4.5: Frontend UI (form, generate flow, copy/paste modal, display)
+- 📋 Phase 5.1-5.3: Image Generation Support
+
+**See full plan details in session history above**
 
 ### Next Session Priorities
-1. **Automated testing framework** for Chrome extension
-2. **Backend API development** according to PROJECT_SPEC.md
-3. **Note search and filtering** capabilities
-4. **Import/export features** for markdown files
-5. **Performance monitoring** and optimization
+1. **Phase 1.2: Cost Tracking Service** - Create cost calculation utilities
+2. **Phase 1.3: Gemini Provider** - Implement Gemini 2.0 Flash integration
+3. Continue with Phases 2-5 as planned
+4. Test artifact generation end-to-end
+5. Optional: Browser-native LLM integration (Phase 6)
+6. Optional: User API key management (Phase 7)
 
 ## Session End Checklist
 
@@ -107,4 +140,15 @@ Before ending any development session:
 - **CODE_REFERENCE.md** - Code navigation and implementation details
 - **CLAUDE_ARCHIVE.md** - Historical session summaries for reference
 
-**Current Status**: The Chrome extension is production-ready with comprehensive features including text selection capture, highlighting, and security hardening. Ready to focus on backend API development and automated testing.
+**Current Status**: Chrome extension is production-ready. Currently implementing LLM artifact generation (Phase 1.1 complete - database schema ready). Next: Cost tracking service (Phase 1.2), then Gemini provider implementation (Phase 1.3).
+
+**Key Files Modified This Session:**
+- `backend/app/models.py` - Extended models for artifact generation
+- `backend/alembic/env.py` - Fixed to import models for proper change detection
+- `backend/alembic/versions/7d6eb6277e6d_*.py` - Artifact schema migration
+- `backend/alembic/versions/90896c04e8d6_*.py` - Database sync migration
+
+**To Resume Next Session:**
+1. Review the 18-phase plan in session history
+2. Start with Phase 1.2: Create `backend/app/services/cost_tracker.py`
+3. Continue through remaining phases incrementally with testing after each
