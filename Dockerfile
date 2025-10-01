@@ -5,7 +5,6 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN echo "Here we go!"
-RUN cat ./Dockerfile
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
