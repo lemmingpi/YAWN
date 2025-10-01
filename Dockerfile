@@ -10,18 +10,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements files
-COPY ../requirements/base.txt /app/requirements/base.txt
-COPY ../requirements/production.txt /app/requirements/production.txt
+COPY requirements/base.txt /app/requirements/base.txt
+COPY requirements/production.txt /app/requirements/production.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r /app/requirements/base.txt && \
     pip install --no-cache-dir -r /app/requirements/production.txt
 
 # Copy application code
-COPY . /app/backend/
+COPY backend/ /app/backend/
 
 # Copy alembic configuration
-COPY alembic.ini /app/backend/
+COPY backend/alembic.prod.ini /app/backend/
 
 # Set working directory to backend
 WORKDIR /app/backend
