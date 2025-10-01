@@ -4,6 +4,9 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
+RUN echo "Here we go!"
+RUN cat ./Dockerfile
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     postgresql-client \
@@ -33,4 +36,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=300s --retries=3 \
   CMD python -c "import requests; requests.get('http://localhost:$PORT/health')"
 
 # Run database migrations and start server
-CMD export ENV_FILE=env/env.prod && python -m app.main --log-level info
+CMD echo "on our way" && export ENV_FILE=env/env.prod && python -m app.main --log-level info
