@@ -10,6 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+# from sqlalchemy.dialects import postgresql as pg
+
 # revision identifiers, used by Alembic.
 revision: str = "a7b4c5f8d9e0"
 down_revision: Union[str, Sequence[str], None] = "96e52d6750f8"
@@ -23,15 +25,6 @@ def upgrade() -> None:
     # Create permission level enum type if it doesn't exist
     connection = op.get_bind()
 
-    # Check if enum type exists
-    enum_exists = connection.execute(sa.text(
-        "SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'permissionlevel')"
-    )).fetchone()[0]
-
-    if not enum_exists:
-        permission_enum = sa.Enum("view", "edit", "admin", name="permissionlevel")
-        permission_enum.create(connection)
-
     # Step 1: Create a system user for existing data
     # First check if there are existing users
     result = connection.execute(sa.text("SELECT COUNT(*) FROM users")).fetchone()
@@ -39,32 +32,42 @@ def upgrade() -> None:
 
     # Create system user if no users exist
     if user_count == 0:
-        system_user_insert = sa.text("""
+        system_user_insert = sa.text(
+            """
             INSERT INTO users (chrome_user_id, email, display_name, is_admin, is_active)
             VALUES ('system_user', 'system@notes.local', 'System User', true, true)
-        """)
+        """
+        )
         connection.execute(system_user_insert)
         connection.commit()
 
     # Get the first user ID (either system user or existing user)
-    first_user_result = connection.execute(sa.text("SELECT id FROM users ORDER BY id LIMIT 1")).fetchone()
+    first_user_result = connection.execute(
+        sa.text("SELECT id FROM users ORDER BY id LIMIT 1")
+    ).fetchone()
     first_user_id = first_user_result[0] if first_user_result else 1
 
     # Step 2: Add user_id columns to existing tables (nullable initially)
 
     # Add user_id to sites table
-    op.add_column("sites", sa.Column("user_id", sa.Integer(), nullable=True))
+    # op.add_column("sites", sa.Column("user_id", sa.Integer(), nullable=True))
 
-    # Add user_id to pages table
-    op.add_column("pages", sa.Column("user_id", sa.Integer(), nullable=True))
+    # # Add user_id to pages table
+    # op.add_column("pages", sa.Column("user_id", sa.Integer(), nullable=True))
 
-    # Add user_id to notes table
-    op.add_column("notes", sa.Column("user_id", sa.Integer(), nullable=True))
+    # # Add user_id to notes table
+    # op.add_column("notes", sa.Column("user_id", sa.Integer(), nullable=True))
 
     # Step 3: Assign all existing records to the first user
-    connection.execute(sa.text(f"UPDATE sites SET user_id = {first_user_id} WHERE user_id IS NULL"))
-    connection.execute(sa.text(f"UPDATE pages SET user_id = {first_user_id} WHERE user_id IS NULL"))
-    connection.execute(sa.text(f"UPDATE notes SET user_id = {first_user_id} WHERE user_id IS NULL"))
+    connection.execute(
+        sa.text(f"UPDATE sites SET user_id = {first_user_id} WHERE user_id IS NULL")
+    )
+    connection.execute(
+        sa.text(f"UPDATE pages SET user_id = {first_user_id} WHERE user_id IS NULL")
+    )
+    connection.execute(
+        sa.text(f"UPDATE notes SET user_id = {first_user_id} WHERE user_id IS NULL")
+    )
     connection.commit()
 
     # Step 4: Make user_id columns non-nullable and add foreign key constraints
@@ -93,73 +96,76 @@ def upgrade() -> None:
     op.create_index("idx_note_page_user", "notes", ["page_id", "user_id"])
 
     # Step 6: Create sharing tables
+    # permission_enum = pg.ENUM(
+    #     "view", "edit", "admin", name="permissionlevel", create_type=False
+    # )
 
     # Create user_site_shares table
-    op.create_table(
-        "user_site_shares",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("permission_level", permission_enum, nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("user_id", sa.Integer(), nullable=False),
-        sa.Column("site_id", sa.Integer(), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["user_id"], ["users.id"], name="fk_user_site_shares_user_id", ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["site_id"], ["sites.id"], name="fk_user_site_shares_site_id", ondelete="CASCADE"
-        ),
-    )
+    # op.create_table(
+    #     "user_site_shares",
+    #     sa.Column("id", sa.Integer(), nullable=False),
+    #     sa.Column("permission_level", permission_enum, nullable=False),
+    #     sa.Column("is_active", sa.Boolean(), nullable=False),
+    #     sa.Column("user_id", sa.Integer(), nullable=False),
+    #     sa.Column("site_id", sa.Integer(), nullable=False),
+    #     sa.Column(
+    #         "created_at",
+    #         sa.DateTime(timezone=True),
+    #         server_default=sa.text("now()"),
+    #         nullable=False,
+    #     ),
+    #     sa.Column(
+    #         "updated_at",
+    #         sa.DateTime(timezone=True),
+    #         server_default=sa.text("now()"),
+    #         nullable=False,
+    #     ),
+    #     sa.PrimaryKeyConstraint("id"),
+    #     sa.ForeignKeyConstraint(
+    #         ["user_id"], ["users.id"], name="fk_user_site_shares_user_id", ondelete="CASCADE"
+    #     ),
+    #     sa.ForeignKeyConstraint(
+    #         ["site_id"], ["sites.id"], name="fk_user_site_shares_site_id", ondelete="CASCADE"
+    #     ),
+    # )
 
-    # Create user_page_shares table
-    op.create_table(
-        "user_page_shares",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("permission_level", permission_enum, nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("user_id", sa.Integer(), nullable=False),
-        sa.Column("page_id", sa.Integer(), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["user_id"], ["users.id"], name="fk_user_page_shares_user_id", ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["page_id"], ["pages.id"], name="fk_user_page_shares_page_id", ondelete="CASCADE"
-        ),
-    )
+    # # Create user_page_shares table
+    # op.create_table(
+    #     "user_page_shares",
+    #     sa.Column("id", sa.Integer(), nullable=False),
+    #     sa.Column("permission_level", permission_enum, nullable=False),
+    #     sa.Column("is_active", sa.Boolean(), nullable=False),
+    #     sa.Column("user_id", sa.Integer(), nullable=False),
+    #     sa.Column("page_id", sa.Integer(), nullable=False),
+    #     sa.Column(
+    #         "created_at",
+    #         sa.DateTime(timezone=True),
+    #         server_default=sa.text("now()"),
+    #         nullable=False,
+    #     ),
+    #     sa.Column(
+    #         "updated_at",
+    #         sa.DateTime(timezone=True),
+    #         server_default=sa.text("now()"),
+    #         nullable=False,
+    #     ),
+    #     sa.PrimaryKeyConstraint("id"),
+    #     sa.ForeignKeyConstraint(
+    #         ["user_id"], ["users.id"], name="fk_user_page_shares_user_id", ondelete="CASCADE"
+    #     ),
+    #     sa.ForeignKeyConstraint(
+    #         ["page_id"], ["pages.id"], name="fk_user_page_shares_page_id", ondelete="CASCADE"
+    #     ),
+    # )
 
-    # Create indexes for sharing tables
-    op.create_index(op.f("ix_user_site_shares_id"), "user_site_shares", ["id"])
-    op.create_index("idx_user_site_share_unique", "user_site_shares", ["user_id", "site_id"], unique=True)
-    op.create_index("idx_user_site_share_permission", "user_site_shares", ["permission_level"])
+    # # Create indexes for sharing tables
+    # op.create_index(op.f("ix_user_site_shares_id"), "user_site_shares", ["id"])
+    # op.create_index("idx_user_site_share_unique", "user_site_shares", ["user_id", "site_id"], unique=True)
+    # op.create_index("idx_user_site_share_permission", "user_site_shares", ["permission_level"])
 
-    op.create_index(op.f("ix_user_page_shares_id"), "user_page_shares", ["id"])
-    op.create_index("idx_user_page_share_unique", "user_page_shares", ["user_id", "page_id"], unique=True)
-    op.create_index("idx_user_page_share_permission", "user_page_shares", ["permission_level"])
+    # op.create_index(op.f("ix_user_page_shares_id"), "user_page_shares", ["id"])
+    # op.create_index("idx_user_page_share_unique", "user_page_shares", ["user_id", "page_id"], unique=True)
+    # op.create_index("idx_user_page_share_permission", "user_page_shares", ["permission_level"])
 
 
 def downgrade() -> None:

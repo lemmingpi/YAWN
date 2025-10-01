@@ -7,7 +7,7 @@ Create Date: 2025-09-27 14:20:31.626710
 """
 from typing import Sequence, Union
 
-import sqlalchemy as sa
+# import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -19,15 +19,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add OAuth fields to User model."""
+    pass
     # Add OAuth token management fields
-    op.add_column("users", sa.Column("refresh_token", sa.Text(), nullable=True))
-    op.add_column(
-        "users",
-        sa.Column("token_expires_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.add_column(
-        "users", sa.Column("oauth_scopes", sa.String(length=500), nullable=True)
-    )
+    # op.add_column("users", sa.Column("refresh_token", sa.Text(), nullable=True))
+    # op.add_column(
+    #     "users",
+    #     sa.Column("token_expires_at", sa.DateTime(timezone=True), nullable=True),
+    # )
+    # op.add_column(
+    #     "users", sa.Column("oauth_scopes", sa.String(length=500), nullable=True)
+    # )
 
 
 def downgrade() -> None:

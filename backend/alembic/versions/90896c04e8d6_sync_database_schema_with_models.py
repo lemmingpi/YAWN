@@ -43,6 +43,8 @@ def upgrade() -> None:
         existing_nullable=True,
     )
     op.alter_column("notes", "user_id", existing_type=sa.INTEGER(), nullable=False)
+    op.drop_index("idx_note_page_user", table_name="notes")
+    op.drop_index("idx_note_user_id", table_name="notes")
     op.create_index("idx_note_page_user", "notes", ["page_id", "user_id"], unique=False)
     op.create_index("idx_note_user_id", "notes", ["user_id"], unique=False)
     op.create_index(op.f("ix_notes_user_id"), "notes", ["user_id"], unique=False)
@@ -50,6 +52,9 @@ def upgrade() -> None:
         None, "notes", "users", ["user_id"], ["id"], ondelete="CASCADE"
     )
     op.alter_column("pages", "user_id", existing_type=sa.INTEGER(), nullable=False)
+    op.drop_index("idx_page_site_user", table_name="pages")
+    op.drop_index("idx_page_url_user", table_name="pages")
+    op.drop_index("idx_page_user_id", table_name="pages")
     op.create_index("idx_page_site_user", "pages", ["site_id", "user_id"], unique=False)
     op.create_index("idx_page_url_user", "pages", ["url", "user_id"], unique=False)
     op.create_index("idx_page_user_id", "pages", ["user_id"], unique=False)
@@ -57,15 +62,18 @@ def upgrade() -> None:
     op.create_foreign_key(
         None, "pages", "users", ["user_id"], ["id"], ondelete="CASCADE"
     )
+    op.drop_index("idx_site_domain_user", table_name="sites")
     op.alter_column("sites", "user_id", existing_type=sa.INTEGER(), nullable=False)
     op.create_index(
         "idx_site_domain_user", "sites", ["domain", "user_id"], unique=False
     )
+    op.drop_index("idx_site_user_id", table_name="sites")
     op.create_index("idx_site_user_id", "sites", ["user_id"], unique=False)
     op.create_index(op.f("ix_sites_user_id"), "sites", ["user_id"], unique=False)
     op.create_foreign_key(
         None, "sites", "users", ["user_id"], ["id"], ondelete="CASCADE"
     )
+    op.drop_index("ix_user_page_shares_id", table_name="user_page_shares")
     op.create_index(
         op.f("ix_user_page_shares_id"), "user_page_shares", ["id"], unique=False
     )
@@ -81,6 +89,7 @@ def upgrade() -> None:
         ["user_id"],
         unique=False,
     )
+    op.drop_index("ix_user_site_shares_id", table_name="user_site_shares")
     op.create_index(
         op.f("ix_user_site_shares_id"), "user_site_shares", ["id"], unique=False
     )
