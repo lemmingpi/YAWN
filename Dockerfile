@@ -33,5 +33,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=300s --retries=3 \
   CMD python -c "import requests; requests.get('http://localhost:$PORT/health')"
 
 # Run database migrations and start server
-CMD alembic upgrade head && \
-     export ENV_FILE=env/env.prod && python -m app.main --log-level info
+CMD export ENV_FILE=env/env.prod && python -m app.main --log-level info
