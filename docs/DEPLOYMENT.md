@@ -68,7 +68,7 @@ Your application supports three LLM providers. Set up at least one.
 
 **Free Tier**: 15 requests per minute, 1,500 requests per day
 
-1. **Create API Key**:
+1. **Create API Key**: ✅ 
    ```bash
    # Visit Google AI Studio
    # https://makersuite.google.com/app/apikey
@@ -77,22 +77,22 @@ Your application supports three LLM providers. Set up at least one.
    gcloud services enable generativelanguage.googleapis.com
    ```
 
-2. **Get API Key**:
+2. **Get API Key**: ✅ 
    - Navigate to https://makersuite.google.com/app/apikey
    - Click "Create API Key"
    - Select your GCP project
    - Copy the API key
 
-3. **Test API Key**:
+3. **Test API Key**: ✅ 
    ```bash
    curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=YOUR_API_KEY" \
      -H 'Content-Type: application/json' \
      -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
    ```
 
-4. **Environment Variable**:
+4. **Environment Variable**:  ✅
    ```bash
-   GEMINI_API_KEY=your_gemini_api_key_here
+   GOOGLE_AI_API_KEY=your_GOOGLE_AI_API_KEY_here
    GEMINI_MODEL=gemini-1.5-flash  # or gemini-1.5-pro
    ```
 
@@ -437,7 +437,7 @@ Store sensitive configuration securely.
 ```bash
 # Create secrets
 echo -n "YOUR_DATABASE_PASSWORD" | gcloud secrets create db-password --data-file=-
-echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create gemini-api-key --data-file=-
+echo -n "YOUR_GOOGLE_AI_API_KEY" | gcloud secrets create gemini-api-key --data-file=-
 echo -n "YOUR_OPENAI_API_KEY" | gcloud secrets create openai-api-key --data-file=-
 echo -n "YOUR_ANTHROPIC_API_KEY" | gcloud secrets create anthropic-api-key --data-file=-
 echo -n "YOUR_JWT_SECRET" | gcloud secrets create jwt-secret --data-file=-
@@ -584,7 +584,7 @@ Create `backend/.env.production.template`:
 DATABASE_URL=postgresql://yawn_app:PASSWORD@/yawn_production?host=/cloudsql/PROJECT:REGION:INSTANCE
 
 # LLM APIs
-GEMINI_API_KEY=your_gemini_key
+GOOGLE_AI_API_KEY=your_gemini_key
 OPENAI_API_KEY=your_openai_key
 ANTHROPIC_API_KEY=your_anthropic_key
 LLM_PROVIDER=gemini
@@ -618,7 +618,7 @@ docker build -t us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:
 # Test locally
 docker run -p 8080:8080 \
   -e DATABASE_URL="postgresql://yawn_app:PASSWORD@host.docker.internal:5432/yawn_production" \
-  -e GEMINI_API_KEY="your_key" \
+  -e GOOGLE_AI_API_KEY="your_key" \
   us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:latest
 
 # Push to Artifact Registry
@@ -642,7 +642,7 @@ gcloud run deploy yawn-api \
   --concurrency=80 \
   --port=8080 \
   --add-cloudsql-instances=yawn-notes-prod:us-central1:yawn-postgres \
-  --set-secrets="DATABASE_URL=db-password:latest,GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,JWT_SECRET_KEY=jwt-secret:latest" \
+  --set-secrets="DATABASE_URL=db-password:latest,GOOGLE_AI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,JWT_SECRET_KEY=jwt-secret:latest" \
   --set-env-vars="LLM_PROVIDER=gemini,ENVIRONMENT=production,LOG_LEVEL=INFO"
 
 # Get service URL
