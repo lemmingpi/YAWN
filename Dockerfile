@@ -31,8 +31,6 @@ WORKDIR /app/backend
 # Expose port (Cloud Run will set PORT env var)
 ENV PORT=8080
 EXPOSE $PORT
-HEALTHCHECK --interval=30s --timeout=3s --start-period=300s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:$PORT/health')"
 
 # Run database migrations and start server
 CMD echo "on our way" && export ENV_FILE=env/env.prod && python -m app.main --log-level info

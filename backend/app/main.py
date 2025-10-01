@@ -260,6 +260,10 @@ async def not_found_handler(request: Request, exc: HTTPException) -> HTMLRespons
 if __name__ == "__main__":
     import uvicorn
 
+    dbstr = os.getenv("DATABASE_URL")
+    dbstr = dbstr.split("?")[0] if dbstr and "?" in dbstr else dbstr
+    print(f"Database URL: {dbstr if dbstr else 'not set'}")
+
     print("Starting development server...")
     # Development server configuration (use settings)
     uvicorn.run(
