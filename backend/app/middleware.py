@@ -5,14 +5,14 @@ processing middleware for the FastAPI application.
 """
 
 import time
-from typing import Callable, List, Optional
+from typing import Awaitable, Callable, List, Optional
 
 from fastapi import HTTPException, Request, Response, status
 from fastapi.security.utils import get_authorization_scheme_param
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
-from .auth import get_current_user, verify_token
-from .database import async_session_maker
+from .auth import verify_token
 
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
@@ -24,14 +24,14 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         excluded_paths: Optional[List[str]] = None,
         protected_prefixes: Optional[List[str]] = None,
-    ):
+    ) -> None:
         """Initialize the authentication middleware.
 
         Args:
-            app: FastAPI application instance
+            app: ASGI application instance
             excluded_paths: List of paths to exclude from authentication
             protected_prefixes: List of path prefixes that require authentication
         """
@@ -62,7 +62,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/api/llm_providers",
         ]
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         """Process the request through the middleware.
 
         Args:
@@ -155,17 +157,19 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     and debugging purposes.
     """
 
-    def __init__(self, app, log_body: bool = False):
+    def __init__(self, app: ASGIApp, log_body: bool = False) -> None:
         """Initialize the request logging middleware.
 
         Args:
-            app: FastAPI application instance
+            app: ASGI application instance
             log_body: Whether to log request/response bodies
         """
         super().__init__(app)
         self.log_body = log_body
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         """Process the request through the middleware.
 
         Args:
@@ -181,7 +185,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
 
-        print(f"Request: {request.method} {request.url.path} from {client_ip}")
+        print(
+            f"Request: {request.method} {request.url.path} from {client_ip} ({user_agent})"
+        )
         if self.log_body and hasattr(request, "body"):
             try:
                 body = await request.body()
@@ -210,15 +216,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     to improve application security.
     """
 
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         """Initialize the security headers middleware.
 
         Args:
-            app: FastAPI application instance
+            app: ASGI application instance
         """
         super().__init__(app)
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         """Process the request through the middleware.
 
         Args:
@@ -232,9 +240,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Add security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        # Allow Google Sign-In iframe (don't use DENY)
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+        # Content Security Policy - allow Google for OAuth
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net; "
+            "frame-src 'self' https://accounts.google.com; "
+            "connect-src 'self' https://accounts.google.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https:;"
+        )
 
         # Add HSTS header for HTTPS (only in production)
         # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
