@@ -107,11 +107,9 @@ app.add_middleware(RequestLoggingMiddleware, log_body=False)
 # Configure CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "*",  # Allow all origins for Chrome extension compatibility
-    ],
-    allow_credentials=False,  # Must be False when allow_origins is "*"
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

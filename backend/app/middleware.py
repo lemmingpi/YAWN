@@ -240,9 +240,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Add security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        # Allow Google Sign-In iframe (don't use DENY)
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+        # Content Security Policy - allow Google for OAuth
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net; "
+            "frame-src 'self' https://accounts.google.com; "
+            "connect-src 'self' https://accounts.google.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https:;"
+        )
 
         # Add HSTS header for HTTPS (only in production)
         # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
