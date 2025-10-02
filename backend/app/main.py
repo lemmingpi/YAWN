@@ -107,11 +107,9 @@ app.add_middleware(RequestLoggingMiddleware, log_body=False)
 # Configure CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "*",  # Allow all origins for Chrome extension compatibility
-    ],
-    allow_credentials=False,  # Must be False when allow_origins is "*"
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -259,6 +257,10 @@ async def not_found_handler(request: Request, exc: HTTPException) -> HTMLRespons
 
 if __name__ == "__main__":
     import uvicorn
+
+    dbstr = os.getenv("DATABASE_URL")
+    dbstr = dbstr.split("?")[0] if dbstr and "?" in dbstr else dbstr
+    print(f"Database URL: {dbstr if dbstr else 'not set'}")
 
     print("Starting development server...")
     # Development server configuration (use settings)

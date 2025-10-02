@@ -75,7 +75,7 @@ async def verify_chrome_identity_token(access_token: str) -> Dict[str, Any]:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                 )
 
-            user_info = response.json()
+            user_info: Dict[str, Any] = response.json()
 
             # Ensure required fields are present
             if not user_info.get("email"):
