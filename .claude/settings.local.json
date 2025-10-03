@@ -37,7 +37,8 @@
       "Bash(alembic revision:*)",
       "Bash(cat:*)",
       "Bash(find:*)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(git log:*)"
     ],
     "deny": [
       "Bash(git commit:-amend:*)"

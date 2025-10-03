@@ -3,7 +3,7 @@
  * Provides Google Docs-style sharing functionality with comprehensive security and UX features
  */
 
-/* global DOMPurify, ErrorHandler, ServerAPI, AuthManager */
+/* global DOMPurify, ErrorHandler, isServerAuthenticated */
 
 /**
  * Sharing Interface Manager
@@ -1071,12 +1071,10 @@ const SharingInterface = {
    */
   async ensureAuthenticated() {
     try {
-      if (typeof AuthManager === "undefined") {
-        this.showErrorMessage("Authentication not available. Please check your connection.");
-        return false;
-      }
+      // Check authentication via background script
+      const isAuth = await isServerAuthenticated();
 
-      if (!AuthManager.isAuthenticated()) {
+      if (!isAuth) {
         this.showErrorMessage("Please sign in to share notes.");
         return false;
       }
@@ -1103,13 +1101,26 @@ const SharingInterface = {
 
       switch (shareType) {
         case "note":
-          result = await ServerAPI.shareNoteWithUser(resourceId, email, permission);
+          // Notes don't have direct sharing - they inherit from their page
+          throw new Error("Individual notes cannot be shared. Share the page instead.");
           break;
         case "page":
-          result = await ServerAPI.sharePageWithUser(resourceId, email, permission);
+          const sharePageResp = await chrome.runtime.sendMessage({
+            action: "API_sharePageWithUser",
+            pageId: resourceId,
+            userEmail: email,
+            permissionLevel: permission,
+          });
+          result = sharePageResp.success ? sharePageResp.data : null;
           break;
         case "site":
-          result = await ServerAPI.shareSiteWithUser(resourceId, email, permission);
+          const shareSiteResp = await chrome.runtime.sendMessage({
+            action: "API_shareSiteWithUser",
+            siteId: resourceId,
+            userEmail: email,
+            permissionLevel: permission,
+          });
+          result = shareSiteResp.success ? shareSiteResp.data : null;
           break;
         default:
           throw new Error(`Invalid share type: ${shareType}`);
@@ -1144,13 +1155,16 @@ const SharingInterface = {
 
       switch (shareType) {
         case "note":
-          shares = await ServerAPI.getNoteShares(resourceId);
+          // Notes don't have direct sharing - they inherit from their page
+          shares = [];
           break;
         case "page":
-          shares = await ServerAPI.getPageShares(resourceId);
+          const getPageSharesResp = await chrome.runtime.sendMessage({ action: "API_getPageShares", pageId: resourceId });
+          shares = getPageSharesResp.success ? getPageSharesResp.data : [];
           break;
         case "site":
-          shares = await ServerAPI.getSiteShares(resourceId);
+          const getSiteSharesResp = await chrome.runtime.sendMessage({ action: "API_getSiteShares", siteId: resourceId });
+          shares = getSiteSharesResp.success ? getSiteSharesResp.data : [];
           break;
         default:
           throw new Error(`Invalid share type: ${shareType}`);
@@ -1201,7 +1215,32 @@ const SharingInterface = {
         throw new Error("You do not have permission to modify this share");
       }
 
-      await ServerAPI.updateSharePermission(shareType, resourceId, userId, newPermission);
+      // Route to appropriate API based on share type
+      switch (shareType) {
+        case "note":
+          throw new Error("Individual notes cannot be shared");
+          break;
+        case "page":
+          await chrome.runtime.sendMessage({
+            action: "API_updatePageSharePermission",
+            pageId: resourceId,
+            userId: userId,
+            newPermission: newPermission,
+            isActive: true,
+          });
+          break;
+        case "site":
+          await chrome.runtime.sendMessage({
+            action: "API_updateSiteSharePermission",
+            siteId: resourceId,
+            userId: userId,
+            newPermission: newPermission,
+            isActive: true,
+          });
+          break;
+        default:
+          throw new Error(`Invalid share type: ${shareType}`);
+      }
 
       // Clear cache and refresh
       this.shareCache.delete(`${shareType}:${resourceId}`);
@@ -1248,7 +1287,28 @@ const SharingInterface = {
         return;
       }
 
-      await ServerAPI.removeShare(shareType, resourceId, userId);
+      // Route to appropriate API based on share type
+      switch (shareType) {
+        case "note":
+          throw new Error("Individual notes cannot be shared");
+          break;
+        case "page":
+          await chrome.runtime.sendMessage({
+            action: "API_removePageShare",
+            pageId: resourceId,
+            userId: userId,
+          });
+          break;
+        case "site":
+          await chrome.runtime.sendMessage({
+            action: "API_removeSiteShare",
+            siteId: resourceId,
+            userId: userId,
+          });
+          break;
+        default:
+          throw new Error(`Invalid share type: ${shareType}`);
+      }
 
       // Clear cache and refresh
       this.shareCache.delete(`${shareType}:${resourceId}`);
@@ -1333,34 +1393,11 @@ const SharingInterface = {
    */
   async copyShareLink(shareType, resourceId) {
     try {
-      const shareLink = await ServerAPI.generateShareLink(shareType, resourceId);
-
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(shareLink);
-        this.showSuccessMessage("Share link copied to clipboard");
-      } else {
-        // Fallback for older browsers
-        const textArea = document.createElement("textarea");
-        textArea.value = shareLink;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-        textArea.style.top = "-999999px";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-
-        try {
-          document.execCommand("copy");
-          this.showSuccessMessage("Share link copied to clipboard");
-        } catch (err) {
-          this.showErrorMessage("Failed to copy link. Please copy manually: " + shareLink);
-        }
-
-        document.body.removeChild(textArea);
-      }
+      // TODO: Implement share link generation on backend
+      throw new Error("Share link generation not yet implemented");
     } catch (error) {
       console.error("[Web Notes] Failed to copy share link:", error);
-      this.showErrorMessage("Failed to generate share link. Please try again.");
+      this.showErrorMessage("Share link generation not yet implemented");
     }
   },
 
@@ -1593,7 +1630,8 @@ const SharingInterface = {
     try {
       // For now, assume authenticated users can share their own resources
       // This should be enhanced with proper server-side permission checks
-      if (typeof AuthManager === "undefined" || !AuthManager.isAuthenticated()) {
+      const isAuth = await isServerAuthenticated();
+      if (!isAuth) {
         return false;
       }
 

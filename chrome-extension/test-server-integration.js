@@ -10,6 +10,7 @@
  */
 
 /* global ServerAPI, getWNConfig, setWNConfig, getNotes, setNotes, addNote, updateNote, deleteNote */
+/* global isServerSyncEnabled */
 
 const ServerIntegrationTest = {
   testResults: [],
@@ -92,22 +93,14 @@ const ServerIntegrationTest = {
         return;
       }
 
-      const isEnabled = await ServerAPI.isEnabled();
-      this.assert(
-        isEnabled,
-        "Server sync enabled",
-        "Should detect enabled server sync"
-      );
+      const isEnabled = await isServerSyncEnabled();
+      this.assert(isEnabled, "Server sync enabled", "Should detect enabled server sync");
 
       // Test page creation (this will test the full chain: site -> page)
       const testUrl = window.location.href;
       const page = await ServerAPI.getOrCreatePage(testUrl);
 
-      this.assert(
-        page && page.id && page.url,
-        "Page creation/retrieval",
-        "Should create or retrieve page from server"
-      );
+      this.assert(page && page.id && page.url, "Page creation/retrieval", "Should create or retrieve page from server");
     } catch (error) {
       this.assert(false, "Server API connection", `Failed: ${error.message}`);
     }
@@ -136,11 +129,7 @@ const ServerIntegrationTest = {
 
       // Test local creation with server sync
       const success = await addNote(testUrl, testNote);
-      this.assert(
-        success,
-        "Note creation",
-        "Should create note locally and sync to server"
-      );
+      this.assert(success, "Note creation", "Should create note locally and sync to server");
 
       // Verify note was added to local storage
       const notes = await getNotes();
@@ -169,9 +158,7 @@ const ServerIntegrationTest = {
       const notes = await getNotes();
       const normalizedUrl = testUrl.split("#")[0];
       const urlNotes = notes[normalizedUrl] || [];
-      const testNote = urlNotes.find(
-        note => note.id && note.id.startsWith("test-note-")
-      );
+      const testNote = urlNotes.find(note => note.id && note.id.startsWith("test-note-"));
 
       if (!testNote) {
         this.assert(false, "Note update", "No test note found to update");
@@ -185,11 +172,7 @@ const ServerIntegrationTest = {
       };
 
       const success = await updateNote(testUrl, testNote.id, updateData);
-      this.assert(
-        success,
-        "Note update",
-        "Should update note locally and sync to server"
-      );
+      this.assert(success, "Note update", "Should update note locally and sync to server");
 
       // Verify update was applied
       const updatedNotes = await getNotes();
@@ -217,9 +200,7 @@ const ServerIntegrationTest = {
       const notes = await getNotes();
       const normalizedUrl = testUrl.split("#")[0];
       const urlNotes = notes[normalizedUrl] || [];
-      const testNote = urlNotes.find(
-        note => note.id && note.id.startsWith("test-note-")
-      );
+      const testNote = urlNotes.find(note => note.id && note.id.startsWith("test-note-"));
 
       if (!testNote) {
         this.assert(false, "Note deletion", "No test note found to delete");
@@ -227,22 +208,14 @@ const ServerIntegrationTest = {
       }
 
       const success = await deleteNote(testUrl, testNote.id);
-      this.assert(
-        success,
-        "Note deletion",
-        "Should delete note locally and from server"
-      );
+      this.assert(success, "Note deletion", "Should delete note locally and from server");
 
       // Verify deletion
       const updatedNotes = await getNotes();
       const updatedUrlNotes = updatedNotes[normalizedUrl] || [];
       const deletedNote = updatedUrlNotes.find(note => note.id === testNote.id);
 
-      this.assert(
-        !deletedNote,
-        "Note deletion verification",
-        "Deleted note should not exist in local storage"
-      );
+      this.assert(!deletedNote, "Note deletion verification", "Deleted note should not exist in local storage");
     } catch (error) {
       this.assert(false, "Note deletion", `Failed: ${error.message}`);
     }
@@ -281,11 +254,7 @@ const ServerIntegrationTest = {
       const success = await addNote(window.location.href, testNote);
 
       // Should succeed locally even if server fails
-      this.assert(
-        success,
-        "Graceful degradation",
-        "Should save locally even when server is unavailable"
-      );
+      this.assert(success, "Graceful degradation", "Should save locally even when server is unavailable");
 
       // Verify note exists locally
       const notes = await getNotes();
@@ -353,9 +322,7 @@ const ServerIntegrationTest = {
 
     if (failed > 0) {
       console.log("\nFailed Tests:");
-      this.testResults
-        .filter(r => !r.passed)
-        .forEach(r => console.log(`❌ ${r.name}: ${r.description}`));
+      this.testResults.filter(r => !r.passed).forEach(r => console.log(`❌ ${r.name}: ${r.description}`));
     }
 
     console.log("\n🏁 Server Integration Tests Complete");

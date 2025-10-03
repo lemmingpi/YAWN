@@ -104,28 +104,44 @@ async function updateUserStatus() {
       return;
     }
 
-    // Check if AuthManager is available
-    if (typeof AuthManager === "undefined") {
-      // Show signed out view if AuthManager not available
+    // Always use message passing to background script - never direct AuthManager access
+    const authResponse = await chrome.runtime.sendMessage({
+      action: "AUTHMANAGER_isAuthenticated",
+    });
+
+    if (!authResponse.success) {
+      // Show signed out view if check failed
       signedInView.style.display = "none";
       signedOutView.style.display = "block";
       return;
     }
 
-    const isAuthenticated = AuthManager.isAuthenticated();
-    const user = AuthManager.getCurrentUser();
+    const isAuthenticated = authResponse.data;
 
-    if (isAuthenticated && user) {
-      // Show signed in view
-      signedInView.style.display = "block";
-      signedOutView.style.display = "none";
+    if (isAuthenticated) {
+      // Get user information from background
+      const userResponse = await chrome.runtime.sendMessage({
+        action: "AUTHMANAGER_getCurrentUser",
+      });
 
-      // Update user information
-      if (userNameElement) {
-        userNameElement.textContent = user.name || "Unknown User";
-      }
-      if (userEmailElement) {
-        userEmailElement.textContent = user.email || "";
+      if (userResponse.success && userResponse.data) {
+        const user = userResponse.data;
+
+        // Show signed in view
+        signedInView.style.display = "block";
+        signedOutView.style.display = "none";
+
+        // Update user information
+        if (userNameElement) {
+          userNameElement.textContent = user.name || "Unknown User";
+        }
+        if (userEmailElement) {
+          userEmailElement.textContent = user.email || "";
+        }
+      } else {
+        // Show signed out view if no user data
+        signedInView.style.display = "none";
+        signedOutView.style.display = "block";
       }
     } else {
       // Show signed out view
@@ -156,18 +172,18 @@ async function handleSignIn() {
       signInBtn.disabled = true;
     }
 
-    if (typeof AuthManager === "undefined") {
-      showUserError("Authentication manager not available");
-      return;
-    }
+    // Use message passing to background script
+    const response = await chrome.runtime.sendMessage({
+      action: "AUTHMANAGER_signIn",
+      interactive: true,
+    });
 
-    const user = await AuthManager.signIn(true);
-    if (user) {
-      console.log("[Popup] Sign-in successful:", user);
+    if (response.success && response.data) {
+      console.log("[Popup] Sign-in successful:", response.data);
       await updateUserStatus();
       await updateStatsDisplay();
     } else {
-      showUserError("Sign-in failed");
+      showUserError("Sign-in failed: " + (response.error || "Unknown error"));
     }
   } catch (error) {
     logError("Sign-in error", error);
@@ -192,15 +208,18 @@ async function handleSignOut() {
       signOutBtn.disabled = true;
     }
 
-    if (typeof AuthManager === "undefined") {
-      showUserError("Authentication manager not available");
-      return;
-    }
+    // Use message passing to background script
+    const response = await chrome.runtime.sendMessage({
+      action: "AUTHMANAGER_signOut",
+    });
 
-    await AuthManager.signOut();
-    console.log("[Popup] Sign-out successful");
-    await updateUserStatus();
-    await updateStatsDisplay();
+    if (response.success) {
+      console.log("[Popup] Sign-out successful");
+      await updateUserStatus();
+      await updateStatsDisplay();
+    } else {
+      showUserError("Sign-out failed: " + (response.error || "Unknown error"));
+    }
   } catch (error) {
     logError("Sign-out error", error);
     showUserError("Sign-out failed: " + error.message);
@@ -400,17 +419,28 @@ document.addEventListener("DOMContentLoaded", async function () {
       signOutBtn.addEventListener("click", handleSignOut);
     }
 
-    // Wait for AuthManager to initialize before updating UI
-    if (typeof AuthManager !== "undefined") {
-      await AuthManager.initialize();
+    // Listen for auth state changes from storage
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "sync") return;
 
-      // Set up authentication state listener
-      AuthManager.addAuthListener(async (event, data) => {
-        console.log("[Popup] Auth state changed:", event, data);
-        await updateUserStatus();
-        await updateStatsDisplay();
-      });
-    }
+      // Check if any auth-related keys changed
+      const authKeys = ["webNotesJWT", "webNotesUser", "webNotesAuthState"];
+      const authChanged = authKeys.some(key => key in changes);
+
+      if (authChanged) {
+        console.log("[Popup] Auth state changed in storage, updating UI");
+        updateUserStatus().catch(error => {
+          console.error("[Popup] Failed to update user status:", error);
+        });
+        updateStatsDisplay().catch(error => {
+          console.error("[Popup] Failed to update stats display:", error);
+        });
+        // Update sharing section when auth changes
+        initializeSharingSection().catch(error => {
+          console.error("[Popup] Failed to update sharing section:", error);
+        });
+      }
+    });
 
     // Initialize popup displays
     await updateUserStatus();
@@ -478,8 +508,12 @@ async function initializeSharingSection() {
  */
 async function checkSharingCapability() {
   try {
-    // Check if user is authenticated
-    if (typeof AuthManager === "undefined" || !AuthManager.isAuthenticated()) {
+    // Check if user is authenticated via background script
+    const authResponse = await chrome.runtime.sendMessage({
+      action: "AUTHMANAGER_isAuthenticated",
+    });
+
+    if (!authResponse.success || !authResponse.data) {
       return false;
     }
 
@@ -798,13 +832,6 @@ async function updateSharingOnAuthChange() {
   }
 }
 
-// Add auth listener for sharing updates
-if (typeof AuthManager !== "undefined") {
-  AuthManager.addAuthListener(async (event, data) => {
-    if (event === "signIn" || event === "signOut") {
-      await updateSharingOnAuthChange();
-    }
-  });
-}
+// Storage listener already handles auth changes and updates sharing section
 
 // Banner functions removed - functionality no longer needed

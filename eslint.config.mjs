@@ -1,4 +1,3 @@
-import { defineConfig } from "eslint/config";
 import globals from "globals";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,10 +9,11 @@ const __dirname = path.dirname(__filename);
 const compat = new FlatCompat({
     baseDirectory: __dirname,
     recommendedConfig: js.configs.recommended,
-    allConfig: js.configs.all
+    allConfig: js.configs.all,
 });
 
-export default defineConfig([globalIgnores([
+export default [{
+    ignores: [
     "**/node_modules/",
     "**/.venv/",
     "**/dist/",
@@ -54,8 +54,9 @@ export default defineConfig([globalIgnores([
     "**/.Trashes",
     "**/ehthumbs.db",
     "**/Thumbs.db",
-]), {
-    extends: compat.extends("eslint:recommended"),
+    ],
+}, {
+    ...js.configs.recommended,
 
     languageOptions: {
         globals: {
@@ -106,4 +107,4 @@ export default defineConfig([globalIgnores([
             ignoreStrings: true,
         }],
     },
-}]);
+}];

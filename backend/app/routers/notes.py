@@ -199,7 +199,11 @@ async def get_or_create_page_by_url(
 
     if not existing_site:
         # Create new site
-        new_site = Site(domain=domain, user_context=None)
+        new_site = Site(
+            domain=domain,
+            user_context=None,
+            user_id=user.id,
+        )
         db.add(new_site)
         await db.flush()  # Get ID without committing
         site = new_site
@@ -237,6 +241,7 @@ async def create_note_with_url(
         HTTPException: If URL is invalid
     """
     try:
+        print("Creating note with URL for User:", current_user.id)
         # Get or create page (and site if needed)
         page = await get_or_create_page_by_url(
             db, note_data.url, current_user, note_data.page_title
@@ -279,6 +284,7 @@ async def create_note(
         HTTPException: If associated page not found
     """
     # Verify page exists and user has access to it
+    print("Creating note with for User:", current_user.id)
     page_result = await db.execute(select(Page).where(Page.id == note_data.page_id))
     page = page_result.scalar_one_or_none()
     if not page:
@@ -550,6 +556,7 @@ async def update_note(
         HTTPException: If note not found or page not found
     """
     # Get existing note
+    print("Put note for User:", current_user.id)
     result = await db.execute(select(Note).where(Note.id == note_id))
     note = result.scalar_one_or_none()
 
@@ -725,35 +732,60 @@ async def create_notes_bulk_with_url(
     """
     created_notes = []
     errors = []
+    print("\n=== BULK CREATE NOTES START ===")
+    print(f"User ID: {current_user.id}")
+    print(f"Number of notes to process: {len(bulk_data.notes)}")
+    print(f"Incoming data: {bulk_data.model_dump()}")
 
     # Cache for created pages to avoid duplicates
     page_cache: Dict[str, Page] = {}
 
     for i, note_data in enumerate(bulk_data.notes):
+        print(f"\n--- Processing note {i + 1}/{len(bulk_data.notes)} ---")
+        print(f"Note data: {note_data.model_dump()}")
+
         try:
             # Get or create page (use cache to avoid duplicates)
             cache_key = note_data.url
             if cache_key in page_cache:
                 page = page_cache[cache_key]
+                print(f"Using cached page: id={page.id}, url={page.url}")
             else:
+                print(f"Getting or creating page for URL: {note_data.url}")
                 page = await get_or_create_page_by_url(
                     db, note_data.url, current_user, note_data.page_title
                 )
                 page_cache[cache_key] = page
+                print(
+                    f"Page result: id={page.id}, url={page.url}, site_id={page.site_id}"
+                )
 
             # Check if note exists by server_link_id (for upsert behavior)
             existing_note = None
             if note_data.server_link_id:
+                print(
+                    f"Checking for existing note with server_link_id: {note_data.server_link_id}"
+                )
                 existing_note_result = await db.execute(
                     select(Note).where(Note.server_link_id == note_data.server_link_id)
                 )
                 existing_note = existing_note_result.scalar_one_or_none()
+                if existing_note:
+                    print(f"Found existing note: id={existing_note.id}")
+                else:
+                    print("No existing note found")
+            else:
+                print("No server_link_id provided, will create new note")
 
             if existing_note:
+                print("CODE PATH: Updating existing note")
                 # Check access to update existing note
                 if not await check_note_access(
                     db, existing_note, current_user, PermissionLevel.EDIT
                 ):
+                    print(
+                        f"ERROR: Insufficient permissions for note {existing_note.id}"
+                    )
                     errors.append(
                         {
                             "index": i,
@@ -765,10 +797,13 @@ async def create_notes_bulk_with_url(
 
                 # Update existing note
                 note_dict = note_data.model_dump(exclude={"url", "page_title"})
+                print(f"Updating fields: {note_dict}")
                 for field, value in note_dict.items():
                     setattr(existing_note, field, value)
 
                 await db.flush()
+                await db.refresh(existing_note)
+                print(f"Note updated successfully: id={existing_note.id}")
 
                 # Get artifact count for the updated note
                 artifact_count_result = await db.execute(
@@ -777,33 +812,53 @@ async def create_notes_bulk_with_url(
                     )
                 )
                 artifact_count = artifact_count_result.scalar() or 0
+                print(f"Artifact count: {artifact_count}")
 
                 note_response = NoteResponse.model_validate(existing_note)
                 note_response.artifacts_count = artifact_count
                 created_notes.append(note_response)
             else:
+                print("CODE PATH: Creating new note")
                 # Create new note associated with current user
                 note_dict = note_data.model_dump(exclude={"url", "page_title"})
                 note_dict["page_id"] = page.id
                 note_dict["user_id"] = current_user.id
+                print(f"New note data: {note_dict}")
                 note = Note(**note_dict)
                 db.add(note)
                 await db.flush()
+                await db.refresh(note)
+                print(f"Note created successfully: id={note.id}")
 
                 note_response = NoteResponse.model_validate(note)
                 note_response.artifacts_count = 0
                 created_notes.append(note_response)
 
         except Exception as e:
+            print(f"ERROR processing note {i}: {str(e)}")
+            print(f"Exception type: {type(e).__name__}")
+            import traceback
+
+            print(f"Traceback: {traceback.format_exc()}")
             errors.append(
                 {"index": i, "error": str(e), "note_data": note_data.model_dump()}
             )
 
     # Commit all successful operations
     if created_notes:
+        print(f"\nCommitting {len(created_notes)} successful notes")
         await db.commit()
     else:
+        print("\nNo notes to commit, rolling back")
         await db.rollback()
+
+    print("\n=== BULK CREATE NOTES SUMMARY ===")
+    print(f"Total processed: {len(bulk_data.notes)}")
+    print(f"Successful: {len(created_notes)}")
+    print(f"Errors: {len(errors)}")
+    if errors:
+        print(f"Error details: {errors}")
+    print("=== END ===\n")
 
     return BulkNoteResponse(created_notes=created_notes, errors=errors)
 

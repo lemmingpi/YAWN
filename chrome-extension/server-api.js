@@ -359,13 +359,13 @@ const ServerAPI = {
   convertToServerFormatWithURL(extensionNote, url) {
     return {
       content: extensionNote.content || "",
-      position_x: extensionNote.fallbackPosition?.x || 0,
-      position_y: extensionNote.fallbackPosition?.y || 0,
+      position_x: Math.floor(extensionNote.fallbackPosition?.x || 0),
+      position_y: Math.floor(extensionNote.fallbackPosition?.y || 0),
       anchor_data: {
         elementSelector: extensionNote.elementSelector || null,
         elementXPath: extensionNote.elementXPath || null,
-        offsetX: extensionNote.offsetX || 0,
-        offsetY: extensionNote.offsetY || 0,
+        offsetX: Math.floor(extensionNote.offsetX || 0),
+        offsetY: Math.floor(extensionNote.offsetY || 0),
         selectionData: extensionNote.selectionData || null,
         backgroundColor: extensionNote.backgroundColor || "light-yellow",
         isMarkdown: extensionNote.isMarkdown || false,
@@ -374,7 +374,7 @@ const ServerAPI = {
       is_active: extensionNote.isVisible !== false,
       server_link_id: extensionNote.id, // Use extension ID as link ID
       url: url,
-      page_title: document.title || "",
+      page_title: url || "",
     };
   },
 
@@ -387,13 +387,13 @@ const ServerAPI = {
   convertToServerFormat(extensionNote, pageId) {
     return {
       content: extensionNote.content || "",
-      position_x: extensionNote.fallbackPosition?.x || 0,
-      position_y: extensionNote.fallbackPosition?.y || 0,
+      position_x: Math.floor(extensionNote.fallbackPosition?.x || 0),
+      position_y: Math.floor(extensionNote.fallbackPosition?.y || 0),
       anchor_data: {
         elementSelector: extensionNote.elementSelector || null,
         elementXPath: extensionNote.elementXPath || null,
-        offsetX: extensionNote.offsetX || 0,
-        offsetY: extensionNote.offsetY || 0,
+        offsetX: Math.floor(extensionNote.offsetX || 0),
+        offsetY: Math.floor(extensionNote.offsetY || 0),
         selectionData: extensionNote.selectionData || null,
         backgroundColor: extensionNote.backgroundColor || "light-yellow",
         isMarkdown: extensionNote.isMarkdown || false,

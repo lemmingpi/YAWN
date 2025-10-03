@@ -31,14 +31,9 @@ console.log("Web Notes - Content script loaded!");
  */
 async function attemptAutoAuthenticationForNote() {
   try {
-    // Check if AuthManager is available
-    if (typeof AuthManager === "undefined") {
-      console.log("[Web Notes] AuthManager not available, skipping authentication");
-      return false;
-    }
-
-    // Check if already authenticated
-    if (AuthManager.isAuthenticated()) {
+    // Check if already authenticated via background
+    const isAuth = await isServerAuthenticated();
+    if (isAuth) {
       console.log("[Web Notes] User already authenticated");
       return false;
     }
@@ -52,8 +47,9 @@ async function attemptAutoAuthenticationForNote() {
 
     console.log("[Web Notes] Attempting auto-authentication for note creation");
 
-    // Try non-interactive authentication
-    const success = await AuthManager.attemptAutoAuth();
+    // Try non-interactive authentication via background
+    const response = await chrome.runtime.sendMessage({ action: "AUTHMANAGER_attemptAutoAuth" });
+    const success = response.success && response.data;
     if (success) {
       console.log("[Web Notes] Auto-authentication successful");
       return true;
@@ -1382,8 +1378,9 @@ function createMarkdownToolbar(textarea) {
     },
   ];
 
-  // Add sharing button if SharingInterface is available and user is authenticated
-  if (typeof SharingInterface !== "undefined" && typeof AuthManager !== "undefined" && AuthManager.isAuthenticated()) {
+  // Add sharing button if SharingInterface is available
+  // Auth check will happen when button is clicked
+  if (typeof SharingInterface !== "undefined") {
     toolbarButtons.push({
       title: "Share this note",
       icon: "🔗",
@@ -2497,14 +2494,14 @@ function getNoteDataFromElement(noteElement) {
  * Add context menu options for sharing
  * This function will be called when context menu is requested
  */
-function addSharingContextMenuOptions() {
+async function addSharingContextMenuOptions() {
   // This will be handled by the background script
   // We'll send messages to request context menu updates
 
   try {
     // Check if sharing is available and user is authenticated
-    const canShare =
-      typeof SharingInterface !== "undefined" && typeof AuthManager !== "undefined" && AuthManager.isAuthenticated();
+    const isAuth = await isServerAuthenticated();
+    const canShare = typeof SharingInterface !== "undefined" && isAuth;
 
     if (canShare) {
       // Send message to background script to update context menu
@@ -2535,6 +2532,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  // Handle async cases
+  if (message.type === "checkSharingCapability") {
+    (async () => {
+      try {
+        const isAuth = await isServerAuthenticated();
+        const canShare = typeof SharingInterface !== "undefined" && isAuth;
+        sendResponse({ canShare });
+      } catch (error) {
+        console.error("[Web Notes] Error checking sharing capability:", error);
+        sendResponse({ canShare: false });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
   try {
     switch (message.type) {
       case "shareCurrentPage":
@@ -2550,12 +2562,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "shareNoteAtPosition":
         handleNoteContextSharing(message.data.x, message.data.y);
         sendResponse({ success: true });
-        break;
-
-      case "checkSharingCapability":
-        const canShare =
-          typeof SharingInterface !== "undefined" && typeof AuthManager !== "undefined" && AuthManager.isAuthenticated();
-        sendResponse({ canShare });
         break;
 
       default:
@@ -2622,7 +2628,8 @@ async function handleNoteContextSharing(x, y) {
 async function updateSharingStatusIndicators() {
   try {
     // Only proceed if sharing interface is available and user is authenticated
-    if (typeof SharingInterface === "undefined" || typeof AuthManager === "undefined" || !AuthManager.isAuthenticated()) {
+    const isAuth = await isServerAuthenticated();
+    if (typeof SharingInterface === "undefined" || !isAuth) {
       return;
     }
 
@@ -2691,13 +2698,14 @@ function updateNoteSharingIndicator(noteElement, isShared) {
 }
 
 // Initialize sharing functionality when document is ready
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   try {
     // Set up context menu options
-    addSharingContextMenuOptions();
+    await addSharingContextMenuOptions();
 
-    // Update sharing indicators periodically
-    if (typeof AuthManager !== "undefined" && AuthManager.isAuthenticated()) {
+    // Update sharing indicators periodically if authenticated
+    const isAuth = await isServerAuthenticated();
+    if (isAuth) {
       // Initial update
       setTimeout(updateSharingStatusIndicators, 2000);
 
@@ -2714,14 +2722,45 @@ if (document.readyState === "loading") {
   // Already handled above
 } else {
   // Document already loaded, initialize immediately
-  try {
-    addSharingContextMenuOptions();
+  (async () => {
+    try {
+      await addSharingContextMenuOptions();
 
-    if (typeof AuthManager !== "undefined" && AuthManager.isAuthenticated()) {
-      setTimeout(updateSharingStatusIndicators, 2000);
-      setInterval(updateSharingStatusIndicators, 5 * 60 * 1000);
+      const isAuth = await isServerAuthenticated();
+      if (isAuth) {
+        setTimeout(updateSharingStatusIndicators, 2000);
+        setInterval(updateSharingStatusIndicators, 5 * 60 * 1000);
+      }
+    } catch (error) {
+      console.error("[Web Notes] Error initializing sharing functionality on loaded document:", error);
     }
-  } catch (error) {
-    console.error("[Web Notes] Error initializing sharing functionality on loaded document:", error);
-  }
+  })();
 }
+
+// Listen for auth state changes from popup/background
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync") return;
+
+  // Check if any auth-related keys changed
+  const authKeys = ["auth_access_token", "auth_refresh_token", "auth_id_token", "auth_token_expires_at", "auth_user_info"];
+  const authChanged = authKeys.some(key => key in changes);
+
+  if (authChanged) {
+    console.log("[Web Notes] Auth state changed, reinitializing sharing features");
+
+    // Reinitialize sharing features
+    (async () => {
+      try {
+        await addSharingContextMenuOptions();
+
+        const isAuth = await isServerAuthenticated();
+        if (isAuth) {
+          // User just logged in, update indicators
+          setTimeout(updateSharingStatusIndicators, 2000);
+        }
+      } catch (error) {
+        console.error("[Web Notes] Error reinitializing after auth change:", error);
+      }
+    })();
+  }
+});

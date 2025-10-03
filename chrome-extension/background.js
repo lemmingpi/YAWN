@@ -5,6 +5,8 @@
 
 // Import shared utilities
 importScripts("./shared-utils.js");
+importScripts("./auth-manager.js");
+importScripts("./server-api.js");
 
 // Constants
 const EXTENSION_ID = "add-web-note";
@@ -228,7 +230,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 async function handleAddNote(info, tab) {
   try {
     // Get next note number using enhanced URL matching
-    const notes = await getNotes();
+    const notes = await getNotes(tab.url);
     const urlNotes = getNotesForUrl(tab.url, notes);
     const noteNumber = urlNotes.length + 1;
 
@@ -300,7 +302,255 @@ async function handleShareSite(info, tab) {
  * Handle messages from content scripts and popup
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || !message.type) {
+  if (!message) {
+    return;
+  }
+
+  // Handle API requests from content scripts (async)
+  if (message.action && message.action.startsWith("API_")) {
+    (async () => {
+      try {
+        let result;
+        switch (message.action) {
+          case "API_fetchNotesForPage":
+            result = await ServerAPI.fetchNotesForPage(message.url);
+            break;
+          case "API_createNote":
+            result = await ServerAPI.createNote(message.url, message.noteData);
+            break;
+          case "API_updateNote":
+            result = await ServerAPI.updateNote(message.serverId, message.noteData);
+            break;
+          case "API_deleteNote":
+            result = await ServerAPI.deleteNote(message.serverId);
+            break;
+          case "API_bulkSyncNotes":
+            result = await ServerAPI.bulkSyncNotes(message.url, message.notes);
+            break;
+          case "API_sharePageWithUser":
+            result = await ServerAPI.sharePageWithUser(message.pageId, message.userEmail, message.permissionLevel);
+            break;
+          case "API_shareSiteWithUser":
+            result = await ServerAPI.shareSiteWithUser(message.siteId, message.userEmail, message.permissionLevel);
+            break;
+          case "API_getPageShares":
+            result = await ServerAPI.getPageShares(message.pageId);
+            break;
+          case "API_getSiteShares":
+            result = await ServerAPI.getSiteShares(message.siteId);
+            break;
+          case "API_updatePageSharePermission":
+            result = await ServerAPI.updatePageSharePermission(
+              message.pageId,
+              message.userId,
+              message.newPermission,
+              message.isActive
+            );
+            break;
+          case "API_updateSiteSharePermission":
+            result = await ServerAPI.updateSiteSharePermission(
+              message.siteId,
+              message.userId,
+              message.newPermission,
+              message.isActive
+            );
+            break;
+          case "API_removePageShare":
+            result = await ServerAPI.removePageShare(message.pageId, message.userId);
+            break;
+          case "API_removeSiteShare":
+            result = await ServerAPI.removeSiteShare(message.siteId, message.userId);
+            break;
+          case "API_getConfig":
+            result = await ServerAPI.getConfig();
+            break;
+          default:
+            throw new Error(`Unknown API action: ${message.action}`);
+        }
+        sendResponse({ success: true, data: result });
+      } catch (error) {
+        logError(`API call failed: ${message.action}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle AUTH fetch requests from content scripts (async)
+  if (message.action && message.action.startsWith("AUTH_")) {
+    (async () => {
+      try {
+        let result;
+        switch (message.action) {
+          case "AUTH_register":
+            result = await fetch(message.url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              body: JSON.stringify(message.body),
+            });
+            break;
+          case "AUTH_login":
+            result = await fetch(message.url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              body: JSON.stringify(message.body),
+            });
+            break;
+          case "AUTH_validateToken":
+            result = await fetch(message.url, {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${message.token}`,
+                Accept: "application/json",
+              },
+            });
+            break;
+          default:
+            throw new Error(`Unknown AUTH action: ${message.action}`);
+        }
+
+        // Process fetch response
+        const ok = result.ok;
+        const status = result.status;
+        let data;
+        const contentType = result.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await result.json();
+        } else {
+          data = await result.text();
+        }
+
+        sendResponse({ success: ok, status: status, data: data });
+      } catch (error) {
+        logError(`AUTH call failed: ${message.action}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle chrome.identity requests from content scripts (async)
+  if (message.action && message.action.startsWith("IDENTITY_")) {
+    (async () => {
+      try {
+        let result;
+        switch (message.action) {
+          case "IDENTITY_getAuthToken":
+            result = await new Promise(resolve => {
+              chrome.identity.getAuthToken(
+                {
+                  interactive: message.interactive,
+                  scopes: message.scopes,
+                },
+                token => {
+                  if (chrome.runtime.lastError) {
+                    resolve({ error: chrome.runtime.lastError.message || String(chrome.runtime.lastError) });
+                  } else {
+                    resolve({ token });
+                  }
+                }
+              );
+            });
+            sendResponse({ success: !result.error, data: result.token, error: result.error });
+            break;
+          case "IDENTITY_removeCachedAuthToken":
+            result = await new Promise(resolve => {
+              chrome.identity.removeCachedAuthToken({ token: message.token }, () => {
+                if (chrome.runtime.lastError) {
+                  resolve({ error: chrome.runtime.lastError.message || String(chrome.runtime.lastError) });
+                } else {
+                  resolve({ success: true });
+                }
+              });
+            });
+            sendResponse({ success: !result.error, error: result.error });
+            break;
+          default:
+            throw new Error(`Unknown IDENTITY action: ${message.action}`);
+        }
+      } catch (error) {
+        logError(`Identity call failed: ${message.action}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle AuthManager requests from content scripts (async)
+  if (message.action && message.action.startsWith("AUTHMANAGER_")) {
+    (async () => {
+      try {
+        let result;
+
+        // Ensure AuthManager is available
+        if (typeof AuthManager === "undefined") {
+          sendResponse({ success: false, error: "AuthManager not available" });
+          return;
+        }
+
+        // Wait for initialization before processing requests
+        const initialized = await AuthManager.waitForInitialization();
+        if (!initialized) {
+          sendResponse({ success: false, error: "AuthManager initialization timeout" });
+          return;
+        }
+
+        switch (message.action) {
+          case "AUTHMANAGER_isAuthenticated":
+            result = AuthManager.isAuthenticated();
+            sendResponse({ success: true, data: result });
+            break;
+          case "AUTHMANAGER_getCurrentToken":
+            if (AuthManager.isAuthenticated()) {
+              result = AuthManager.getCurrentToken();
+              sendResponse({ success: true, data: result });
+            } else {
+              sendResponse({ success: false, data: null });
+            }
+            break;
+          case "AUTHMANAGER_getCurrentUser":
+            if (AuthManager.isAuthenticated()) {
+              result = AuthManager.getCurrentUser();
+              sendResponse({ success: true, data: result });
+            } else {
+              sendResponse({ success: false, data: null });
+            }
+            break;
+          case "AUTHMANAGER_refreshTokenIfNeeded":
+            result = await AuthManager.refreshTokenIfNeeded();
+            sendResponse({ success: true, data: result });
+            break;
+          case "AUTHMANAGER_attemptAutoAuth":
+            result = await AuthManager.attemptAutoAuth();
+            sendResponse({ success: true, data: result });
+            break;
+          case "AUTHMANAGER_signIn":
+            result = await AuthManager.signIn(message.interactive || false);
+            sendResponse({ success: true, data: result });
+            break;
+          case "AUTHMANAGER_signOut":
+            await AuthManager.signOut();
+            sendResponse({ success: true });
+            break;
+          default:
+            throw new Error(`Unknown AUTHMANAGER action: ${message.action}`);
+        }
+      } catch (error) {
+        logError(`AuthManager call failed: ${message.action}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle regular message types
+  if (!message.type) {
     return;
   }
 

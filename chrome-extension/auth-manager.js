@@ -41,6 +41,9 @@ const AuthManager = {
   // Initialization promise
   _initPromise: null,
 
+  // Initialization state
+  _isInitialized: false,
+
   /**
    * Initialize authentication manager
    * @returns {Promise<void>}
@@ -60,6 +63,8 @@ const AuthManager = {
    * @returns {Promise<void>}
    */
   async _doInitialize() {
+    this._isInitialized = false;
+
     try {
       console.log("[Auth] Initializing authentication manager");
 
@@ -69,11 +74,45 @@ const AuthManager = {
       // Set up periodic token validation
       this.setupTokenValidation();
 
+      // Listen for auth state changes from other contexts (popup, other tabs)
+      this.setupStorageListener();
+
+      this._isInitialized = true;
       console.log("[Auth] Authentication manager initialized");
     } catch (error) {
+      this._isInitialized = false;
       console.error("[Auth] Failed to initialize authentication manager:", error);
       throw error;
     }
+  },
+
+  /**
+   * Set up storage listener to detect auth changes from other contexts
+   */
+  setupStorageListener() {
+    let reloadTimeout = null;
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "sync") return;
+
+      // Check if any auth-related keys changed
+      const authKeys = Object.values(this.STORAGE_KEYS);
+      const authChanged = authKeys.some(key => key in changes);
+
+      if (authChanged) {
+        // Debounce rapid changes to prevent cascading reloads
+        if (reloadTimeout) {
+          clearTimeout(reloadTimeout);
+        }
+
+        reloadTimeout = setTimeout(() => {
+          console.log("[Auth] Auth state changed in storage, reloading");
+          this.loadAuthState().catch(error => {
+            console.error("[Auth] Failed to reload auth state:", error);
+          });
+        }, 500); // Wait 500ms for changes to settle
+      }
+    });
   },
 
   /**
@@ -240,10 +279,19 @@ const AuthManager = {
     try {
       console.log("[Auth] Starting sign-out process");
 
-      // Remove cached Chrome token
-      await new Promise(resolve => {
-        chrome.identity.removeCachedAuthToken({ token: this._authCache.jwtToken || "" }, resolve);
-      });
+      // Remove cached Chrome token if we have one
+      if (this._authCache.jwtToken) {
+        try {
+          await new Promise(resolve => {
+            chrome.identity.removeCachedAuthToken({ token: this._authCache.jwtToken }, () => {
+              resolve();
+            });
+          });
+        } catch (tokenError) {
+          console.warn("[Auth] Failed to remove cached token:", tokenError);
+          // Continue with sign-out even if token removal fails
+        }
+      }
 
       // Clear local authentication state
       await this.clearAuthState();
@@ -263,27 +311,30 @@ const AuthManager = {
    * @returns {Promise<string|null>} Google ID token
    */
   async getGoogleToken(interactive = true) {
-    return new Promise(resolve => {
-      chrome.identity.getAuthToken(
-        {
-          interactive: interactive,
-          scopes: this.CONFIG.SCOPES,
-        },
-        token => {
-          if (chrome.runtime.lastError) {
-            console.error(
-              "[Auth] Failed to get Google token:",
-              chrome.runtime.lastError.message || chrome.runtime.lastError
-            );
-            console.error("[Auth] Full error object:", chrome.runtime.lastError);
-            resolve(null);
-          } else {
-            console.log("[Auth] Got Google token successfully");
-            resolve(token);
+    try {
+      // Directly use Chrome Identity API (we're in service worker context)
+      const token = await new Promise((resolve, reject) => {
+        chrome.identity.getAuthToken(
+          {
+            interactive: interactive,
+            scopes: this.CONFIG.SCOPES,
+          },
+          token => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message || String(chrome.runtime.lastError)));
+            } else {
+              resolve(token);
+            }
           }
-        }
-      );
-    });
+        );
+      });
+
+      console.log("[Auth] Got Google token successfully");
+      return token;
+    } catch (error) {
+      console.error("[Auth] Failed to get Google token:", error);
+      return null;
+    }
   },
 
   /**
@@ -293,14 +344,14 @@ const AuthManager = {
    */
   async authenticateWithBackend(googleToken) {
     try {
-      // Get server configuration
+      // Get server configuration directly (we're in service worker)
       const config = await ServerAPI.getConfig();
       const serverUrl = config.serverUrl;
 
       // First try to register (handles both new users and existing users)
       let response;
       try {
-        response = await fetch(`${serverUrl}/users/register`, {
+        const registerResponse = await fetch(`${serverUrl}/users/register`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -310,9 +361,21 @@ const AuthManager = {
             chrome_token: googleToken,
           }),
         });
+
+        const ok = registerResponse.ok;
+        const status = registerResponse.status;
+        let data;
+        const contentType = registerResponse.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await registerResponse.json();
+        } else {
+          data = await registerResponse.text();
+        }
+
+        response = { success: ok, status: status, data: data };
       } catch (error) {
         // If register fails, try login
-        response = await fetch(`${serverUrl}/users/login`, {
+        const loginResponse = await fetch(`${serverUrl}/users/login`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -322,14 +385,27 @@ const AuthManager = {
             google_token: googleToken,
           }),
         });
+
+        const ok = loginResponse.ok;
+        const status = loginResponse.status;
+        let data;
+        const contentType = loginResponse.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await loginResponse.json();
+        } else {
+          data = await loginResponse.text();
+        }
+
+        response = { success: ok, status: status, data: data };
       }
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "Unknown error");
-        throw new Error(`Authentication failed: ${response.status} ${errorText}`);
+      if (!response.success) {
+        throw new Error(
+          `Authentication failed: ${response.status} ${typeof response.data === "string" ? response.data : "Unknown error"}`
+        );
       }
 
-      const result = await response.json();
+      const result = response.data;
 
       if (!result.access_token || !result.user) {
         throw new Error("Invalid authentication response from server");
@@ -359,7 +435,7 @@ const AuthManager = {
         return false;
       }
 
-      // Validate with backend
+      // Validate with backend directly (we're in service worker)
       const config = await ServerAPI.getConfig();
       const response = await fetch(`${config.serverUrl}/users/me`, {
         method: "GET",
@@ -455,7 +531,35 @@ const AuthManager = {
    * @returns {boolean} True if authenticated
    */
   isAuthenticated() {
+    if (!this._isInitialized) {
+      console.warn("[Auth] Checking auth before initialization complete");
+      // Trigger initialization if not already started
+      if (!this._initPromise) {
+        this.initialize().catch(error => {
+          console.error("[Auth] Failed to auto-initialize:", error);
+        });
+      }
+      return false;
+    }
     return this._authCache.isAuthenticated && !!this._authCache.jwtToken;
+  },
+
+  /**
+   * Wait for AuthManager to complete initialization
+   * @param {number} timeout - Maximum time to wait in milliseconds (default 5000)
+   * @returns {Promise<boolean>} True if initialized within timeout
+   */
+  async waitForInitialization(timeout = 5000) {
+    if (this._isInitialized) {
+      return true;
+    }
+
+    const startTime = Date.now();
+    while (!this._isInitialized && Date.now() - startTime < timeout) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return this._isInitialized;
   },
 
   /**
@@ -580,9 +684,9 @@ const AuthManager = {
   },
 };
 
-// Initialize auth manager when script loads
-if (typeof window !== "undefined") {
-  // Only initialize in browser context
+// Initialize auth manager only in service worker (background) context
+if (typeof importScripts === "function") {
+  // Only initialize in service worker context
   AuthManager.initialize().catch(error => {
     console.error("[Auth] Failed to initialize:", error);
   });
