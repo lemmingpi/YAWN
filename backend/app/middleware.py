@@ -250,8 +250,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net; "
             "frame-src 'self' https://accounts.google.com; "
-            "connect-src 'self' https://accounts.google.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "connect-src 'self' https://accounts.google.com https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "img-src 'self' data: https:;"
         )

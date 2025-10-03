@@ -12,7 +12,7 @@ from typing import AsyncGenerator, Dict
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 # Load environment variables from file specified by ENV_FILE (fallback to ".env")
@@ -239,7 +239,9 @@ async def detailed_status() -> dict:
 
 # Exception handlers
 @app.exception_handler(404)
-async def not_found_handler(request: Request, exc: HTTPException) -> HTMLResponse:
+async def not_found_handler(
+    request: Request, exc: HTTPException
+) -> HTMLResponse | JSONResponse:
     """Handle 404 errors for web interface."""
     if request.url.path.startswith("/app/"):
         # For web interface, return HTML 404 page
@@ -252,7 +254,7 @@ async def not_found_handler(request: Request, exc: HTTPException) -> HTMLRespons
         )
     else:
         # For API endpoints, return JSON
-        raise HTTPException(status_code=404, detail="Endpoint not found")
+        return JSONResponse(status_code=404, content={"detail": "Endpoint not found"})
 
 
 if __name__ == "__main__":
