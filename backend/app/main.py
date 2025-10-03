@@ -105,13 +105,19 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestLoggingMiddleware, log_body=False)
 
 # Configure CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
+# Use regex if configured, otherwise use explicit origins list
+cors_config = {
+    "allow_credentials": True,
+    "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    "allow_headers": ["*"],
+}
+
+if settings.ALLOWED_ORIGINS_REGEX:
+    cors_config["allow_origin_regex"] = settings.ALLOWED_ORIGINS_REGEX
+else:
+    cors_config["allow_origins"] = settings.ALLOWED_ORIGINS
+
+app.add_middleware(CORSMiddleware, **cors_config)
 
 # Include API routers
 app.include_router(users.router)

@@ -40,6 +40,9 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000", "chrome-extension://*"]
     )
 
+    # CORS regex pattern for dynamic origin matching
+    ALLOWED_ORIGINS_REGEX: Optional[str] = None
+
     class Config:
         # Use ENV_FILE env var to choose which .env file to load
         env_file = os.getenv("ENV_FILE", ".env")
