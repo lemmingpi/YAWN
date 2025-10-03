@@ -102,7 +102,7 @@ app = FastAPI(
 
 # Configure middleware
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RequestLoggingMiddleware, log_body=False)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Configure CORS middleware
 # Use regex if configured, otherwise use explicit origins list
