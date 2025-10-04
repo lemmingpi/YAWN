@@ -249,13 +249,17 @@
                         <select class="form-select" id="artifactType" required>
                             <option value="">Select type...</option>
                             <option value="summary">Summary</option>
-                            <option value="questions">Questions</option>
                             <option value="analysis">Analysis</option>
+                            <option value="questions">Questions</option>
+                            <option value="action_items">Action Items</option>
+                            <option value="explanation">Explanation</option>
+                            <option value="outline">Outline</option>
+                            <option value="code_snippet">Code Snippet</option>
                             <option value="custom">Custom</option>
                         </select>
                     </div>
                     <div class="mb-3" id="customPromptContainer" style="display: none;">
-                        <label for="customPrompt" class="form-label">Custom Prompt</label>
+                        <label for="customPrompt" class="form-label">Custom Prompt <span class="text-danger">*</span></label>
                         <textarea class="form-control" id="customPrompt" rows="3" placeholder="Enter your custom prompt..."></textarea>
                     </div>
                 </div>
@@ -290,13 +294,110 @@
 }
 
 .artifact-content {
-    max-height: 200px;
+    max-height: 400px;
     overflow-y: auto;
     background-color: #f8f9fa;
     border-radius: 6px;
     padding: 12px;
-    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
     font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+/* Markdown styling for artifact content */
+.artifact-content h1,
+.artifact-content h2,
+.artifact-content h3,
+.artifact-content h4,
+.artifact-content h5,
+.artifact-content h6 {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.artifact-content h1 { font-size: 1.5rem; }
+.artifact-content h2 { font-size: 1.3rem; }
+.artifact-content h3 { font-size: 1.1rem; }
+.artifact-content h4 { font-size: 1rem; }
+
+.artifact-content p {
+    margin-bottom: 0.75rem;
+}
+
+.artifact-content ul,
+.artifact-content ol {
+    margin-bottom: 0.75rem;
+    padding-left: 1.5rem;
+}
+
+.artifact-content li {
+    margin-bottom: 0.25rem;
+}
+
+.artifact-content code {
+    background-color: #e9ecef;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.85em;
+}
+
+.artifact-content pre {
+    background-color: #e9ecef;
+    padding: 0.75rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin-bottom: 0.75rem;
+}
+
+.artifact-content pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.artifact-content blockquote {
+    border-left: 3px solid #dee2e6;
+    padding-left: 1rem;
+    margin-left: 0;
+    margin-bottom: 0.75rem;
+    color: #6c757d;
+}
+
+.artifact-content a {
+    color: #0d6efd;
+    text-decoration: none;
+}
+
+.artifact-content a:hover {
+    text-decoration: underline;
+}
+
+.artifact-content table {
+    width: 100%;
+    margin-bottom: 0.75rem;
+    border-collapse: collapse;
+}
+
+.artifact-content table th,
+.artifact-content table td {
+    padding: 0.5rem;
+    border: 1px solid #dee2e6;
+}
+
+.artifact-content table th {
+    background-color: #e9ecef;
+    font-weight: 600;
+}
+
+.prompt-content {
+    max-height: 200px;
+    overflow-y: auto;
+    background-color: #fff3cd;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    border-left: 3px solid #ffc107;
 }
 
 .artifact-metadata {
@@ -315,16 +416,75 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Markdown rendering libraries -->
+<script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+
 <script>
 class NoteDetailManager {
     constructor() {
         this.noteId = {{ note.id }};
         this.pageId = {{ note.page_id }};
 
+        this.initializeMarked();
         this.initializeEventListeners();
         this.loadPageInfo();
         this.loadArtifacts();
         this.loadLLMProviders();
+    }
+
+    initializeMarked() {
+        // Configure marked for security
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                headerIds: false,
+                mangle: false
+            });
+
+            // Custom renderer for security
+            const renderer = new marked.Renderer();
+            renderer.html = () => ''; // Block raw HTML
+
+            // Capture escapeHtml for use in renderer
+            const escapeHtml = this.escapeHtml.bind(this);
+
+            // Safe link rendering - allow all URLs (LLM-generated content is trusted)
+            renderer.link = (href, title, text) => {
+
+                // Use href as fallback text if text is missing
+                const linkText = text || href;
+
+                // Block potentially dangerous protocols
+                const dangerousProtocols = ['javascript:', 'data:', 'vbscript:', 'file:'];
+                try {
+                    const url = new URL(href);
+                    if (dangerousProtocols.some(proto => url.protocol === proto)) {
+                        return escapeHtml(linkText); // Strip dangerous links
+                    }
+                } catch {
+                    // Relative URLs or malformed URLs - allow them
+                }
+                const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+                return `<a href="${escapeHtml(href)}"${titleAttr} target="_blank" >${escapeHtml(linkText)}</a>`;
+            };
+
+            marked.use({ renderer });
+        }
+    }
+
+    renderMarkdown(content) {
+        if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+            return this.escapeHtml(content);
+        }
+        const rawHtml = marked.parse(content);
+        return DOMPurify.sanitize(rawHtml, {
+            ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                           'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'a', 'table', 'thead',
+                           'tbody', 'tr', 'th', 'td', 'hr', 'del', 'ins', 'img', 'div', 'span'],
+            ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'src', 'alt', 'width', 'height', 'class']
+        });
     }
 
     initializeEventListeners() {
@@ -337,7 +497,10 @@ class NoteDetailManager {
         // Artifact type change
         document.getElementById('artifactType').addEventListener('change', (e) => {
             const customContainer = document.getElementById('customPromptContainer');
-            customContainer.style.display = e.target.value === 'custom' ? 'block' : 'none';
+            const customPrompt = document.getElementById('customPrompt');
+            const isCustom = e.target.value === 'custom';
+            customContainer.style.display = isCustom ? 'block' : 'none';
+            customPrompt.required = isCustom;
         });
     }
 
@@ -444,14 +607,17 @@ class NoteDetailManager {
                         </div>
                     </div>
                     <div class="artifact-content">
-                        ${this.escapeHtml(artifact.content)}
+                        ${this.renderMarkdown(artifact.content)}
                     </div>
                     ${artifact.prompt_used ? `
-                        <div class="mt-2">
-                            <small class="text-muted">
-                                <strong>Prompt used:</strong> ${this.truncateText(artifact.prompt_used, 100)}
-                            </small>
-                        </div>
+                        <details class="mt-2">
+                            <summary class="text-muted" style="cursor: pointer;">
+                                <small><i class="bi bi-code-square me-1"></i>View Prompt Used</small>
+                            </summary>
+                            <div class="prompt-content mt-2">
+                                ${this.renderMarkdown(artifact.prompt_used)}
+                            </div>
+                        </details>
                     ` : ''}
                 </div>
             </div>
@@ -460,7 +626,7 @@ class NoteDetailManager {
 
     async loadLLMProviders() {
         try {
-            const response = await authenticatedFetch('/api/llm-providers/');
+            const response = await authenticatedFetch('/api/llm/providers/');
             const providers = await response.json();
 
             const select = document.getElementById('llmProvider');

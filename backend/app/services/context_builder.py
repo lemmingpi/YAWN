@@ -19,6 +19,7 @@ class ArtifactType(str, Enum):
     CODE_SNIPPET = "code_snippet"
     EXPLANATION = "explanation"
     OUTLINE = "outline"
+    CUSTOM = "custom"
 
 
 # Prompt templates for different artifact types
@@ -100,6 +101,9 @@ Requirements:
 {user_instructions}
 
 Outline:""",
+    ArtifactType.CUSTOM: """{context}
+
+{user_instructions}""",
 }
 
 
@@ -149,6 +153,12 @@ class ContextBuilder:
             raise ValueError(
                 f"Unsupported artifact type: {artifact_type}. "
                 f"Supported types: {list(ARTIFACT_TEMPLATES.keys())}"
+            )
+
+        # For CUSTOM type, user_instructions is required
+        if artifact_type == ArtifactType.CUSTOM and not user_instructions:
+            raise ValueError(
+                "Custom artifact type requires user_instructions (custom_prompt)"
             )
 
         # Assemble context from note and related objects

@@ -71,8 +71,7 @@ const ErrorHandler = {
 
     // Determine if operation should be retried
     const shouldRetry =
-      currentCount < this.maxRetries &&
-      (errorType === this.ERROR_TYPES.NETWORK || errorType === this.ERROR_TYPES.SERVER);
+      currentCount < this.maxRetries && (errorType === this.ERROR_TYPES.NETWORK || errorType === this.ERROR_TYPES.SERVER);
 
     // Show user feedback for certain error types
     if (!shouldRetry && options.showUserFeedback !== false) {
@@ -129,8 +128,7 @@ const ErrorHandler = {
       messageEl.textContent = message;
 
       // Style the message
-      const backgroundColor =
-        type === "error" ? "#f44336" : type === "warning" ? "#ff9800" : "#4caf50";
+      const backgroundColor = type === "error" ? "#f44336" : type === "warning" ? "#ff9800" : "#4caf50";
 
       messageEl.style.cssText = `
         position: fixed;

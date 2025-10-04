@@ -334,10 +334,22 @@ async def generate_note_artifact(
         RateLimitError,
     )
 
+    print("=" * 80)
+    print("ARTIFACT GENERATION REQUEST STARTED")
+    print("=" * 80)
+    print(f"[INPUT] note_id: {note_id}")
+    print(f"[INPUT] llm_provider_id: {request.llm_provider_id}")
+    print(f"[INPUT] artifact_type: {request.artifact_type}")
+    print(
+        f"[INPUT] custom_prompt: {request.custom_prompt[:100] if request.custom_prompt else None}..."
+    )
+
     start_time = time.time()
+    print(f"[TIMING] Request started at: {datetime.now(timezone.utc).isoformat()}")
 
     try:
         # Fetch note with all relationships
+        print("\n[STEP 1] Fetching note with relationships from database...")
         result = await db.execute(
             select(Note)
             .options(selectinload(Note.page).selectinload(Page.site))
@@ -346,87 +358,195 @@ async def generate_note_artifact(
         note = result.scalar_one_or_none()
 
         if not note:
+            print(f"[ERROR] Note not found: note_id={note_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Note with ID {note_id} not found",
             )
 
+        print(
+            f"[DATA] Note found: id={note.id}, user_id={note.user_id}, "
+            f"content_length={len(note.content) if note.content else 0}"
+        )
+        print(
+            f"[DATA] Note highlighted_text: {len(note.highlighted_text) if note.highlighted_text else 0} characters"
+        )
+        print(
+            f"[DATA] Note page_section_html: {len(note.page_section_html) if note.page_section_html else 0} characters"
+        )
+        if note.page:
+            print(
+                f"[DATA] Page: id={note.page.id}, user_id={note.page.user_id}, title='{note.page.title}'"
+            )
+            print(f"[DATA] Page URL: {note.page.url}")
+            if note.page.site:
+                print(
+                    f"[DATA] Site: id={note.page.site.id}, "
+                    f"user_id={note.page.site.user_id}, domain='{note.page.site.domain}'"
+                )
+            else:
+                print("[DATA] Site: None (page has no site relationship)")
+        else:
+            print("[DATA] Page: None (note has no page relationship)")
+
         # Validate artifact type
+        print(f"\n[STEP 2] Validating artifact type: {request.artifact_type}")
         try:
             artifact_type_enum = ArtifactType(request.artifact_type)
+            print(f"[DATA] Artifact type validated: {artifact_type_enum.value}")
         except ValueError:
+            print(f"[ERROR] Invalid artifact type: {request.artifact_type}")
+            valid_types = [t.value for t in ArtifactType]
+            print(f"[ERROR] Valid types: {valid_types}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid artifact type: {request.artifact_type}. "
-                f"Valid types: {[t.value for t in ArtifactType]}",
+                f"Valid types: {valid_types}",
             )
 
         # Build context and prompt
+        print("\n[STEP 3] Building context and prompt...")
         context_builder = ContextBuilder()
         prompt = context_builder.build_prompt(
             note=note,
             artifact_type=artifact_type_enum,
             user_instructions=request.custom_prompt,
         )
+        print("[DATA] Prompt built successfully")
+        print(f"[DATA] Prompt length: {len(prompt)} characters")
+        print(f"[DATA] Prompt preview (first 200 chars): {prompt[:200]}...")
+        print(f"[DATA] User instructions included: {bool(request.custom_prompt)}")
 
         # Generate using Gemini
+        print("\n[STEP 4] Creating Gemini provider...")
         provider = await create_gemini_provider()
+        print("[DATA] Gemini provider created successfully")
+
+        print("\n[STEP 5] Calling Gemini API for content generation...")
+        print("[DATA] Generation params: max_output_tokens=4096, temperature=0.7")
+
         generation_result = await provider.generate_content(
             prompt=prompt,
             max_output_tokens=4096,
             temperature=0.7,
         )
 
+        print("[DATA] Generation completed successfully")
+        print(f"[DATA] Model used: {generation_result.get('model')}")
+        print(f"[DATA] Input tokens: {generation_result.get('input_tokens')}")
+        print(f"[DATA] Output tokens: {generation_result.get('output_tokens')}")
+        print(f"[DATA] Cost (USD): ${generation_result.get('cost')}")
+        print(
+            f"[DATA] Content length: {len(generation_result.get('content', ''))} characters"
+        )
+        print(
+            f"[DATA] Content preview (first 200 chars): {generation_result.get('content', '')[:200]}..."
+        )
+
         # Calculate generation time
         generation_time_ms = int((time.time() - start_time) * 1000)
+        print(f"\n[TIMING] Generation time: {generation_time_ms}ms")
 
         # Create artifact record
+        print("\n[STEP 6] Creating artifact database record...")
+        artifact_metadata = {
+            "model": generation_result["model"],
+            "temperature": 0.7,
+            "max_output_tokens": 4096,
+            "generation_time_ms": generation_time_ms,
+            "prompt_length": len(prompt),
+        }
+        print(f"[DATA] Artifact metadata: {artifact_metadata}")
+        print("[DATA] Generation source: gemini")
+        print(f"[DATA] Prompt saved: {len(prompt)} characters")
+
         artifact = NoteArtifact(
             note_id=note_id,
             artifact_type=request.artifact_type,
             content=generation_result["content"],
-            llm_provider_id=request.llm_provider_id,  # Use provided or default
+            prompt_used=prompt,
+            llm_provider_id=request.llm_provider_id,
             input_tokens=generation_result["input_tokens"],
             output_tokens=generation_result["output_tokens"],
             cost_usd=generation_result["cost"],
-            generation_metadata={
-                "model": generation_result["model"],
-                "temperature": 0.7,
-                "max_output_tokens": 4096,
-                "generation_time_ms": generation_time_ms,
-                "prompt_length": len(prompt),
-            },
-            generated_at=datetime.now(timezone.utc),
+            generation_source="gemini",
+            generation_metadata=artifact_metadata,
         )
 
         db.add(artifact)
-        await db.commit()
-        await db.refresh(artifact)
+        print("[DATA] Artifact added to session")
 
-        return ArtifactGenerationResponse(
+        await db.commit()
+        print("[DATA] Database commit successful")
+
+        await db.refresh(artifact)
+        print(f"[DATA] Artifact refreshed: id={artifact.id}")
+
+        # Build response
+        total_tokens = (
+            generation_result["input_tokens"] + generation_result["output_tokens"]
+        )
+        response = ArtifactGenerationResponse(
             artifact_id=artifact.id,
             content=artifact.content,
             generation_time_ms=generation_time_ms,
-            tokens_used=generation_result["input_tokens"]
-            + generation_result["output_tokens"],
+            tokens_used=total_tokens,
         )
 
+        print("\n" + "=" * 80)
+        print("ARTIFACT GENERATION COMPLETED SUCCESSFULLY")
+        print("=" * 80)
+        print(f"[SUMMARY] Artifact ID: {artifact.id}")
+        print(f"[SUMMARY] Note ID: {note_id}")
+        print(f"[SUMMARY] Artifact Type: {request.artifact_type}")
+        print(f"[SUMMARY] LLM Provider ID: {request.llm_provider_id}")
+        print(
+            f"[SUMMARY] Total Tokens: {total_tokens} "
+            f"(input: {generation_result['input_tokens']}, output: {generation_result['output_tokens']})"
+        )
+        print(f"[SUMMARY] Cost: ${generation_result['cost']:.6f}")
+        print(f"[SUMMARY] Generation Time: {generation_time_ms}ms")
+        print(f"[SUMMARY] Content Length: {len(artifact.content)} characters")
+        print(f"[SUMMARY] Model: {generation_result['model']}")
+        print("=" * 80)
+
+        return response
+
     except RateLimitError as e:
+        print(f"\n[ERROR] Rate limit exceeded: {str(e)}")
+        print(
+            f"[ERROR] Generation time before error: {int((time.time() - start_time) * 1000)}ms"
+        )
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Rate limit exceeded: {str(e)}",
         )
     except GeminiProviderError as e:
+        print(f"\n[ERROR] Gemini provider error: {str(e)}")
+        print(
+            f"[ERROR] Generation time before error: {int((time.time() - start_time) * 1000)}ms"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"LLM generation failed: {str(e)}",
         )
     except ValueError as e:
+        print(f"\n[ERROR] Validation error: {str(e)}")
+        print(
+            f"[ERROR] Generation time before error: {int((time.time() - start_time) * 1000)}ms"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        print(f"\n[ERROR] Unexpected error: {type(e).__name__}: {str(e)}")
+        print(
+            f"[ERROR] Generation time before error: {int((time.time() - start_time) * 1000)}ms"
+        )
+        import traceback
+
+        print(f"[ERROR] Traceback:\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Artifact generation failed: {str(e)}",

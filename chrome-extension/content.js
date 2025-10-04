@@ -927,7 +927,6 @@ function makeDraggable(noteElement, noteData, targetElement) {
       ensureNoteVisibility(noteElement, noteData);
     }, TIMING.DOM_UPDATE_DELAY);
 
-    // eslint-disable-next-line max-len
     console.log(
       `[Web Notes] Finished dragging note ${noteData.id} to offset ` + `(${noteData.offsetX || 0}, ${noteData.offsetY || 0})`
     );

@@ -671,7 +671,8 @@ const ServerAPI = {
       const shares = await response.json();
 
       console.log(
-        `[Web Notes] Retrieved user shares: ${shares.shared_pages?.length || 0} pages, ${shares.shared_sites?.length || 0} sites`
+        `[Web Notes] Retrieved user shares: ${shares.shared_pages?.length || 0} pages, ` +
+          `${shares.shared_sites?.length || 0} sites`
       );
       return shares;
     } catch (error) {
