@@ -566,6 +566,32 @@ class PageSummarizationResponse(BaseModel):
     tokens_used: Optional[int] = Field(None, description="Number of tokens used")
 
 
+class PageContextGenerationRequest(BaseModel):
+    """Schema for AI-powered page context generation requests."""
+
+    llm_provider_id: int = Field(..., description="ID of the LLM provider to use")
+    custom_instructions: Optional[str] = Field(
+        None,
+        description="Optional custom instructions to guide context generation",
+    )
+
+
+class PageContextGenerationResponse(BaseModel):
+    """Schema for page context generation responses."""
+
+    user_context: str = Field(..., description="Generated context summary for the page")
+    detected_content_type: str = Field(
+        ..., description="Content type detected by the LLM"
+    )
+    tokens_used: int = Field(..., description="Total tokens consumed")
+    cost_usd: float = Field(..., description="Generation cost in USD")
+    generation_time_ms: int = Field(
+        ..., description="Time taken for generation in milliseconds"
+    )
+    input_tokens: int = Field(..., description="Input token count")
+    output_tokens: int = Field(..., description="Output token count")
+
+
 # Bulk operation schemas
 class BulkNoteCreate(BaseModel):
     """Schema for bulk note creation."""

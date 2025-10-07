@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models import Note, Page, PageSection, Site
 from ..schemas import (
+    PageContextGenerationRequest,
+    PageContextGenerationResponse,
     PageCreate,
     PageResponse,
     PageSummarizationRequest,
@@ -454,4 +456,75 @@ async def summarize_page(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Page summarization failed: {e}",
+        )
+
+
+@router.post(
+    "/{page_id}/generate-context", response_model=PageContextGenerationResponse
+)
+async def generate_page_context(
+    page_id: int,
+    request: PageContextGenerationRequest,
+    db: AsyncSession = Depends(get_db),
+) -> PageContextGenerationResponse:
+    """Generate AI-powered custom context for a page.
+
+    This endpoint analyzes the page and its notes to generate a structured
+    context summary optimized for LLM consumption. The context captures
+    genre-specific information like writing style, technical details, or
+    scholarly metadata based on automatic content type detection.
+
+    Args:
+        page_id: Page ID
+        request: Context generation request with optional custom instructions
+        db: Database session
+
+    Returns:
+        Generated context, detected content type, and generation metadata
+
+    Raises:
+        HTTPException: If page not found or generation fails
+    """
+    from ..services.gemini_provider import GeminiProviderError
+    from ..services.page_context_service import PageContextService
+
+    # Verify page exists
+    page_result = await db.execute(select(Page).where(Page.id == page_id))
+    page = page_result.scalar_one_or_none()
+    if not page:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Page with ID {page_id} not found",
+        )
+
+    service = PageContextService(db)
+
+    try:
+        result = await service.generate_page_context(
+            page_id=page_id,
+            llm_provider_id=request.llm_provider_id,
+            custom_instructions=request.custom_instructions,
+        )
+
+        return PageContextGenerationResponse(
+            user_context=result["user_context"],
+            detected_content_type=result["detected_content_type"],
+            tokens_used=result["tokens_used"],
+            cost_usd=result["cost_usd"],
+            generation_time_ms=result["generation_time_ms"],
+            input_tokens=result["input_tokens"],
+            output_tokens=result["output_tokens"],
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except GeminiProviderError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Context generation failed: {e}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Page context generation failed: {e}",
         )
