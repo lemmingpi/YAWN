@@ -301,6 +301,39 @@
         </div>
     </div>
 </div>
+
+<!-- Prompt Preview Modal -->
+<div class="modal fade" id="promptPreviewModal" tabindex="-1" aria-labelledby="promptPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="promptPreviewModalLabel">Prompt Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    This is the exact prompt that will be sent to the LLM. You can select and copy this text.
+                </div>
+                <div class="mb-3">
+                    <label for="promptPreviewText" class="form-label">Full Prompt:</label>
+                    <textarea
+                        class="form-control font-monospace"
+                        id="promptPreviewText"
+                        rows="20"
+                        readonly
+                        style="font-size: 0.875rem;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="copyPromptToClipboard()">
+                    <i class="bi bi-clipboard me-1"></i>Copy to Clipboard
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_css %}
@@ -570,13 +603,34 @@ async function previewPrompt() {
 
         const result = await response.json();
 
-        // Show preview in a modal or alert
-        alert('PROMPT PREVIEW:\n\n' + result.prompt);
+        // Show preview in modal with selectable text
+        document.getElementById('promptPreviewText').value = result.prompt;
+        const previewModal = new bootstrap.Modal(document.getElementById('promptPreviewModal'));
+        previewModal.show();
 
     } catch (error) {
         console.error('Error previewing prompt:', error);
         alert('Error: ' + error.message);
     }
+}
+
+function copyPromptToClipboard() {
+    const promptText = document.getElementById('promptPreviewText');
+    promptText.select();
+    document.execCommand('copy');
+
+    // Show feedback
+    const copyBtn = event.target.closest('button');
+    const originalHtml = copyBtn.innerHTML;
+    copyBtn.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
+    copyBtn.classList.add('btn-success');
+    copyBtn.classList.remove('btn-primary');
+
+    setTimeout(() => {
+        copyBtn.innerHTML = originalHtml;
+        copyBtn.classList.remove('btn-success');
+        copyBtn.classList.add('btn-primary');
+    }, 2000);
 }
 
 async function generatePageContext(event) {
