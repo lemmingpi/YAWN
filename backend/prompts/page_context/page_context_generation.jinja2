@@ -1,6 +1,7 @@
 {#
 Available Jinja2 Template Variables:
-- page_url: str - The page URL to analyze (defaults to page.url, or custom page_source if paywalled)
+- page_url: str - The page URL from the database (always present)
+- page_source: str | None - Optional alternate source for paywalled content (user-provided)
 - page_title: str - The page title (or "Untitled" if not set)
 - page_summary: str | None - Existing user-provided summary to incorporate (optional)
 - notes_content: str | None - Concatenated content from all user notes on this page (optional)
@@ -13,13 +14,13 @@ Summarize the content in a concise manner, focusing on clarity and relevance for
 Future LLM sessions should not need the original page to understand the context.
 
 **Page Information:**
+{% if page_source %}
+- This is the source to analysis: {{ page_source }}
+{% else %}
 - This is the page to analysis: {{ page_url }}
+{% endif %}
 {% if page_summary %}
 - Existing User Summary to incorporate: {{ page_summary }}
-{% endif %}
-{% if notes_content %}
-- User Notes:
-{{ notes_content }}
 {% endif %}
 {% if custom_instructions %}
 

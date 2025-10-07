@@ -91,7 +91,7 @@ class PageContextService:
             page: Page object with metadata
             notes: List of notes on this page
             custom_instructions: Optional user-provided instructions
-            page_source: Optional alternate page source (defaults to page.url)
+            page_source: Optional alternate page source (for paywalled content)
 
         Returns:
             Formatted prompt string ready for LLM
@@ -101,17 +101,15 @@ class PageContextService:
             [f"Note {i + 1}:\n{note.content}" for i, note in enumerate(notes)]
         )
 
-        # Use page_source if provided, otherwise default to page.url
-        source_to_use = page_source if page_source else page.url
-
         # Load and render template
         template = self._load_prompt_template()
         prompt: str = template.render(
-            page_url=source_to_use,
+            page_url=page.url,  # Always from database
             page_title=page.title or "Untitled",
             page_summary=page.page_summary,
             notes_content=notes_content if notes_content else None,
             custom_instructions=custom_instructions,
+            page_source=page_source,  # Optional alternate source
         )
 
         return prompt
@@ -130,7 +128,7 @@ class PageContextService:
             page_id: ID of page to generate context for
             llm_provider_id: LLM provider to use (currently unused, uses Gemini)
             custom_instructions: Optional user instructions for customization
-            page_source: Optional alternate page source (defaults to page.url)
+            page_source: Optional alternate page source (for paywalled content)
 
         Returns:
             Dictionary with:
@@ -242,7 +240,7 @@ class PageContextService:
         Args:
             page_id: ID of page to preview prompt for
             custom_instructions: Optional user instructions for customization
-            page_source: Optional alternate page source (defaults to page.url)
+            page_source: Optional alternate page source (for paywalled content)
 
         Returns:
             The fully rendered prompt string
