@@ -15,6 +15,8 @@ from ..models import Note, Page, PageSection, Site
 from ..schemas import (
     PageContextGenerationRequest,
     PageContextGenerationResponse,
+    PageContextPreviewRequest,
+    PageContextPreviewResponse,
     PageCreate,
     PageResponse,
     PageSummarizationRequest,
@@ -459,6 +461,59 @@ async def summarize_page(
         )
 
 
+@router.post("/{page_id}/preview-context", response_model=PageContextPreviewResponse)
+async def preview_page_context(
+    page_id: int,
+    request: PageContextPreviewRequest,
+    db: AsyncSession = Depends(get_db),
+) -> PageContextPreviewResponse:
+    """Preview the prompt that would be sent to the LLM for context generation.
+
+    This endpoint renders the Jinja2 template with the current page data
+    and custom instructions to show the full prompt without actually calling the LLM.
+
+    Args:
+        page_id: Page ID
+        request: Preview request with optional custom instructions and page source
+        db: Database session
+
+    Returns:
+        Rendered prompt preview
+
+    Raises:
+        HTTPException: If page not found
+    """
+    from ..services.page_context_service import PageContextService
+
+    # Verify page exists
+    page_result = await db.execute(select(Page).where(Page.id == page_id))
+    page = page_result.scalar_one_or_none()
+    if not page:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Page with ID {page_id} not found",
+        )
+
+    service = PageContextService(db)
+
+    try:
+        prompt = await service.preview_prompt(
+            page_id=page_id,
+            custom_instructions=request.custom_instructions,
+            page_source=request.page_source,
+        )
+
+        return PageContextPreviewResponse(prompt=prompt)
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Prompt preview failed: {e}",
+        )
+
+
 @router.post(
     "/{page_id}/generate-context", response_model=PageContextGenerationResponse
 )
@@ -504,6 +559,7 @@ async def generate_page_context(
             page_id=page_id,
             llm_provider_id=request.llm_provider_id,
             custom_instructions=request.custom_instructions,
+            page_source=request.page_source,
         )
 
         return PageContextGenerationResponse(

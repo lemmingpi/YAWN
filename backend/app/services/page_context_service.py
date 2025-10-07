@@ -82,6 +82,7 @@ class PageContextService:
         page: Page,
         notes: list[Note],
         custom_instructions: Optional[str] = None,
+        page_source: Optional[str] = None,
     ) -> str:
         """
         Build the prompt for page context generation.
@@ -90,6 +91,7 @@ class PageContextService:
             page: Page object with metadata
             notes: List of notes on this page
             custom_instructions: Optional user-provided instructions
+            page_source: Optional alternate page source (defaults to page.url)
 
         Returns:
             Formatted prompt string ready for LLM
@@ -99,10 +101,13 @@ class PageContextService:
             [f"Note {i + 1}:\n{note.content}" for i, note in enumerate(notes)]
         )
 
+        # Use page_source if provided, otherwise default to page.url
+        source_to_use = page_source if page_source else page.url
+
         # Load and render template
         template = self._load_prompt_template()
         prompt: str = template.render(
-            page_url=page.url,
+            page_url=source_to_use,
             page_title=page.title or "Untitled",
             page_summary=page.page_summary,
             notes_content=notes_content if notes_content else None,
@@ -116,6 +121,7 @@ class PageContextService:
         page_id: int,
         llm_provider_id: int,
         custom_instructions: Optional[str] = None,
+        page_source: Optional[str] = None,
     ) -> Dict:
         """
         Generate AI-powered context summary for a page.
@@ -124,6 +130,7 @@ class PageContextService:
             page_id: ID of page to generate context for
             llm_provider_id: LLM provider to use (currently unused, uses Gemini)
             custom_instructions: Optional user instructions for customization
+            page_source: Optional alternate page source (defaults to page.url)
 
         Returns:
             Dictionary with:
@@ -168,7 +175,9 @@ class PageContextService:
         logger.info(f"Found {len(notes)} active notes for this page")
 
         # Build prompt
-        prompt = await self._build_context_prompt(page, notes, custom_instructions)
+        prompt = await self._build_context_prompt(
+            page, notes, custom_instructions, page_source
+        )
         logger.info(f"Built prompt: {len(prompt)} characters")
 
         # Generate using Gemini
@@ -217,3 +226,54 @@ class PageContextService:
             "input_tokens": generation_result["input_tokens"],
             "output_tokens": generation_result["output_tokens"],
         }
+
+    async def preview_prompt(
+        self,
+        page_id: int,
+        custom_instructions: Optional[str] = None,
+        page_source: Optional[str] = None,
+    ) -> str:
+        """
+        Preview the prompt that would be sent to the LLM without actually calling it.
+
+        This method uses the same _build_context_prompt function as generate_page_context,
+        ensuring the preview exactly matches what will be sent to the LLM.
+
+        Args:
+            page_id: ID of page to preview prompt for
+            custom_instructions: Optional user instructions for customization
+            page_source: Optional alternate page source (defaults to page.url)
+
+        Returns:
+            The fully rendered prompt string
+
+        Raises:
+            ValueError: If page not found
+        """
+        logger.info(f"Previewing prompt for page_id={page_id}")
+
+        # Fetch page with site relationship
+        result = await self.db.execute(
+            select(Page).options(selectinload(Page.site)).where(Page.id == page_id)
+        )
+        page = result.scalar_one_or_none()
+
+        if not page:
+            raise ValueError(f"Page with ID {page_id} not found")
+
+        # Fetch all notes for this page (same logic as generate_page_context)
+        notes_result = await self.db.execute(
+            select(Note)
+            .where(Note.page_id == page_id)
+            .where(Note.is_active.is_(True))
+            .order_by(Note.created_at)
+        )
+        notes = list(notes_result.scalars().all())
+
+        # Build prompt using the SAME function as generate_page_context
+        prompt = await self._build_context_prompt(
+            page, notes, custom_instructions, page_source
+        )
+
+        logger.info(f"Preview generated: {len(prompt)} characters")
+        return prompt

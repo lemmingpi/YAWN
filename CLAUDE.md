@@ -38,22 +38,17 @@ Load on-demand when needed:
 - Major dependency updates
 - Architecture changes from PROJECT_SPEC.md
 - Chrome extension permission changes
+- Any feature changes
 
 ### Always Do Without Asking
 - Add new tests
 - Fix typos
 - Add error handling
-- Improve logging
 - Add type hints
 - Write docstrings
 - Create feature branches
 - Update UI/styling
-- Add features not requiring new permissions
 
-## Current Database State
-- Latest migration: 90896c04e8d6 (database sync)
-- Models in sync with migrations ✅
-- Test database: backend/test.db
 
 ## Key File Locations
 - Chrome extension: `chrome-extension/`
@@ -63,7 +58,8 @@ Load on-demand when needed:
 - Templates: `backend/app/templates/`
 
 ## Session End Checklist
-- Commit code with proper messages
-- Tests written and passing
+- Commit code with proper messages with a NEW commit. 
+- NEVER amend a commit
+- Tests written and passing. Check all test, not jsut new ones.
 - Create PR if feature complete
-- Document next steps
+- Document next steps in TODO.md

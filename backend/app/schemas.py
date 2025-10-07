@@ -574,6 +574,10 @@ class PageContextGenerationRequest(BaseModel):
         None,
         description="Optional custom instructions to guide context generation",
     )
+    page_source: Optional[str] = Field(
+        None,
+        description="Optional alternate page source (for paywalled content)",
+    )
 
 
 class PageContextGenerationResponse(BaseModel):
@@ -590,6 +594,27 @@ class PageContextGenerationResponse(BaseModel):
     )
     input_tokens: int = Field(..., description="Input token count")
     output_tokens: int = Field(..., description="Output token count")
+
+
+class PageContextPreviewRequest(BaseModel):
+    """Schema for preview prompt request."""
+
+    custom_instructions: Optional[str] = Field(
+        None,
+        description="Optional custom instructions to include in preview",
+    )
+    page_source: Optional[str] = Field(
+        None,
+        description="Optional alternate page source",
+    )
+
+
+class PageContextPreviewResponse(BaseModel):
+    """Schema for preview prompt response."""
+
+    prompt: str = Field(
+        ..., description="The full rendered prompt that would be sent to the LLM"
+    )
 
 
 # Bulk operation schemas

@@ -1,92 +1,16 @@
-You are analyzing a web page to create a context summary optimized for LLM consumption (not human reading).
-
-This context will be used when generating AI artifacts from notes on this page. The goal is to capture essential information about the page's content type, style, tone, and key metadata that will help future LLM interactions understand the source material.
+You are analyzing a web page to create a context summary optimized for LLM consumption, not human reading, with reduced token usage.
+Extract the main content, key points, and relevant metadata.
+Exclude navigation menus, ads, and unrelated sections. For brevity, do not list exclusions.
+Summarize the content in a concise manner, focusing on clarity and relevance for understanding the page's purpose and information.
+Future LLM sessions should not need the original page to understand the context.
 
 **Page Information:**
-- URL: {{ page_url }}
-- Title: {{ page_title }}
+- This is the page to analysis: {{ page_url }}
 {% if page_summary %}
-- Existing Summary: {{ page_summary }}
+- Existing User Summary to incorporate: {{ page_summary }}
 {% endif %}
-
-**Notes on this Page:**
-{% if notes_content %}
-{{ notes_content }}
-{% else %}
-(No notes available)
-{% endif %}
-
----
-
-**Your Task:**
-1. Analyze the content above and determine the primary content type
-2. Extract context following the appropriate template below
-3. Return ONLY the structured context summary (no preamble, no explanation)
-
-**Content Type Templates:**
-
-## If this is FICTION/CREATIVE WRITING:
-Extract and structure as:
-- **Content Type**: Fiction/Creative Writing
-- **Writing Style**: (narrative voice, POV, tense, prose style - e.g., "Third-person limited, past tense, lyrical prose")
-- **Author Tone**: (emotional quality - e.g., "whimsical", "dark and brooding", "hopeful", "satirical")
-- **Genre/Subgenre**: (specific genre classification - e.g., "low fantasy", "hard sci-fi", "cozy mystery", "contemporary romance")
-- **Setting**: (time period, location, world-building - e.g., "Medieval-inspired fantasy world with limited magic")
-- **Character Notes**: (protagonist type, key relationships - e.g., "reluctant hero, found family dynamic")
-- **Narrative Structure**: (pacing, plot stage - e.g., "Act 2, rising action, character development focus")
-
-## If this is SCHOLARLY/ACADEMIC:
-Extract and structure as:
-- **Content Type**: Scholarly/Academic
-- **Authors & Credentials**: (researchers, institutions, expertise)
-- **Research Domain**: (field, subfield, theoretical framework - e.g., "Machine Learning, Natural Language Processing, Transformer architectures")
-- **Methodology**: (research approach, methods used - e.g., "Empirical study with controlled experiments")
-- **Key Findings**: (main results, conclusions, significance)
-- **Related Work**: (important citations, foundational papers to explore)
-- **Publication Context**: (venue, year, impact level - e.g., "NeurIPS 2023, high-impact venue")
-
-## If this is TECHNICAL/DOCUMENTATION:
-Extract and structure as:
-- **Content Type**: Technical/Documentation
-- **Technology Stack**: (languages, frameworks, tools - e.g., "Python, FastAPI, PostgreSQL, React")
-- **API Patterns**: (REST, GraphQL, conventions - e.g., "RESTful API with JWT authentication")
-- **Code Style**: (formatting, naming conventions - e.g., "PEP 8, snake_case, type hints")
-- **System Architecture**: (components, design patterns - e.g., "Microservices with async message queues")
-- **Version/Compatibility**: (requirements, dependencies - e.g., "Python 3.9+, PostgreSQL 14+")
-- **Key Concepts**: (technical terms, abstractions - explain any domain-specific terminology)
-
-## If this is NEWS/JOURNALISM:
-Extract and structure as:
-- **Content Type**: News/Journalism
-- **Source & Credibility**: (outlet, author, reputation - e.g., "New York Times, investigative journalism")
-- **Perspective/Bias**: (political lean, viewpoint, framing - be objective in assessment)
-- **Topic Context**: (background, related events, timeline)
-- **Key Claims**: (main assertions, evidence quality, sources cited)
-- **Stakeholders**: (people, organizations, interests involved)
-- **Update Status**: (breaking, developing, analysis, evergreen)
-
-## If this is GENERAL WEB CONTENT (blog, product page, tutorial, etc.):
-Extract and structure as:
-- **Content Type**: General Web Content - [be specific: blog, tutorial, product page, etc.]
-- **Audience Level**: (beginner, intermediate, expert, general public)
-- **Purpose**: (inform, persuade, entertain, sell, educate - be specific)
-- **Key Concepts**: (main ideas, important terminology explained)
-- **Actionable Items**: (steps, recommendations, calls-to-action)
-- **Credibility Markers**: (expertise signals, sources, author credentials)
-
 {% if custom_instructions %}
 
----
-
-**Additional Instructions from User:**
+**In addition to the summary, follow these instructions:**
 {{ custom_instructions }}
 {% endif %}
-
----
-
-**Format Requirements:**
-- Start with "Content Type: [Your determination]"
-- Then provide the structured context following the appropriate template
-- Be concise but comprehensive
-- Focus on information useful for future LLM tasks
-- Do not include meta-commentary or explanations

@@ -58,11 +58,11 @@
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h6 class="text-muted mb-0">User Context:</h6>
                         <button class="btn btn-sm btn-outline-primary" onclick="showGenerateContextModal()">
-                            <i class="bi bi-magic me-1"></i>Generate AI Context
+                            <i class="bi bi-magic me-1"></i>Generate AI Context Summary
                         </button>
                     </div>
                     <div id="userContextDisplay" class="p-2 border rounded bg-light" style="white-space: pre-wrap;">
-                        {{ page.user_context or 'No context set. Click "Generate AI Context" to create an AI-powered summary.' }}
+                        {{ page.user_context or 'No context set. Click "Generate AI Context Summary" to create an AI-powered summary.' }}
                     </div>
                 </div>
             </div>
@@ -209,6 +209,34 @@
                     </div>
 
                     <div class="mb-3">
+                        <label for="sourceUrl" class="form-label">Source URL</label>
+                        <input
+                            type="text"
+                            class="form-control"
+                            id="sourceUrl"
+                            value="{{ page.url }}"
+                            readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="paywalledCheckbox"
+                                onchange="toggleSourceUrlEditable()">
+                            <label
+                                class="form-check-label"
+                                for="paywalledCheckbox"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="right"
+                                title="If a site is paywalled, you may need to specify an alternate source or description. Please obey the terms of service of content creators.">
+                                PayWalled <i class="bi bi-info-circle text-muted"></i>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
                         <label for="customInstructions" class="form-label">
                             Custom Instructions (Optional)
                         </label>
@@ -262,6 +290,9 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-info" onclick="previewPrompt()">
+                        <i class="bi bi-eye me-1"></i>Preview Prompt
+                    </button>
                     <button type="submit" class="btn btn-primary" id="generateBtn">
                         <i class="bi bi-magic me-1"></i>Generate Context
                     </button>
@@ -485,18 +516,75 @@ function showGenerateContextModal() {
     const modal = new bootstrap.Modal(document.getElementById('generateContextModal'));
 
     // Reset modal state
+    document.getElementById('sourceUrl').value = '{{ page.url }}';
+    document.getElementById('sourceUrl').readOnly = true;
+    document.getElementById('paywalledCheckbox').checked = false;
     document.getElementById('customInstructions').value = '';
     document.getElementById('generationProgress').classList.add('d-none');
     document.getElementById('generationResult').classList.add('d-none');
     document.getElementById('generateBtn').disabled = false;
 
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
     modal.show();
+}
+
+function toggleSourceUrlEditable() {
+    const sourceUrlInput = document.getElementById('sourceUrl');
+    const isChecked = document.getElementById('paywalledCheckbox').checked;
+    sourceUrlInput.readOnly = !isChecked;
+    if (isChecked) {
+        sourceUrlInput.focus();
+    } else {
+        sourceUrlInput.value = '{{ page.url }}';
+    }
+}
+
+async function previewPrompt() {
+    const customInstructions = document.getElementById('customInstructions').value.trim();
+    const sourceUrl = document.getElementById('sourceUrl').value.trim();
+    const isPaywalled = document.getElementById('paywalledCheckbox').checked;
+
+    try {
+        const requestData = {
+            custom_instructions: customInstructions || null,
+            page_source: isPaywalled ? sourceUrl : null
+        };
+
+        const response = await authenticatedFetch(`/api/pages/{{ page.id }}/preview-context`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to preview prompt');
+        }
+
+        const result = await response.json();
+
+        // Show preview in a modal or alert
+        alert('PROMPT PREVIEW:\n\n' + result.prompt);
+
+    } catch (error) {
+        console.error('Error previewing prompt:', error);
+        alert('Error: ' + error.message);
+    }
 }
 
 async function generatePageContext(event) {
     event.preventDefault();
 
     const customInstructions = document.getElementById('customInstructions').value.trim();
+    const sourceUrl = document.getElementById('sourceUrl').value.trim();
+    const isPaywalled = document.getElementById('paywalledCheckbox').checked;
     const generateBtn = document.getElementById('generateBtn');
     const progressDiv = document.getElementById('generationProgress');
     const resultDiv = document.getElementById('generationResult');
@@ -510,7 +598,8 @@ async function generatePageContext(event) {
         // TODO: Get actual LLM provider ID (hardcoded to 1 for now)
         const requestData = {
             llm_provider_id: 1,
-            custom_instructions: customInstructions || null
+            custom_instructions: customInstructions || null,
+            page_source: isPaywalled ? sourceUrl : null
         };
 
         const response = await authenticatedFetch(`/api/pages/{{ page.id }}/generate-context`, {
