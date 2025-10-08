@@ -5,7 +5,7 @@ import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import jinja2
 from sqlalchemy import select
@@ -338,7 +338,7 @@ class AutoNoteService:
                     css_selector, xpath = detect_selector_type(position)
 
             # Build anchor_data with selectors
-            anchor_data = {
+            anchor_data: Dict[str, Any] = {
                 "auto_generated": True,
             }
 
@@ -347,13 +347,30 @@ class AutoNoteService:
             if xpath:
                 anchor_data["elementXPath"] = xpath
 
+            # Build selectionData for the extension to properly highlight text
+            # The extension needs this structure to restore text highlighting
+            highlighted_text = note_data.get("highlighted_text", "")
+            if highlighted_text and (css_selector or xpath):
+                # Use the best available selector (prefer CSS)
+                selector = css_selector or xpath
+                anchor_data["selectionData"] = {
+                    "selectedText": highlighted_text,
+                    "startSelector": selector,
+                    "endSelector": selector,
+                    "startOffset": 0,  # LLM doesn't provide exact offsets
+                    "endOffset": len(highlighted_text),
+                    "startContainerType": 3,  # TEXT_NODE
+                    "endContainerType": 3,  # TEXT_NODE
+                    "commonAncestorSelector": selector,
+                }
+
             # Create unique server_link_id using batch ID + index
             # This prevents duplicates during sync while allowing extension display
             server_link_id = f"{generation_batch_id}_{idx}"
 
             note = Note(
                 content=note_data.get("commentary", ""),
-                highlighted_text=note_data.get("highlighted_text"),
+                highlighted_text=highlighted_text,
                 page_section_html=None,  # We don't have section HTML from LLM
                 position_x=100 + (idx * 20),  # Stagger notes slightly
                 position_y=100 + (idx * 20),
