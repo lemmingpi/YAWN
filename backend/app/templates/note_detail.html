@@ -106,27 +106,70 @@
                 <div class="col-md-6">
                     <div class="mb-2">
                         <label class="form-label text-muted small mb-1">Element Selector</label>
-                        <code class="d-block p-2 bg-light rounded small">
-                            {{ note.element_selector or 'Not specified' }}
+                        <code class="d-block p-2 bg-light rounded small text-break">
+                            {{ note.anchor_data.get('elementSelector') if note.anchor_data else 'Not specified' }}
                         </code>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label text-muted small mb-1">Anchor Data</label>
-                        <pre class="bg-light p-2 rounded small mb-0">{{ note.anchor_data or 'No anchor data' }}</pre>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="mb-2">
                         <label class="form-label text-muted small mb-1">Element XPath</label>
-                        <code class="d-block p-2 bg-light rounded small">
-                            {{ note.element_xpath or 'Not specified' }}
+                        <code class="d-block p-2 bg-light rounded small text-break">
+                            {{ note.anchor_data.get('elementXPath') if note.anchor_data else 'Not specified' }}
                         </code>
                     </div>
                     <div class="mb-2">
                         <label class="form-label text-muted small mb-1">Position Offset</label>
                         <code class="d-block p-2 bg-light rounded small">
-                            X: {{ note.offset_x or 0 }}, Y: {{ note.offset_y or 0 }}
+                            X: {{ note.anchor_data.get('offsetX', 0) if note.anchor_data else 0 }},
+                            Y: {{ note.anchor_data.get('offsetY', 0) if note.anchor_data else 0 }}
                         </code>
+                    </div>
+                    {% if note.anchor_data and note.anchor_data.get('position_hint') %}
+                    <div class="mb-2">
+                        <label class="form-label text-muted small mb-1">Position Hint (Auto-Generated)</label>
+                        <code class="d-block p-2 bg-light rounded small text-break">
+                            {{ note.anchor_data.get('position_hint') }}
+                        </code>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    {% if note.anchor_data and note.anchor_data.get('selectionData') %}
+                    <div class="mb-2">
+                        <label class="form-label text-muted small mb-1">Text Selection</label>
+                        <div class="p-2 bg-light rounded small">
+                            <strong>Selected Text:</strong>
+                            <div class="text-break fst-italic">"{{ note.anchor_data.get('selectionData', {}).get('selectedText', 'N/A')[:100] }}..."</div>
+                            {% if note.anchor_data.get('selectionData', {}).get('textBefore') %}
+                            <small class="text-muted">Before: "{{ note.anchor_data.get('selectionData', {}).get('textBefore', '')[:30] }}..."</small><br>
+                            {% endif %}
+                            {% if note.anchor_data.get('selectionData', {}).get('textAfter') %}
+                            <small class="text-muted">After: "{{ note.anchor_data.get('selectionData', {}).get('textAfter', '')[:30] }}..."</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="mb-2">
+                        <label class="form-label text-muted small mb-1">Note Metadata</label>
+                        <div class="p-2 bg-light rounded small">
+                            <div><strong>Background Color:</strong>
+                                <span class="badge" style="background-color: {{ note.anchor_data.get('backgroundColor', 'light-yellow') if note.anchor_data else 'light-yellow' }}">
+                                    {{ note.anchor_data.get('backgroundColor', 'light-yellow') if note.anchor_data else 'light-yellow' }}
+                                </span>
+                            </div>
+                            <div><strong>Content Type:</strong>
+                                {% if note.anchor_data and note.anchor_data.get('isMarkdown') %}
+                                    <span class="badge bg-info">Markdown</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Plain Text</span>
+                                {% endif %}
+                            </div>
+                            {% if note.anchor_data and note.anchor_data.get('auto_generated') %}
+                            <div><strong>Source:</strong> <span class="badge bg-warning">Auto-Generated by AI</span></div>
+                            {% endif %}
+                            {% if note.anchor_data and note.anchor_data.get('contentHash') %}
+                            <div><strong>Content Hash:</strong> <code class="small">{{ note.anchor_data.get('contentHash')[:16] }}...</code></div>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
