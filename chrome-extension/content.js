@@ -2548,6 +2548,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   try {
     switch (message.type) {
+      case "showPageRegistered":
+        alert(`✓ Page "${message.title}" has been registered.\n\nYou can now generate AI context or add notes.`);
+        sendResponse({ success: true });
+        break;
+
+      case "showRegistrationError":
+        alert(`✗ Failed to register page.\n\nError: ${message.error}\n\nPlease try again.`);
+        sendResponse({ success: true });
+        break;
+
       case "shareCurrentPage":
         handlePageSharing();
         sendResponse({ success: true });

@@ -494,6 +494,39 @@ const ServerAPI = {
   },
 
   /**
+   * Register a page without creating a note
+   * @param {string} url - Page URL
+   * @param {string} title - Page title
+   * @returns {Promise<Object>} Created page data
+   */
+  async registerPage(url, title) {
+    try {
+      // Check authentication before attempting to register page
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot register page on server");
+      }
+
+      const pageData = {
+        url: url,
+        title: title || null,
+      };
+
+      const response = await this.makeRequest("/pages/", {
+        method: "POST",
+        body: JSON.stringify(pageData),
+      });
+
+      const createdPage = await response.json();
+      console.log(`[Web Notes] Page registered successfully:`, createdPage);
+      return createdPage;
+    } catch (error) {
+      console.error(`[Web Notes] Failed to register page:`, error);
+      throw error;
+    }
+  },
+
+  /**
    * Check if current request should include authentication
    * @returns {Promise<boolean>} True if authenticated requests should be made
    */

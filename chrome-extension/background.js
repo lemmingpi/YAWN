@@ -52,6 +52,13 @@ async function createContextMenu() {
         title: "Share Current Site",
         contexts: ["page"],
       });
+
+      // Register page menu item
+      chrome.contextMenus.create({
+        id: "register-page",
+        title: "📋 Register Page (without notes)",
+        contexts: ["page"],
+      });
     }, "Creating context menu");
 
     console.log("[Web Notes Extension] Context menu created successfully");
@@ -204,6 +211,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         await handleAddNote(info, tab);
         break;
 
+      case "register-page":
+        // Handle register page action
+        await handleRegisterPage(tab);
+        break;
+
       case "share-current-page":
         // Handle share page action
         await handleSharePage(info, tab);
@@ -296,6 +308,41 @@ async function handleShareSite(info, tab) {
   }
 }
 
+/**
+ * Handle register page context menu action
+ * @param {Object} tab - Tab object
+ */
+async function handleRegisterPage(tab) {
+  try {
+    console.log("[Web Notes Extension] Register page requested via context menu");
+
+    // Register the page without creating a note
+    const response = await chrome.runtime.sendMessage({
+      action: "API_registerPage",
+      url: tab.url,
+      title: tab.title,
+    });
+
+    if (response && response.success) {
+      console.log("[Web Notes Extension] Page registered successfully:", response.data);
+      // Send message to content script to show alert
+      chrome.tabs.sendMessage(tab.id, {
+        type: "showPageRegistered",
+        title: tab.title,
+      });
+    } else {
+      console.error("[Web Notes Extension] Failed to register page:", response?.error);
+      // Send error message to content script
+      chrome.tabs.sendMessage(tab.id, {
+        type: "showRegistrationError",
+        error: response?.error || "Unknown error",
+      });
+    }
+  } catch (error) {
+    logError("Error handling register page action", error);
+  }
+}
+
 // ===== SHARING MESSAGE HANDLING =====
 
 /**
@@ -363,6 +410,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             break;
           case "API_getConfig":
             result = await ServerAPI.getConfig();
+            break;
+          case "API_registerPage":
+            result = await ServerAPI.registerPage(message.url, message.title);
             break;
           default:
             throw new Error(`Unknown API action: ${message.action}`);
