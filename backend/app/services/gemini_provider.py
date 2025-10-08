@@ -76,7 +76,7 @@ class GeminiProvider:
         self,
         prompt: str,
         max_output_tokens: int = 8192,
-        temperature: float = 0.75,
+        temperature: float = 0.625,
     ) -> Dict[str, Any]:
         """
         Generate content using Gemini API with larger token limit.
@@ -84,7 +84,7 @@ class GeminiProvider:
         Args:
             prompt: Input prompt for generation
             max_output_tokens: (default 8192) Maximum tokens to generate
-            temperature: (default 0.75) Sampling temperature (0.0-1.0)
+            temperature: (default 0.625) Sampling temperature (0.0-1.0)
 
         Returns:
             Dictionary with:

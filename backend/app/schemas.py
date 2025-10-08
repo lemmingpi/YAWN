@@ -155,6 +155,13 @@ class PageCreate(PageBase):
     site_id: int = Field(..., description="ID of the associated site")
 
 
+class PageCreateWithURL(BaseModel):
+    """Schema for creating a new page with URL (auto-creates site if needed)."""
+
+    url: str = Field(..., min_length=1, max_length=2048, description="Page URL")
+    title: Optional[str] = Field(None, max_length=500, description="Page title")
+
+
 class PageUpdate(BaseModel):
     """Schema for updating an existing page."""
 

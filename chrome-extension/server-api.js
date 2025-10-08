@@ -62,6 +62,15 @@ const ServerAPI = {
   },
 
   /**
+   * Get base web URL (without /api suffix)
+   * @returns {Promise<string>} Base web URL
+   */
+  async getBaseUrl() {
+    const config = await this.getConfig();
+    return config.serverUrl.replace(/\/api$/, "");
+  },
+
+  /**
    * Make HTTP request with error handling and retries
    * @param {string} endpoint - API endpoint (relative to server URL)
    * @param {Object} options - Fetch options
@@ -512,7 +521,7 @@ const ServerAPI = {
         title: title || null,
       };
 
-      const response = await this.makeRequest("/pages/", {
+      const response = await this.makeRequest("/pages/with-url", {
         method: "POST",
         body: JSON.stringify(pageData),
       });

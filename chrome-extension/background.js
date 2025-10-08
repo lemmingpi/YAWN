@@ -331,29 +331,28 @@ async function handleRegisterPage(tab) {
   try {
     console.log("[Web Notes Extension] Register page requested via context menu");
 
-    // Register the page without creating a note
-    const response = await chrome.runtime.sendMessage({
-      action: "API_registerPage",
-      url: tab.url,
-      title: tab.title,
-    });
+    // Register the page without creating a note - call ServerAPI directly
+    const pageData = await ServerAPI.registerPage(tab.url, tab.title);
 
-    if (response && response.success) {
-      console.log("[Web Notes Extension] Page registered successfully:", response.data);
-      // Send message to content script to show alert
-      chrome.tabs.sendMessage(tab.id, {
-        type: "showPageRegistered",
-        title: tab.title,
-      });
-    } else {
-      console.error("[Web Notes Extension] Failed to register page:", response?.error);
-      // Send error message to content script
-      chrome.tabs.sendMessage(tab.id, {
-        type: "showRegistrationError",
-        error: response?.error || "Unknown error",
-      });
-    }
+    console.log("[Web Notes Extension] Page registered successfully:", pageData);
+
+    // Open the server page in a new tab
+    const baseUrl = await ServerAPI.getBaseUrl();
+    const serverPageUrl = `${baseUrl}/app/pages/${pageData.id}`;
+    chrome.tabs.create({ url: serverPageUrl });
   } catch (error) {
+    console.error("[Web Notes Extension] Failed to register page:", error);
+
+    // Send error message to content script to show alert
+    chrome.tabs
+      .sendMessage(tab.id, {
+        type: "showRegistrationError",
+        error: error.message || "Unknown error",
+      })
+      .catch(err => {
+        console.warn("[Web Notes Extension] Could not send error message to tab:", err);
+      });
+
     logError("Error handling register page action", error);
   }
 }
@@ -425,9 +424,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             break;
           case "API_getConfig":
             result = await ServerAPI.getConfig();
-            break;
-          case "API_registerPage":
-            result = await ServerAPI.registerPage(message.url, message.title);
             break;
           default:
             throw new Error(`Unknown API action: ${message.action}`);

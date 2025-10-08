@@ -10,14 +10,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth import get_current_active_user
 from ..database import get_db
-from ..models import Note, Page, PageSection, Site
+from ..models import Note, Page, PageSection, Site, User
 from ..schemas import (
     PageContextGenerationRequest,
     PageContextGenerationResponse,
     PageContextPreviewRequest,
     PageContextPreviewResponse,
     PageCreate,
+    PageCreateWithURL,
     PageResponse,
     PageSummarizationRequest,
     PageSummarizationResponse,
@@ -62,6 +64,106 @@ async def create_page(
     result.notes_count = 0  # New page has no notes yet
     result.sections_count = 0  # New page has no sections yet
     return result
+
+
+@router.post(
+    "/with-url", response_model=PageResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_page_with_url(
+    page_data: PageCreateWithURL,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> PageResponse:
+    """Create a new page with URL (auto-creates site if needed).
+
+    This endpoint is used by the Chrome extension to register pages
+    without creating notes. It automatically creates the site if it
+    doesn't exist.
+
+    Args:
+        page_data: Page creation data with URL
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Created page data
+
+    Raises:
+        HTTPException: If URL is invalid
+    """
+    from urllib.parse import urlparse, urlunparse
+
+    try:
+        # Normalize the URL
+        parsed = urlparse(page_data.url)
+        normalized_url = urlunparse(parsed._replace(fragment=""))
+        if normalized_url.endswith("/") and len(normalized_url) > 1:
+            normalized_url = normalized_url[:-1]
+
+        # Try to find existing page
+        page_result = await db.execute(select(Page).where(Page.url == normalized_url))
+        existing_page = page_result.scalar_one_or_none()
+
+        if existing_page:
+            # Return existing page
+            page_response = PageResponse.model_validate(existing_page)
+            # Get counts
+            note_count = await db.scalar(
+                select(func.count(Note.id)).where(Note.page_id == existing_page.id)
+            )
+            section_count = await db.scalar(
+                select(func.count(PageSection.id)).where(
+                    PageSection.page_id == existing_page.id
+                )
+            )
+            page_response.notes_count = note_count or 0
+            page_response.sections_count = section_count or 0
+            return page_response
+
+        # Extract domain and get or create site
+        domain = parsed.hostname
+        if not domain:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid URL: cannot extract domain",
+            )
+
+        # Try to find existing site
+        site_result = await db.execute(select(Site).where(Site.domain == domain))
+        existing_site = site_result.scalar_one_or_none()
+
+        if not existing_site:
+            # Create new site
+            new_site = Site(
+                domain=domain,
+                user_context=None,
+                user_id=current_user.id,
+            )
+            db.add(new_site)
+            await db.flush()  # Get ID without committing
+            site = new_site
+        else:
+            site = existing_site
+
+        # Create new page
+        new_page = Page(
+            url=normalized_url,
+            title=page_data.title or "",
+            site_id=site.id,
+            user_id=current_user.id,
+        )
+        db.add(new_page)
+        await db.commit()
+        await db.refresh(new_page)
+
+        # Return response with counts
+        result = PageResponse.model_validate(new_page)
+        result.notes_count = 0  # New page has no notes yet
+        result.sections_count = 0  # New page has no sections yet
+        return result
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/", response_model=List[PageResponse])
