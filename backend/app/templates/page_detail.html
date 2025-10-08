@@ -393,7 +393,18 @@ class PageDetailManager {
     async loadStats() {
         try {
             const notesResponse = await authenticatedFetch(`/api/notes?page_id=${this.pageId}&limit=1000`);
+
+            if (!notesResponse.ok) {
+                throw new Error(`HTTP ${notesResponse.status}: ${notesResponse.statusText}`);
+            }
+
             const notes = await notesResponse.json();
+
+            // Ensure notes is an array
+            if (!Array.isArray(notes)) {
+                console.error('Expected notes to be an array, got:', typeof notes);
+                throw new Error('Invalid response format');
+            }
 
             document.getElementById('totalNotes').textContent = notes.length;
 
@@ -415,6 +426,10 @@ class PageDetailManager {
 
         } catch (error) {
             console.error('Error loading stats:', error);
+            // Set default values on error
+            document.getElementById('totalNotes').textContent = '0';
+            document.getElementById('totalArtifacts').textContent = '0';
+            document.getElementById('recentActivity').textContent = '0';
         }
     }
 
@@ -428,11 +443,32 @@ class PageDetailManager {
             if (search) params.append('search', search);
 
             const response = await authenticatedFetch(`/api/notes?${params}`);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
             const notes = await response.json();
+
+            // Ensure notes is an array
+            if (!Array.isArray(notes)) {
+                console.error('Expected notes to be an array, got:', typeof notes);
+                throw new Error('Invalid response format');
+            }
 
             this.renderNotes(notes);
         } catch (error) {
             console.error('Error loading notes:', error);
+            // Show error state
+            const container = document.getElementById('notesContainer');
+            container.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Failed to load notes: ${error.message}
+                    </div>
+                </div>
+            `;
         }
     }
 
