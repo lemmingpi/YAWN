@@ -68,6 +68,9 @@
             </div>
             <div class="col-md-4">
                 <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="showAutoNoteModal()">
+                        <i class="bi bi-stars me-1"></i>Generate Auto-Notes
+                    </button>
                     <button class="btn btn-outline-primary" onclick="editPage()">
                         <i class="bi bi-pencil me-1"></i>Edit Page
                     </button>
@@ -177,6 +180,20 @@
                                 Active Page
                             </label>
                         </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editPagePaywalled" {{ 'checked' if page.is_paywalled else '' }} onchange="toggleEditPageSource()">
+                            <label class="form-check-label" for="editPagePaywalled">
+                                Page is Paywalled
+                                <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" title="Mark if page content is behind a paywall. You can provide alternate source text for AI context generation."></i>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="editPageSourceContainer" style="display: {{ 'block' if page.is_paywalled else 'none' }};">
+                        <label for="editPageSource" class="form-label">Alternate Page Source</label>
+                        <textarea class="form-control" id="editPageSource" rows="4" placeholder="Provide alternate page source text for paywalled content...">{{ page.page_source or '' }}</textarea>
+                        <small class="form-text text-muted">This text will be used for AI analysis when the original page is inaccessible.</small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -295,6 +312,98 @@
                     </button>
                     <button type="submit" class="btn btn-primary" id="generateBtn">
                         <i class="bi bi-magic me-1"></i>Generate Context
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Auto-Note Generation Modal -->
+<div class="modal fade" id="autoNoteModal" tabindex="-1" aria-labelledby="autoNoteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="autoNoteModalLabel">
+                    <i class="bi bi-stars me-2"></i>Generate Auto-Notes
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="autoNoteForm">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>What are Auto-Notes?</strong><br>
+                        The AI will analyze this page and automatically create 5-15 structured notes with
+                        highlighted text and commentary. Choose a template based on your goal.
+                    </div>
+
+                    {% if page.is_paywalled %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Paywalled Page Notice:</strong><br>
+                        This page is marked as paywalled. Auto-note generation is disabled because the LLM
+                        cannot accurately position notes without access to the original page content.
+                        You can still preview what would be generated using your alternate page source.
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="autoNoteTemplate" class="form-label">Template Type <span class="text-danger">*</span></label>
+                        <select class="form-select" id="autoNoteTemplate" required>
+                            <option value="study_guide">📚 Study Guide - Extract key concepts and explanations</option>
+                            <option value="content_review">✍️ Content Review - Editorial feedback and expansion suggestions</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            <strong>Study Guide:</strong> Best for learning materials, articles, documentation<br>
+                            <strong>Content Review:</strong> Best for your own writing that needs feedback
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="autoNoteInstructions" class="form-label">
+                            Custom Instructions (Optional)
+                        </label>
+                        <textarea
+                            class="form-control"
+                            id="autoNoteInstructions"
+                            rows="3"
+                            placeholder="E.g., 'Focus on technical implementation details' or 'Emphasize philosophical arguments'"></textarea>
+                        <small class="form-text text-muted">
+                            Provide specific guidance for the AI about what to focus on.
+                        </small>
+                    </div>
+
+                    <!-- Result display area -->
+                    <div id="autoNoteResult" style="display: none;">
+                        <hr>
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            <strong>Notes Generated!</strong>
+                            <div class="mt-2">
+                                <small>
+                                    <strong>Notes Created:</strong> <span id="autoNoteCount"></span><br>
+                                    <strong>Tokens Used:</strong> <span id="autoNoteTokens"></span><br>
+                                    <strong>Cost:</strong> $<span id="autoNoteCost"></span><br>
+                                    <strong>Generation Time:</strong> <span id="autoNoteTime"></span>ms
+                                </small>
+                            </div>
+                            <div class="mt-3">
+                                <strong>Batch ID:</strong> <code id="autoNoteBatchId"></code>
+                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="archiveBatch()">
+                                    <i class="bi bi-archive me-1"></i>Archive This Batch
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-info" onclick="previewAutoNotePrompt()">
+                        <i class="bi bi-eye me-1"></i>Preview Prompt
+                    </button>
+                    <button type="submit" class="btn btn-primary" id="autoNoteGenerateBtn" {% if page.is_paywalled %}disabled{% endif %}>
+                        <i class="bi bi-stars me-1"></i>Generate Notes
                     </button>
                 </div>
             </form>
@@ -518,7 +627,9 @@ class PageDetailManager {
             title: document.getElementById('editPageTitle').value.trim() || null,
             page_summary: document.getElementById('editPageSummary').value.trim() || null,
             user_context: document.getElementById('editPageContext').value.trim() || null,
-            is_active: document.getElementById('editPageActive').checked
+            is_active: document.getElementById('editPageActive').checked,
+            is_paywalled: document.getElementById('editPagePaywalled').checked,
+            page_source: document.getElementById('editPageSource').value.trim() || null
         };
 
         try {
@@ -732,6 +843,167 @@ async function generatePageContext(event) {
         progressDiv.classList.add('d-none');
         generateBtn.disabled = false;
         alert('Error: ' + error.message);
+    }
+}
+
+// Helper function for edit page paywall toggle
+function toggleEditPageSource() {
+    const isPaywalled = document.getElementById('editPagePaywalled').checked;
+    const sourceContainer = document.getElementById('editPageSourceContainer');
+    sourceContainer.style.display = isPaywalled ? 'block' : 'none';
+}
+
+// Auto-Note Generation Functions
+let currentBatchId = null;
+
+function showAutoNoteModal() {
+    const modal = new bootstrap.Modal(document.getElementById('autoNoteModal'));
+
+    // Reset modal state
+    document.getElementById('autoNoteTemplate').value = 'study_guide';
+    document.getElementById('autoNoteInstructions').value = '';
+    document.getElementById('autoNoteResult').style.display = 'none';
+    document.getElementById('autoNoteGenerateBtn').disabled = {{ 'true' if page.is_paywalled else 'false' }};
+    currentBatchId = null;
+
+    modal.show();
+}
+
+async function previewAutoNotePrompt() {
+    const templateType = document.getElementById('autoNoteTemplate').value;
+    const customInstructions = document.getElementById('autoNoteInstructions').value.trim();
+
+    try {
+        const response = await authenticatedFetch('/api/auto-notes/pages/{{ page.id }}/preview', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                template_type: templateType,
+                custom_instructions: customInstructions || null,
+                page_source: {{ 'page.page_source' if page.is_paywalled else 'null' }}
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+
+            // Show in existing prompt preview modal
+            document.getElementById('promptPreviewText').value = data.prompt;
+            document.getElementById('promptLength').textContent = data.prompt_length.toLocaleString();
+            document.getElementById('estimatedTokens').textContent = data.estimated_tokens.toLocaleString();
+
+            const previewModal = new bootstrap.Modal(document.getElementById('promptPreviewModal'));
+            previewModal.show();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.detail || 'Failed to preview prompt'));
+        }
+    } catch (error) {
+        console.error('Error previewing prompt:', error);
+        alert('Error: Failed to preview prompt');
+    }
+}
+
+document.getElementById('autoNoteForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const templateType = document.getElementById('autoNoteTemplate').value;
+    const customInstructions = document.getElementById('autoNoteInstructions').value.trim();
+    const generateBtn = document.getElementById('autoNoteGenerateBtn');
+
+    // Disable button and show loading
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+
+    try {
+        const response = await authenticatedFetch('/api/auto-notes/pages/{{ page.id }}/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                llm_provider_id: 1,  // Default to first provider
+                template_type: templateType,
+                custom_instructions: customInstructions || null,
+                page_source: null  // Not used for generation, only preview
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+
+            // Store batch ID
+            currentBatchId = data.generation_batch_id;
+
+            // Show success result
+            document.getElementById('autoNoteCount').textContent = data.notes.length;
+            document.getElementById('autoNoteTokens').textContent = data.tokens_used.toLocaleString();
+            document.getElementById('autoNoteCost').textContent = data.cost_usd.toFixed(4);
+            document.getElementById('autoNoteTime').textContent = data.generation_time_ms.toLocaleString();
+            document.getElementById('autoNoteBatchId').textContent = data.generation_batch_id;
+            document.getElementById('autoNoteResult').style.display = 'block';
+
+            // Open the page in a new tab
+            window.open('{{ page.url }}', '_blank');
+
+            // Reload notes to show new ones
+            setTimeout(() => {
+                if (pageDetailManager) {
+                    pageDetailManager.loadNotes();
+                    pageDetailManager.loadStats();
+                }
+            }, 1000);
+
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.detail || 'Failed to generate notes'));
+        }
+    } catch (error) {
+        console.error('Error generating notes:', error);
+        alert('Error: Failed to generate notes');
+    } finally {
+        // Re-enable button
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = '<i class="bi bi-stars me-1"></i>Generate Notes';
+    }
+});
+
+async function archiveBatch() {
+    if (!currentBatchId) {
+        alert('No batch to archive');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to archive all notes from batch ${currentBatchId}? This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await authenticatedFetch(`/api/auto-notes/batch/${currentBatchId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            alert(`Successfully archived ${data.deleted_count} notes`);
+
+            // Close modal and reload
+            const modal = bootstrap.Modal.getInstance(document.getElementById('autoNoteModal'));
+            modal.hide();
+
+            if (pageDetailManager) {
+                pageDetailManager.loadNotes();
+                pageDetailManager.loadStats();
+            }
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.detail || 'Failed to archive batch'));
+        }
+    } catch (error) {
+        console.error('Error archiving batch:', error);
+        alert('Error: Failed to archive batch');
     }
 }
 
