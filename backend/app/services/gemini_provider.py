@@ -2,12 +2,11 @@
 
 import asyncio
 import logging
-import sys
 from decimal import Decimal
 from typing import Any, Dict, Optional
 
-import google.generativeai as genai
-from google.api_core import exceptions as google_exceptions
+from google import genai
+from google.genai import types
 
 from .cost_tracker import calculate_cost, LLMModel
 
@@ -34,7 +33,7 @@ class GeminiProvider:
     - Automatic retry with exponential backoff
     - Rate limit detection and handling
     - Token usage tracking and cost calculation
-    - Safety settings configuration
+    - Support for text and image generation
     """
 
     def __init__(
@@ -58,19 +57,8 @@ class GeminiProvider:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
-        # Configure the API
-        genai.configure(api_key=api_key)
-
-        # Initialize the model with safety settings
-        self.model = genai.GenerativeModel(
-            model_name=model,
-            safety_settings={
-                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
-                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
-                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
-            },
-        )
+        # Initialize the new client
+        self.client = genai.Client(api_key=api_key)
 
     async def generate_content_large(
         self,
@@ -126,29 +114,20 @@ class GeminiProvider:
             RateLimitError: When rate limit is exceeded after retries
             GeminiProviderError: For other API errors
         """
-        generation_config = genai.GenerationConfig(
-            max_output_tokens=max_output_tokens,
+        generation_config = types.GenerateContentConfig(
             temperature=temperature,
+            max_output_tokens=max_output_tokens,
         )
 
         for attempt in range(self.max_retries):
             try:
-                # Generate content
-                # Use to_thread for Python 3.9+, or run_in_executor for older versions
-                if sys.version_info >= (3, 9):
-                    response = await asyncio.to_thread(
-                        self.model.generate_content,
-                        prompt,
-                        generation_config=generation_config,
-                    )
-                else:
-                    loop = asyncio.get_event_loop()
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: self.model.generate_content(
-                            prompt, generation_config=generation_config
-                        ),
-                    )
+                # Generate content using new API
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=self.model_name,
+                    contents=prompt,
+                    config=generation_config,
+                )
 
                 # Extract text
                 if not response.candidates:
@@ -190,29 +169,29 @@ class GeminiProvider:
                     "token_limit_reached": token_limit_reached,
                 }
 
-            except google_exceptions.ResourceExhausted as e:
-                # Rate limit exceeded
-                if attempt < self.max_retries - 1:
-                    delay = self.retry_delay * (2**attempt)
-                    logger.warning(
-                        f"Rate limit exceeded, retrying in {delay}s "
-                        f"(attempt {attempt + 1}/{self.max_retries})"
-                    )
-                    await asyncio.sleep(delay)
-                else:
-                    raise RateLimitError(
-                        f"Rate limit exceeded after {self.max_retries} attempts"
-                    ) from e
-
-            except google_exceptions.GoogleAPIError as e:
-                # Other Google API errors
-                logger.error(f"Google API error: {e}")
-                raise GeminiProviderError(f"API error: {str(e)}") from e
-
             except Exception as e:
-                # Unexpected errors
-                logger.error(f"Unexpected error generating content: {e}")
-                raise GeminiProviderError(f"Unexpected error: {str(e)}") from e
+                # Check if it's a rate limit error
+                error_message = str(e).lower()
+                if (
+                    "rate limit" in error_message
+                    or "quota" in error_message
+                    or "429" in error_message
+                ):
+                    if attempt < self.max_retries - 1:
+                        delay = self.retry_delay * (2**attempt)
+                        logger.warning(
+                            f"Rate limit exceeded, retrying in {delay}s "
+                            f"(attempt {attempt + 1}/{self.max_retries})"
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        raise RateLimitError(
+                            f"Rate limit exceeded after {self.max_retries} attempts"
+                        ) from e
+                else:
+                    # Other errors
+                    logger.error(f"API error: {e}")
+                    raise GeminiProviderError(f"API error: {str(e)}") from e
 
         # Should not reach here
         raise GeminiProviderError("Failed to generate content after all retries")
@@ -228,16 +207,12 @@ class GeminiProvider:
             Estimated token count
         """
         try:
-            if sys.version_info >= (3, 9):
-                result = await asyncio.to_thread(
-                    self.model.count_tokens,
-                    text,
-                )
-            else:
-                loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(
-                    None, lambda: self.model.count_tokens(text)
-                )
+            # Use the new API to count tokens
+            result = await asyncio.to_thread(
+                self.client.models.count_tokens,
+                model=self.model_name,
+                contents=text,
+            )
             return int(result.total_tokens)
         except Exception as e:
             logger.warning(f"Error estimating tokens: {e}")
@@ -292,44 +267,40 @@ class GeminiProvider:
         """
         import base64
 
-        # Use Gemini 2.5 Flash Image model
-        image_model = genai.GenerativeModel("gemini-2.5-flash-image")
-
-        generation_config = genai.GenerationConfig(
-            response_modalities=["image"],
+        # Configure for image generation
+        generation_config = types.GenerateContentConfig(
+            response_modalities=["IMAGE"],
         )
 
         for attempt in range(self.max_retries):
             try:
-                # Generate image
-                if sys.version_info >= (3, 9):
-                    response = await asyncio.to_thread(
-                        image_model.generate_content,
-                        prompt,
-                        generation_config=generation_config,
-                    )
-                else:
-                    loop = asyncio.get_event_loop()
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: image_model.generate_content(
-                            prompt, generation_config=generation_config
-                        ),
-                    )
+                # Generate image using new API
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model="gemini-2.5-flash-image",
+                    contents=prompt,
+                    config=generation_config,
+                )
 
                 # Extract image data
                 if not response.candidates:
                     raise GeminiProviderError("No candidates returned from API")
 
                 # Get the first part which should contain the image
-                part = response.candidates[0].content.parts[0]
+                image_parts = [
+                    part.inline_data.data
+                    for part in response.candidates[0].content.parts
+                    if part.inline_data
+                ]
 
-                if not hasattr(part, "inline_data"):
+                if not image_parts:
                     raise GeminiProviderError("No image data in response")
 
-                image_data = part.inline_data
-                mime_type = image_data.mime_type
-                image_bytes = image_data.data
+                image_bytes = image_parts[0]
+                # The MIME type should be in the inline_data
+                mime_type = (
+                    response.candidates[0].content.parts[0].inline_data.mime_type
+                )
 
                 # Convert to base64 for storage
                 image_base64 = base64.b64encode(image_bytes).decode("utf-8")
@@ -360,29 +331,29 @@ class GeminiProvider:
                     "model": "gemini-2.5-flash-image",
                 }
 
-            except google_exceptions.ResourceExhausted as e:
-                # Rate limit exceeded
-                if attempt < self.max_retries - 1:
-                    delay = self.retry_delay * (2**attempt)
-                    logger.warning(
-                        f"Rate limit exceeded, retrying in {delay}s "
-                        f"(attempt {attempt + 1}/{self.max_retries})"
-                    )
-                    await asyncio.sleep(delay)
-                else:
-                    raise RateLimitError(
-                        f"Rate limit exceeded after {self.max_retries} attempts"
-                    ) from e
-
-            except google_exceptions.GoogleAPIError as e:
-                # Other Google API errors
-                logger.error(f"Google API error: {e}")
-                raise GeminiProviderError(f"API error: {str(e)}") from e
-
             except Exception as e:
-                # Unexpected errors
-                logger.error(f"Unexpected error generating image: {e}")
-                raise GeminiProviderError(f"Unexpected error: {str(e)}") from e
+                # Check if it's a rate limit error
+                error_message = str(e).lower()
+                if (
+                    "rate limit" in error_message
+                    or "quota" in error_message
+                    or "429" in error_message
+                ):
+                    if attempt < self.max_retries - 1:
+                        delay = self.retry_delay * (2**attempt)
+                        logger.warning(
+                            f"Rate limit exceeded, retrying in {delay}s "
+                            f"(attempt {attempt + 1}/{self.max_retries})"
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        raise RateLimitError(
+                            f"Rate limit exceeded after {self.max_retries} attempts"
+                        ) from e
+                else:
+                    # Other errors
+                    logger.error(f"API error generating image: {e}")
+                    raise GeminiProviderError(f"API error: {str(e)}") from e
 
         # Should not reach here
         raise GeminiProviderError("Failed to generate image after all retries")
