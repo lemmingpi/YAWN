@@ -142,6 +142,17 @@ class Page(Base, TimestampMixin):
     user_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Paywall support for auto-note generation
+    is_paywalled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Whether the page content is behind a paywall",
+    )
+    page_source: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="Alternate page source text for paywalled content"
+    )
+
     # Foreign Keys
     site_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True
@@ -182,6 +193,12 @@ class Note(Base, TimestampMixin):
     position_y: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     anchor_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Whether the note has been archived (soft delete for auto-generated batches)",
+    )
     server_link_id: Mapped[Optional[str]] = mapped_column(
         String(100), index=True, nullable=True
     )

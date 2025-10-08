@@ -147,6 +147,12 @@ class PageBase(BaseModel):
         None, description="User-defined context for this page"
     )
     is_active: bool = Field(True, description="Whether the page is active")
+    is_paywalled: bool = Field(
+        False, description="Whether the page content is behind a paywall"
+    )
+    page_source: Optional[str] = Field(
+        None, description="Alternate page source text for paywalled content"
+    )
 
 
 class PageCreate(PageBase):
@@ -170,6 +176,8 @@ class PageUpdate(BaseModel):
     page_summary: Optional[str] = None
     user_context: Optional[str] = None
     is_active: Optional[bool] = None
+    is_paywalled: Optional[bool] = None
+    page_source: Optional[str] = None
     site_id: Optional[int] = None
 
 

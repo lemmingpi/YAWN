@@ -167,10 +167,10 @@ async def delete_auto_notes_batch(
     current_user: User = Depends(get_current_active_user),
 ) -> BatchDeleteResponse:
     """
-    Delete all notes from an auto-generation batch.
+    Archive all notes from an auto-generation batch.
 
     Useful when generated notes are not satisfactory.
-    Marks notes as inactive rather than hard-deleting them.
+    Marks notes as archived rather than hard-deleting them.
 
     Args:
         generation_batch_id: Batch ID to delete

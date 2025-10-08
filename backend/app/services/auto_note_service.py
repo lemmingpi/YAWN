@@ -187,8 +187,17 @@ class AutoNoteService:
         if not page:
             raise ValueError(f"Page with ID {page_id} not found")
 
+        # Validate that page is not paywalled (cannot generate notes if we can't read the page)
+        if page.is_paywalled:
+            raise ValueError(
+                "Cannot generate auto-notes for paywalled pages. "
+                "The LLM cannot accurately position notes without access to the original page content. "
+                "You can still use the preview feature to see what would be generated."
+            )
+
         logger.info(
-            f"Found page: title='{page.title}', url='{page.url}', site_id={page.site_id}"
+            f"Found page: title='{page.title}', url='{page.url}', "
+            f"site_id={page.site_id}, is_paywalled={page.is_paywalled}"
         )
 
         # Build prompt
@@ -341,20 +350,20 @@ class AutoNoteService:
 
     async def delete_batch(self, generation_batch_id: str, user_id: int) -> int:
         """
-        Delete all notes with a given generation_batch_id.
+        Archive all notes with a given generation_batch_id.
 
         Args:
-            generation_batch_id: Batch ID to delete
+            generation_batch_id: Batch ID to archive
             user_id: User ID for authorization
 
         Returns:
-            Number of notes deleted
+            Number of notes archived
 
         Raises:
             ValueError: If batch not found or user doesn't own the notes
         """
         logger.info(
-            f"Deleting notes with generation_batch_id={generation_batch_id} "
+            f"Archiving notes with generation_batch_id={generation_batch_id} "
             f"for user_id={user_id}"
         )
 
@@ -363,20 +372,21 @@ class AutoNoteService:
             select(Note)
             .where(Note.generation_batch_id == generation_batch_id)
             .where(Note.user_id == user_id)
+            .where(Note.is_archived == False)  # noqa: E712
         )
-        notes_to_delete = list(result.scalars().all())
+        notes_to_archive = list(result.scalars().all())
 
-        if not notes_to_delete:
+        if not notes_to_archive:
             raise ValueError(
-                f"No notes found with batch ID {generation_batch_id} for this user"
+                f"No active notes found with batch ID {generation_batch_id} for this user"
             )
 
-        # Mark as inactive rather than hard delete
-        for note in notes_to_delete:
-            note.is_active = False
+        # Archive the notes (soft delete)
+        for note in notes_to_archive:
+            note.is_archived = True
 
         await self.db.commit()
 
-        logger.info(f"Deleted {len(notes_to_delete)} notes")
+        logger.info(f"Archived {len(notes_to_archive)} notes")
 
-        return len(notes_to_delete)
+        return len(notes_to_archive)
