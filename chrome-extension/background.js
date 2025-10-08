@@ -53,11 +53,12 @@ async function createContextMenu() {
         contexts: ["page"],
       });
 
-      // Register page menu item
+      // Register page menu item (hidden by default, shown when user is authenticated)
       chrome.contextMenus.create({
         id: "register-page",
         title: "📋 Register Page (without notes)",
         contexts: ["page"],
+        visible: false, // Hidden by default, shown when user is authenticated
       });
     }, "Creating context menu");
 
@@ -68,22 +69,36 @@ async function createContextMenu() {
 }
 
 /**
- * Update context menu visibility based on sharing capability
- * @param {boolean} canShare - Whether sharing is available
+ * Update context menu visibility based on authentication
+ * @param {boolean} isAuthenticated - Whether user is authenticated
  */
-async function updateSharingContextMenu(canShare) {
+async function updateAuthenticatedContextMenus(isAuthenticated) {
   try {
     await safeApiCall(() => {
+      // Update sharing submenu visibility
       chrome.contextMenus.update("share-submenu", {
-        visible: canShare,
+        visible: isAuthenticated,
       });
-    }, "Updating sharing context menu");
 
-    console.log(`[Web Notes Extension] Sharing context menu ${canShare ? "enabled" : "disabled"}`);
+      // Update register page menu visibility
+      chrome.contextMenus.update("register-page", {
+        visible: isAuthenticated,
+      });
+    }, "Updating authenticated context menus");
+
+    console.log(`[Web Notes Extension] Authenticated context menus ${isAuthenticated ? "enabled" : "disabled"}`);
   } catch (error) {
     // Silently fail if context menu doesn't exist yet
     console.debug("Context menu update failed (expected during initialization):", error);
   }
+}
+
+/**
+ * Legacy function name for backward compatibility
+ * @param {boolean} canShare - Whether sharing is available
+ */
+async function updateSharingContextMenu(canShare) {
+  await updateAuthenticatedContextMenus(canShare);
 }
 
 /**
