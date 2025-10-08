@@ -960,7 +960,16 @@ async def get_artifact_types(db: AsyncSession = Depends(get_db)) -> List[str]:
     artifact_types = result.scalars().all()
 
     # Include common types even if no artifacts exist yet
-    common_types = ["summary", "expansion", "analysis", "questions", "action_items"]
+    common_types = [
+        "summary",
+        "expansion",
+        "analysis",
+        "questions",
+        "action_items",
+        "scene_illustration",
+        "data_chart",
+        "scientific_visualization",
+    ]
     all_types = list(set(artifact_types + common_types))
     all_types.sort()
 

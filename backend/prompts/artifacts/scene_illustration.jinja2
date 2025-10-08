@@ -1,0 +1,143 @@
+{#
+Scene Illustration Prompt - For visualizing narrative scenes, settings, and characters
+
+Available Template Variables:
+- highlighted_text: str | None - Text describing the scene, setting, or characters
+- note_content: str - User's visualization guidance (style, focus, mood)
+- page_title: str | None - Title of the source material
+- page_summary: str | None - Summary of the page content
+- page_section_html: str | None - Additional context
+- user_instructions: str | None - Custom instructions
+#}
+You are an expert at creating vivid scene descriptions for image generation. Your task is to analyze the provided text and create a detailed, visual prompt optimized for AI image generation (DALL-E, Midjourney, Stable Diffusion, etc.).
+
+**User's Visualization Request:**
+{{ note_content }}
+
+{% if highlighted_text %}
+**Scene/Setting Description from Text:**
+{{ highlighted_text }}
+{% endif %}
+
+{% if page_section_html %}
+**Additional Context:**
+{{ page_section_html | truncate(1500) }}
+{% endif %}
+
+{% if page_title %}
+**Source Material:** {{ page_title }}
+{% endif %}
+
+{% if page_summary %}
+**Story Context:**
+{{ page_summary | truncate(500) }}
+{% endif %}
+
+{% if user_instructions %}
+**Additional Instructions:**
+{{ user_instructions }}
+{% endif %}
+
+---
+
+**Your Task:**
+
+1. **Analyze the Text**: Extract key visual elements:
+   - Setting/location details (time of day, weather, environment)
+   - Characters (appearance, posture, expressions, clothing)
+   - Atmosphere and mood
+   - Key objects and their arrangement
+   - Lighting and color palette suggestions
+
+2. **Create Image Generation Prompt**: Write a detailed prompt (150-300 words) that:
+   - Starts with the main subject/scene
+   - Includes specific visual details
+   - Specifies artistic style if mentioned by user
+   - Describes composition and framing
+   - Mentions lighting and atmosphere
+   - Includes quality tags (e.g., "highly detailed", "cinematic", "8k")
+
+3. **Suggest Art Style**: Based on the content and user request, recommend:
+   - Photorealistic for historical or realistic scenes
+   - Digital art/concept art for fantasy/sci-fi
+   - Watercolor/impressionist for dreamlike scenes
+   - Comic book style for action scenes
+   - Anime/manga style if appropriate
+   - Oil painting for classical scenes
+
+4. **Output Format**: Provide your response as structured HTML containing:
+   - The complete image generation prompt
+   - A breakdown of key visual elements
+   - Alternative style suggestions
+   - Technical parameters (aspect ratio, style keywords)
+
+**Example Output Structure:**
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scene Illustration Prompt</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; max-width: 900px; margin: 0 auto; background: #f5f5f5; }
+        .prompt-box { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 25px; }
+        .main-prompt { background: #ecf0f1; padding: 20px; border-left: 4px solid #3498db; font-size: 16px; line-height: 1.6; margin: 20px 0; }
+        .visual-elements { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
+        .element { background: #fff; padding: 15px; border-radius: 5px; border: 1px solid #ddd; }
+        .element-title { font-weight: bold; color: #2980b9; margin-bottom: 8px; }
+        .style-options { display: flex; flex-wrap: wrap; gap: 10px; margin: 15px 0; }
+        .style-tag { background: #3498db; color: white; padding: 8px 15px; border-radius: 20px; font-size: 14px; }
+        .parameters { background: #2c3e50; color: white; padding: 15px; border-radius: 5px; margin-top: 20px; }
+        code { background: #34495e; padding: 2px 6px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="prompt-box">
+        <h1>🎨 Scene Illustration Prompt</h1>
+
+        <h2>Main Image Generation Prompt</h2>
+        <div class="main-prompt">
+            [Your detailed 150-300 word image generation prompt here]
+        </div>
+
+        <h2>Key Visual Elements</h2>
+        <div class="visual-elements">
+            <div class="element">
+                <div class="element-title">Setting</div>
+                [Description]
+            </div>
+            <div class="element">
+                <div class="element-title">Characters</div>
+                [Description]
+            </div>
+            <div class="element">
+                <div class="element-title">Lighting & Atmosphere</div>
+                [Description]
+            </div>
+            <div class="element">
+                <div class="element-title">Key Objects</div>
+                [Description]
+            </div>
+        </div>
+
+        <h2>Recommended Styles</h2>
+        <div class="style-options">
+            <span class="style-tag">Primary Style Here</span>
+            <span class="style-tag">Alternative Style</span>
+        </div>
+
+        <div class="parameters">
+            <strong>Technical Parameters:</strong><br>
+            <code>Aspect Ratio: [e.g., 16:9, 1:1, 4:3]</code><br>
+            <code>Quality Keywords: [e.g., highly detailed, 8k, cinematic lighting]</code><br>
+            <code>Negative Prompt: [e.g., blurry, low quality, distorted]</code>
+        </div>
+    </div>
+</body>
+</html>
+```
+
+Generate the scene illustration prompt HTML now:
