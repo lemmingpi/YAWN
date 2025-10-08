@@ -72,19 +72,47 @@ class GeminiProvider:
             },
         )
 
+    async def generate_content_large(
+        self,
+        prompt: str,
+        max_output_tokens: int = 8192,
+        temperature: float = 0.75,
+    ) -> Dict[str, Any]:
+        """
+        Generate content using Gemini API with larger token limit.
+
+        Args:
+            prompt: Input prompt for generation
+            max_output_tokens: (default 8192) Maximum tokens to generate
+            temperature: (default 0.75) Sampling temperature (0.0-1.0)
+
+        Returns:
+            Dictionary with:
+                - content: Generated text
+                - input_tokens: Number of input tokens
+                - output_tokens: Number of output tokens
+                - cost: Cost in USD
+                - model: Model used
+
+        Raises:
+            RateLimitError: When rate limit is exceeded after retries
+            GeminiProviderError: For other API errors
+        """
+        return await self.generate_content(prompt, max_output_tokens, temperature)
+
     async def generate_content(
         self,
         prompt: str,
         max_output_tokens: int = 4096,
-        temperature: float = 0.7,
+        temperature: float = 0.75,
     ) -> Dict[str, Any]:
         """
         Generate content using Gemini API with automatic retry.
 
         Args:
             prompt: Input prompt for generation
-            max_output_tokens: Maximum tokens to generate
-            temperature: Sampling temperature (0.0-1.0)
+            max_output_tokens: (default 4096) Maximum tokens to generate
+            temperature: (default 0.75) Sampling temperature (0.0-1.0)
 
         Returns:
             Dictionary with:
@@ -140,6 +168,14 @@ class GeminiProvider:
                     output_tokens=output_tokens,
                 )
 
+                # Check if we hit the token limit
+                token_limit_reached = output_tokens >= max_output_tokens * 0.95
+                if token_limit_reached:
+                    logger.warning(
+                        f"Output tokens ({output_tokens}) near or at limit ({max_output_tokens}). "
+                        f"Response may be truncated. Consider increasing max_output_tokens."
+                    )
+
                 logger.info(
                     f"Generated content: {input_tokens} input tokens, "
                     f"{output_tokens} output tokens, ${cost:.6f} cost"
@@ -151,6 +187,7 @@ class GeminiProvider:
                     "output_tokens": output_tokens,
                     "cost": float(cost),
                     "model": self.model_name,
+                    "token_limit_reached": token_limit_reached,
                 }
 
             except google_exceptions.ResourceExhausted as e:

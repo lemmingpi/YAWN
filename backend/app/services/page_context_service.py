@@ -182,17 +182,20 @@ class PageContextService:
         provider = await create_gemini_provider()
         logger.info("Calling Gemini API for context generation")
 
-        generation_result = await provider.generate_content(
-            prompt=prompt,
-            max_output_tokens=2048,  # Context should be concise
-            temperature=0.5,  # Lower temp for more consistent structure
-        )
+        generation_result = await provider.generate_content_large(prompt=prompt)
 
         logger.info(
             f"Generation complete: {generation_result['input_tokens']} input tokens, "
             f"{generation_result['output_tokens']} output tokens, "
             f"${generation_result['cost']:.6f} cost"
         )
+
+        if generation_result.get("token_limit_reached"):
+            logger.warning(
+                f"⚠️  Token limit reached! Response may be incomplete. "
+                f"Output: {generation_result['output_tokens']} tokens. "
+                f"Consider increasing max_output_tokens in generate_content() call."
+            )
 
         # Extract generated context
         generated_context = generation_result["content"]

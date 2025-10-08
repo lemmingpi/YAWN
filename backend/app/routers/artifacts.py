@@ -425,11 +425,7 @@ async def generate_note_artifact(
         print("\n[STEP 5] Calling Gemini API for content generation...")
         print("[DATA] Generation params: max_output_tokens=4096, temperature=0.7")
 
-        generation_result = await provider.generate_content(
-            prompt=prompt,
-            max_output_tokens=4096,
-            temperature=0.7,
-        )
+        generation_result = await provider.generate_content(prompt=prompt)
 
         print("[DATA] Generation completed successfully")
         print(f"[DATA] Model used: {generation_result.get('model')}")
