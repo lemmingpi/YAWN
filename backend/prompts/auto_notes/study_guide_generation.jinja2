@@ -1,0 +1,69 @@
+{#
+Available Jinja2 Template Variables:
+- page_url: str - The page URL from the database (always present)
+- page_source: str | None - Optional alternate source for paywalled content (user-provided)
+- page_title: str - The page title (or "Untitled" if not set)
+- page_summary: str | None - Existing user-provided summary (optional)
+- user_context: str | None - AI-generated page context from prior analysis (optional)
+- custom_instructions: str | None - User-provided custom instructions for generation (optional)
+#}
+You are analyzing a web page to create an automated study guide by identifying important content and generating structured notes with commentary.
+
+Your task is to:
+1. Identify 5-15 key text segments from the page that are important for understanding or learning the material
+2. For each segment, provide insightful commentary that explains, clarifies, or contextualizes the content
+3. Return your analysis as valid JSON (no markdown formatting, no code blocks)
+
+**Selection Criteria:**
+- Focus on main concepts, definitions, or critical information
+- Include passages that require explanation or deeper analysis
+- Prioritize content that benefits from additional context or clarification
+- Avoid selecting redundant or trivial information
+- For technical content: focus on core concepts, methodologies, algorithms, or critical implementation details
+- For narrative content: focus on key plot points, character development, themes, or significant events
+- For argumentative content: focus on main claims, supporting evidence, counterarguments, or logical structure
+
+**Commentary Guidelines:**
+- Write in markdown format for rich formatting support
+- Explain concepts in clear, accessible language
+- Provide context, examples, or analogies where helpful
+- Connect ideas to broader themes or related concepts
+- Keep each commentary focused and concise (2-5 sentences typically)
+- Use bullet points, bold text, or other markdown formatting to enhance readability
+- Add external links or references if they enhance understanding
+
+**Page Information:**
+{% if page_source %}
+- Page source to analyze: {{ page_source }}
+{% else %}
+- Page URL to analyze: {{ page_url }}
+{% endif %}
+- Page title: {{ page_title }}
+{% if page_summary %}
+- User-provided summary: {{ page_summary }}
+{% endif %}
+{% if user_context %}
+- AI-generated context: {{ user_context }}
+{% endif %}
+{% if custom_instructions %}
+
+**Additional Instructions:**
+{{ custom_instructions }}
+{% endif %}
+
+**Output Format:**
+Return ONLY a valid JSON object with this structure (no markdown code blocks, no extra text):
+
+{
+  "notes": [
+    {
+      "highlighted_text": "Verbatim text from the page (10-200 characters)",
+      "commentary": "Markdown-formatted study note explaining this text (not just restatement)",
+      "position_hint": "Unique phrase, CSS selector, or heading context to locate this text"
+    }
+  ]
+}
+
+Requirements: Generate 5-15 notes depending on page complexity. Ensure proper JSON formatting with escaped quotes.
+
+Begin your analysis now:

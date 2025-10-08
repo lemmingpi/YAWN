@@ -190,6 +190,11 @@ class Note(Base, TimestampMixin):
     highlighted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     page_section_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Auto-generation tracking for batch operations
+    generation_batch_id: Mapped[Optional[str]] = mapped_column(
+        String(100), index=True, nullable=True
+    )
+
     # Foreign Keys
     page_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("pages.id", ondelete="CASCADE"), nullable=False, index=True
