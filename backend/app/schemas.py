@@ -851,3 +851,82 @@ class UserPageShareResponse(UserPageShareBase, TimestampSchema):
 
     class Config:
         from_attributes = True
+
+
+# Auto Note Generation schemas
+class AutoNoteGenerationRequest(BaseModel):
+    """Schema for requesting auto note generation."""
+
+    llm_provider_id: int = Field(1, description="LLM provider ID to use")
+    template_type: str = Field(
+        "study_guide",
+        description="Type of template: 'study_guide' or 'content_review'",
+    )
+    custom_instructions: Optional[str] = Field(
+        None, description="Optional custom instructions for generation"
+    )
+    page_source: Optional[str] = Field(
+        None, description="Optional alternate page source for paywalled content"
+    )
+
+
+class GeneratedNoteData(BaseModel):
+    """Schema for a single generated note."""
+
+    id: int = Field(..., description="Note ID")
+    content: str = Field(..., description="Note commentary/content")
+    highlighted_text: Optional[str] = Field(
+        None, description="Highlighted text from page"
+    )
+    position_x: Optional[int] = Field(None, description="X position on page")
+    position_y: Optional[int] = Field(None, description="Y position on page")
+
+
+class AutoNoteGenerationResponse(BaseModel):
+    """Schema for auto note generation response."""
+
+    notes: List[GeneratedNoteData] = Field(..., description="List of generated notes")
+    generation_batch_id: Optional[str] = Field(
+        None, description="Batch ID for bulk operations"
+    )
+    tokens_used: int = Field(..., description="Total tokens consumed")
+    cost_usd: float = Field(..., description="Generation cost in USD")
+    generation_time_ms: int = Field(..., description="Generation time in milliseconds")
+    input_tokens: int = Field(..., description="Input token count")
+    output_tokens: int = Field(..., description="Output token count")
+
+
+class AutoNotePreviewRequest(BaseModel):
+    """Schema for previewing auto note generation prompt."""
+
+    template_type: str = Field(
+        "study_guide",
+        description="Type of template: 'study_guide' or 'content_review'",
+    )
+    custom_instructions: Optional[str] = Field(
+        None, description="Optional custom instructions for generation"
+    )
+    page_source: Optional[str] = Field(
+        None, description="Optional alternate page source for paywalled content"
+    )
+
+
+class AutoNotePreviewResponse(BaseModel):
+    """Schema for auto note prompt preview response."""
+
+    prompt: str = Field(..., description="The full prompt that would be sent to LLM")
+    prompt_length: int = Field(..., description="Length of prompt in characters")
+    estimated_tokens: int = Field(..., description="Estimated token count")
+
+
+class BatchDeleteRequest(BaseModel):
+    """Schema for batch deleting auto-generated notes."""
+
+    generation_batch_id: str = Field(..., description="Batch ID of notes to delete")
+
+
+class BatchDeleteResponse(BaseModel):
+    """Schema for batch delete response."""
+
+    deleted_count: int = Field(..., description="Number of notes deleted")
+    generation_batch_id: str = Field(..., description="Batch ID that was deleted")

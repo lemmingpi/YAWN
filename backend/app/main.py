@@ -28,6 +28,7 @@ from .middleware import (  # noqa: E402
 )
 from .routers import (  # noqa: E402
     artifacts,
+    auto_notes,
     llm_providers,
     notes,
     pages,
@@ -125,6 +126,7 @@ app.include_router(sites.router)
 app.include_router(pages.router)
 app.include_router(notes.router)
 app.include_router(artifacts.router)
+app.include_router(auto_notes.router)
 app.include_router(llm_providers.router)
 app.include_router(sharing.router)
 
