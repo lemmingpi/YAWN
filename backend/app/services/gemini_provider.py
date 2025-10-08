@@ -265,6 +265,128 @@ class GeminiProvider:
             output_tokens=output_tokens,
         )
 
+    async def generate_image(
+        self,
+        prompt: str,
+        aspect_ratio: str = "1:1",
+    ) -> Dict[str, Any]:
+        """
+        Generate an image using Gemini 2.5 Flash Image.
+
+        Args:
+            prompt: Text description of the desired image
+            aspect_ratio: Aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4, etc.)
+
+        Returns:
+            Dictionary with:
+                - image_data: Base64 encoded image data
+                - mime_type: Image MIME type (e.g., 'image/png')
+                - input_tokens: Number of input tokens
+                - output_tokens: Number of output tokens (1290 per image)
+                - cost: Cost in USD
+                - model: Model used
+
+        Raises:
+            RateLimitError: When rate limit is exceeded
+            GeminiProviderError: For other API errors
+        """
+        import base64
+
+        # Use Gemini 2.5 Flash Image model
+        image_model = genai.GenerativeModel("gemini-2.5-flash-image")
+
+        generation_config = genai.GenerationConfig(
+            response_modalities=["image"],
+        )
+
+        for attempt in range(self.max_retries):
+            try:
+                # Generate image
+                if sys.version_info >= (3, 9):
+                    response = await asyncio.to_thread(
+                        image_model.generate_content,
+                        prompt,
+                        generation_config=generation_config,
+                    )
+                else:
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: image_model.generate_content(
+                            prompt, generation_config=generation_config
+                        ),
+                    )
+
+                # Extract image data
+                if not response.candidates:
+                    raise GeminiProviderError("No candidates returned from API")
+
+                # Get the first part which should contain the image
+                part = response.candidates[0].content.parts[0]
+
+                if not hasattr(part, "inline_data"):
+                    raise GeminiProviderError("No image data in response")
+
+                image_data = part.inline_data
+                mime_type = image_data.mime_type
+                image_bytes = image_data.data
+
+                # Convert to base64 for storage
+                image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+                # Extract token usage
+                usage_metadata = response.usage_metadata
+                input_tokens = usage_metadata.prompt_token_count
+                output_tokens = usage_metadata.candidates_token_count
+
+                # Calculate cost (images are 1290 output tokens)
+                cost = calculate_cost(
+                    model="gemini-2.5-flash-image",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
+
+                logger.info(
+                    f"Generated image: {input_tokens} input tokens, "
+                    f"{output_tokens} output tokens, ${cost:.6f} cost"
+                )
+
+                return {
+                    "image_data": image_base64,
+                    "mime_type": mime_type,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cost": float(cost),
+                    "model": "gemini-2.5-flash-image",
+                }
+
+            except google_exceptions.ResourceExhausted as e:
+                # Rate limit exceeded
+                if attempt < self.max_retries - 1:
+                    delay = self.retry_delay * (2**attempt)
+                    logger.warning(
+                        f"Rate limit exceeded, retrying in {delay}s "
+                        f"(attempt {attempt + 1}/{self.max_retries})"
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    raise RateLimitError(
+                        f"Rate limit exceeded after {self.max_retries} attempts"
+                    ) from e
+
+            except google_exceptions.GoogleAPIError as e:
+                # Other Google API errors
+                logger.error(f"Google API error: {e}")
+                raise GeminiProviderError(f"API error: {str(e)}") from e
+
+            except Exception as e:
+                # Unexpected errors
+                logger.error(f"Unexpected error generating image: {e}")
+                raise GeminiProviderError(f"Unexpected error: {str(e)}") from e
+
+        # Should not reach here
+        raise GeminiProviderError("Failed to generate image after all retries")
+
 
 async def create_gemini_provider(
     api_key: Optional[str] = None,

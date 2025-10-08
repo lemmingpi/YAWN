@@ -422,10 +422,27 @@ async def generate_note_artifact(
         provider = await create_gemini_provider()
         print("[DATA] Gemini provider created successfully")
 
-        print("\n[STEP 5] Calling Gemini API for content generation...")
-        print("[DATA] Generation params: max_output_tokens=4096, temperature=0.7")
+        # Check if this is an image generation request
+        is_image_generation = artifact_type_enum == ArtifactType.SCENE_ILLUSTRATION
 
-        generation_result = await provider.generate_content(prompt=prompt)
+        if is_image_generation:
+            print("\n[STEP 5] Calling Gemini API for IMAGE generation...")
+            print("[DATA] Using Gemini 2.5 Flash Image model")
+
+            generation_result = await provider.generate_image(
+                prompt=prompt,
+                aspect_ratio="1:1",
+            )
+
+            # Store image as base64 data URL
+            image_data_url = f"data:{generation_result['mime_type']};base64,{generation_result['image_data']}"
+            generation_result["content"] = image_data_url
+
+        else:
+            print("\n[STEP 5] Calling Gemini API for content generation...")
+            print("[DATA] Generation params: max_output_tokens=4096, temperature=0.7")
+
+            generation_result = await provider.generate_content(prompt=prompt)
 
         print("[DATA] Generation completed successfully")
         print(f"[DATA] Model used: {generation_result.get('model')}")

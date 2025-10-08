@@ -313,7 +313,8 @@
 }
 
 .artifact-content:has(iframe.artifact-html-iframe),
-.artifact-content:has(.artifact-svg-container) {
+.artifact-content:has(.artifact-svg-container),
+.artifact-content:has(.artifact-image-container) {
     background-color: transparent;
     padding: 0;
     max-height: none;
@@ -323,6 +324,14 @@
 .artifact-svg-container svg {
     max-width: 100%;
     height: auto;
+}
+
+.artifact-image-container img {
+    cursor: zoom-in;
+}
+
+.artifact-image-container img:active {
+    cursor: zoom-out;
 }
 
 /* Markdown styling for artifact content */
@@ -647,8 +656,28 @@ class NoteDetailManager {
     }
 
     renderArtifactContent(artifact) {
+        // Check if content is a base64 data URL (image)
+        const isDataUrl = artifact.content.trim().startsWith('data:image/');
+
+        if (isDataUrl) {
+            // Display as image
+            return `
+                <div class="artifact-image-container" style="text-align: center; padding: 20px; background: white; border-radius: 6px;">
+                    <img
+                        src="${artifact.content}"
+                        alt="${this.escapeHtml(artifact.artifact_type)} image"
+                        style="max-width: 100%; height: auto; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
+                        loading="lazy"
+                    />
+                    <div class="mt-2 text-muted small">
+                        <i class="bi bi-image me-1"></i>Generated with Gemini 2.5 Flash Image
+                    </div>
+                </div>
+            `;
+        }
+
         // Check if this is a visualization type that contains HTML
-        const visualizationTypes = ['scene_illustration', 'data_chart', 'scientific_visualization'];
+        const visualizationTypes = ['data_chart', 'scientific_visualization'];
         const isVisualization = visualizationTypes.includes(artifact.artifact_type);
 
         // Check if content looks like HTML (contains DOCTYPE or opening html tag)

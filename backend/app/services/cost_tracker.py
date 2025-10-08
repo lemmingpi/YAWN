@@ -9,6 +9,7 @@ class LLMModel(str, Enum):
     """Supported LLM models with their identifiers."""
 
     GEMINI_2_FLASH = "gemini-2.0-flash"
+    GEMINI_2_5_FLASH_IMAGE = "gemini-2.5-flash-image"
     CLAUDE_3_5_SONNET = "claude-3.5-sonnet"
     GPT_4_TURBO = "gpt-4-turbo"
     GPT_4O = "gpt-4o"
@@ -21,6 +22,11 @@ MODEL_PRICING: Dict[str, Dict[str, Decimal]] = {
         "input_per_m": Decimal("0.075"),  # $0.075 per 1M input tokens
         "output_per_m": Decimal("0.30"),  # $0.30 per 1M output tokens
         "context_cache_per_m": Decimal("0.01875"),  # 75% discount on cached
+    },
+    LLMModel.GEMINI_2_5_FLASH_IMAGE: {
+        "input_per_m": Decimal("0.075"),  # $0.075 per 1M input tokens
+        "output_per_m": Decimal("30.00"),  # $30.00 per 1M output tokens (images)
+        # Each image = 1290 output tokens = ~$0.039 per image
     },
     LLMModel.CLAUDE_3_5_SONNET: {
         "input_per_m": Decimal("3.00"),  # $3.00 per 1M input tokens
