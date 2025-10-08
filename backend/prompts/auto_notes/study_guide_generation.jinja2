@@ -59,10 +59,31 @@ Return ONLY a valid JSON object with this structure (no markdown code blocks, no
     {
       "highlighted_text": "Verbatim text from the page (10-200 characters)",
       "commentary": "Markdown-formatted study note explaining this text (not just restatement)",
-      "position_hint": "Unique phrase, CSS selector, or heading context to locate this text"
+      "css_selector": "CSS selector to uniquely locate this text",
+      "xpath": "XPath expression to uniquely locate this text"
     }
   ]
 }
+
+**Positioning Requirements:**
+Your selectors MUST be specific enough to uniquely identify the text location in the DOM.
+
+GOOD CSS Examples:
+- "article.main-content > p:nth-of-type(3)"
+- "#introduction + p.highlight"
+- "div.container > section[data-id='intro'] > p:first-child"
+- "h2#overview ~ p.summary"
+
+GOOD XPath Examples:
+- "//article[@class='main-content']/p[3]"
+- "//div[@id='introduction']/following-sibling::p[1]"
+- "//p[contains(@class, 'highlight') and contains(text(), 'key phrase')]"
+- "//section[@data-id='intro']/p[1]"
+
+AVOID:
+- Generic tags alone: "p", "div" ❌
+- Vague descriptions: "first paragraph", "main section" ❌
+- Non-unique selectors that match multiple elements ❌
 
 Requirements: Generate 5-15 notes depending on page complexity. Ensure proper JSON formatting with escaped quotes.
 

@@ -18,6 +18,65 @@ from .gemini_provider import create_gemini_provider
 logger = logging.getLogger(__name__)
 
 
+def detect_selector_type(position_string: str) -> tuple[str | None, str | None]:
+    """
+    Auto-detect whether a position string is a CSS selector or XPath.
+
+    Args:
+        position_string: The position string from LLM (could be CSS, XPath, or text)
+
+    Returns:
+        Tuple of (css_selector, xpath) where one will be the string and the other None
+    """
+    if not position_string or not isinstance(position_string, str):
+        return (None, None)
+
+    position_string = position_string.strip()
+
+    # XPath indicators
+    xpath_indicators = [
+        position_string.startswith("/"),  # Absolute XPath
+        position_string.startswith("//"),  # Relative XPath
+        position_string.startswith("("),  # XPath expression
+        "//" in position_string and "[" in position_string,  # Contains XPath syntax
+        "ancestor::" in position_string,  # XPath axis
+        "descendant::" in position_string,
+        "following::" in position_string,
+        "preceding::" in position_string,
+    ]
+
+    if any(xpath_indicators):
+        return (None, position_string)
+
+    # CSS selector indicators (if it has CSS-specific syntax)
+    css_indicators = [
+        ">" in position_string,  # Direct child combinator
+        "+" in position_string,  # Adjacent sibling
+        "~" in position_string,  # General sibling
+        ":nth-child" in position_string,
+        ":first-child" in position_string,
+        ":last-child" in position_string,
+        "::before" in position_string,
+        "::after" in position_string,
+        position_string.startswith("#"),  # ID selector
+        position_string.startswith("."),  # Class selector
+        "[" in position_string and "]" in position_string,  # Attribute selector
+    ]
+
+    if any(css_indicators):
+        return (position_string, None)
+
+    # If it looks like a simple tag or class/id combo, treat as CSS
+    if (
+        position_string.replace(".", "").replace("#", "").replace(" ", "").isalnum()
+        or " " in position_string
+    ):
+        return (position_string, None)
+
+    # Default to None for ambiguous cases (plain text descriptions)
+    return (None, None)
+
+
 class AutoNoteService:
     """
     Service for generating LLM-powered study notes from page content.
@@ -267,19 +326,42 @@ class AutoNoteService:
         # Create Note records
         created_notes = []
         for idx, note_data in enumerate(notes_data):
+            # Extract selectors from LLM response
+            # New format: css_selector and xpath fields directly provided
+            css_selector = note_data.get("css_selector")
+            xpath = note_data.get("xpath")
+
+            # Fallback to old format for backward compatibility
+            if not css_selector and not xpath:
+                position = note_data.get("position") or note_data.get("position_hint")
+                if position:
+                    css_selector, xpath = detect_selector_type(position)
+
+            # Build anchor_data with selectors
+            anchor_data = {
+                "auto_generated": True,
+            }
+
+            if css_selector:
+                anchor_data["elementSelector"] = css_selector
+            if xpath:
+                anchor_data["elementXPath"] = xpath
+
+            # Create unique server_link_id using batch ID + index
+            # This prevents duplicates during sync while allowing extension display
+            server_link_id = f"{generation_batch_id}_{idx}"
+
             note = Note(
                 content=note_data.get("commentary", ""),
                 highlighted_text=note_data.get("highlighted_text"),
                 page_section_html=None,  # We don't have section HTML from LLM
                 position_x=100 + (idx * 20),  # Stagger notes slightly
                 position_y=100 + (idx * 20),
-                anchor_data={
-                    "position_hint": note_data.get("position_hint"),
-                    "auto_generated": True,
-                },
+                anchor_data=anchor_data,
                 page_id=page_id,
                 user_id=user_id,
                 generation_batch_id=generation_batch_id,
+                server_link_id=server_link_id,
                 is_active=True,
             )
             self.db.add(note)
