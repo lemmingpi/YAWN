@@ -303,13 +303,26 @@
 }
 
 .artifact-content {
-    max-height: 400px;
+    max-height: 800px;
     overflow-y: auto;
     background-color: #f8f9fa;
     border-radius: 6px;
     padding: 12px;
     font-size: 0.875rem;
     line-height: 1.6;
+}
+
+.artifact-content:has(iframe.artifact-html-iframe),
+.artifact-content:has(.artifact-svg-container) {
+    background-color: transparent;
+    padding: 0;
+    max-height: none;
+    overflow: visible;
+}
+
+.artifact-svg-container svg {
+    max-width: 100%;
+    height: auto;
 }
 
 /* Markdown styling for artifact content */
@@ -616,7 +629,7 @@ class NoteDetailManager {
                         </div>
                     </div>
                     <div class="artifact-content">
-                        ${this.renderMarkdown(artifact.content)}
+                        ${this.renderArtifactContent(artifact)}
                     </div>
                     ${artifact.prompt_used ? `
                         <details class="mt-2">
@@ -631,6 +644,42 @@ class NoteDetailManager {
                 </div>
             </div>
         `).join('');
+    }
+
+    renderArtifactContent(artifact) {
+        // Check if this is a visualization type that contains HTML
+        const visualizationTypes = ['scene_illustration', 'data_chart', 'scientific_visualization'];
+        const isVisualization = visualizationTypes.includes(artifact.artifact_type);
+
+        // Check if content looks like HTML (contains DOCTYPE or opening html tag)
+        const looksLikeHtml = artifact.content.trim().toLowerCase().startsWith('<!doctype') ||
+                              artifact.content.trim().toLowerCase().startsWith('<html');
+
+        if (isVisualization && looksLikeHtml) {
+            // Render HTML content in an iframe for isolation and proper rendering
+            const iframeId = `artifact-iframe-${artifact.id}`;
+            // Use srcdoc to embed the HTML directly
+            return `
+                <iframe
+                    id="${iframeId}"
+                    class="artifact-html-iframe"
+                    srcdoc="${this.escapeHtml(artifact.content)}"
+                    sandbox="allow-scripts allow-same-origin"
+                    style="width: 100%; min-height: 600px; border: 1px solid #dee2e6; border-radius: 6px; background: white;"
+                    onload="this.style.height=(this.contentWindow.document.documentElement.scrollHeight + 20)+'px'">
+                </iframe>
+            `;
+        } else if (artifact.content.includes('<svg')) {
+            // Handle standalone SVG content (not wrapped in HTML)
+            return `
+                <div class="artifact-svg-container" style="text-align: center; padding: 20px; background: white; border-radius: 6px;">
+                    ${artifact.content}
+                </div>
+            `;
+        } else {
+            // Regular markdown content
+            return this.renderMarkdown(artifact.content);
+        }
     }
 
     async loadLLMProviders() {
