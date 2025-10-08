@@ -354,6 +354,9 @@ async def create_note(
 async def get_notes_by_url(
     url: str = Query(..., description="URL of the page to get notes for"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    is_archived: Optional[bool] = Query(
+        False, description="Include archived notes (default: exclude archived)"
+    ),
     search: Optional[str] = Query(None, description="Search in note content"),
     server_link_id: Optional[str] = Query(None, description="Filter by server link ID"),
     db: AsyncSession = Depends(get_db),
@@ -364,12 +367,13 @@ async def get_notes_by_url(
     Args:
         url: The page URL to get notes for
         is_active: Filter by active status
+        is_archived: Include archived notes (default: False excludes archived)
         search: Search term for note content
         server_link_id: Filter by server link ID
         db: Database session
 
     Returns:
-        List of notes for the specified URL
+        List of notes for the specified URL (excludes archived notes by default)
     """
     # Normalize the URL for consistent storage
     # Remove fragment and normalize trailing slashes
@@ -393,6 +397,10 @@ async def get_notes_by_url(
     # Apply filters
     if is_active is not None:
         query = query.where(Note.is_active.is_(is_active))
+
+    # Exclude archived notes by default
+    if is_archived is not None:
+        query = query.where(Note.is_archived == is_archived)
 
     if server_link_id:
         query = query.where(Note.server_link_id == server_link_id)
@@ -431,6 +439,9 @@ async def get_notes(
     ),
     page_id: Optional[int] = Query(None, description="Filter by page ID"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    is_archived: Optional[bool] = Query(
+        False, description="Include archived notes (default: exclude archived)"
+    ),
     search: Optional[str] = Query(None, description="Search in note content"),
     server_link_id: Optional[str] = Query(None, description="Filter by server link ID"),
     db: AsyncSession = Depends(get_db),
@@ -443,12 +454,13 @@ async def get_notes(
         limit: Maximum number of notes to return
         page_id: Filter by page ID
         is_active: Filter by active status
+        is_archived: Include archived notes (default: False excludes archived)
         search: Search term for note content
         server_link_id: Filter by server link ID
         db: Database session
 
     Returns:
-        List of notes with artifact counts
+        List of notes with artifact counts (excludes archived notes by default)
     """
     # Build base query with user access control
     query = await get_user_accessible_notes_query(db, current_user)
@@ -459,6 +471,10 @@ async def get_notes(
 
     if is_active is not None:
         query = query.where(Note.is_active == is_active)
+
+    # Exclude archived notes by default
+    if is_archived is not None:
+        query = query.where(Note.is_archived == is_archived)
 
     if server_link_id:
         query = query.where(Note.server_link_id == server_link_id)
