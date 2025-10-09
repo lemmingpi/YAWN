@@ -268,6 +268,17 @@ class AutoNoteService:
         )
         logger.info(f"Built prompt: {len(prompt)} characters")
 
+        # Echo the full prompt to console for debugging
+        logger.info("=" * 80)
+        logger.info("FULL PROMPT BEING SENT TO LLM:")
+        logger.info("=" * 80)
+        logger.info(prompt)
+        logger.info("=" * 80)
+        logger.info(
+            f"DOM included: {bool(page_dom)}, DOM size: {len(page_dom) if page_dom else 0} chars"
+        )
+        logger.info("=" * 80)
+
         # Generate using Gemini
         provider = await create_gemini_provider()
         logger.info("Calling Gemini API for auto note generation")
