@@ -69,6 +69,7 @@ async def generate_auto_notes(
             template_type=request.template_type,
             custom_instructions=request.custom_instructions,
             page_source=request.page_source,
+            page_dom=request.page_dom,
         )
 
         # Convert Note objects to schema
@@ -138,6 +139,7 @@ async def preview_auto_notes_prompt(
             template_type=request.template_type,
             custom_instructions=request.custom_instructions,
             page_source=request.page_source,
+            page_dom=request.page_dom,
         )
 
         # Estimate tokens (rough: 1 token ≈ 4 characters)

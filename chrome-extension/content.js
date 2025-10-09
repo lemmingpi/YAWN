@@ -2524,6 +2524,113 @@ async function addSharingContextMenuOptions() {
 }
 
 /**
+ * Extract page DOM content for auto-note generation
+ * @returns {string} Cleaned HTML content with structure preserved
+ */
+function extractPageDOMForTest() {
+  try {
+    console.log("[Web Notes] Extracting page DOM for auto-note generation");
+
+    // Clone the document to work with
+    const clonedDoc = document.documentElement.cloneNode(true);
+
+    // Remove scripts, styles, and other non-content elements
+    const removeSelectors = ["script", "style", "noscript", "iframe", "object", "embed", "svg", ".web-note"];
+    removeSelectors.forEach(selector => {
+      clonedDoc.querySelectorAll(selector).forEach(el => el.remove());
+    });
+
+    // Remove all attributes except for semantic ones
+    const preserveAttrs = ["id", "class", "data-section", "data-paragraph", "role", "aria-label"];
+    clonedDoc.querySelectorAll("*").forEach(el => {
+      const attrs = Array.from(el.attributes);
+      attrs.forEach(attr => {
+        if (!preserveAttrs.includes(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+
+    // Get the body content
+    const bodyElement = clonedDoc.querySelector("body");
+    if (!bodyElement) {
+      console.warn("[Web Notes] No body element found");
+      return document.body.innerHTML.substring(0, 50000);
+    }
+
+    let contentHTML = bodyElement.innerHTML;
+
+    // Clean up excessive whitespace
+    contentHTML = contentHTML.replace(/\s+/g, " ").trim();
+
+    // Check size and warn if truncating
+    const originalLength = contentHTML.length;
+    if (contentHTML.length > 50000) {
+      alert(`Page content is ${Math.round(originalLength / 1000)}KB. Truncating to 50KB to fit token limits.`);
+      contentHTML = contentHTML.substring(0, 50000);
+    }
+
+    console.log(`[Web Notes] Extracted ${Math.round(contentHTML.length / 1000)}KB of DOM content`);
+    return contentHTML;
+  } catch (error) {
+    console.error("[Web Notes] Error extracting page DOM:", error);
+    throw error;
+  }
+}
+
+/**
+ * Handle DOM test auto-notes generation
+ */
+async function handleGenerateDOMTestNotes() {
+  try {
+    console.log("[Web Notes] Starting DOM test auto-note generation");
+
+    // Check authentication
+    const isAuth = await isServerAuthenticated();
+    if (!isAuth) {
+      alert("Please sign in to generate auto notes");
+      return;
+    }
+
+    // Extract page DOM
+    const pageDom = extractPageDOMForTest();
+
+    // Get or create page registration
+    const pageUrl = window.location.href;
+    const pageTitle = document.title || "Untitled";
+
+    // Send request to backend via ServerAPI
+    console.log("[Web Notes] Sending DOM content to backend for note generation");
+
+    // Get the page ID first by registering the page
+    const pageData = await ServerAPI.registerPage(pageUrl, pageTitle);
+
+    if (!pageData || !pageData.id) {
+      throw new Error("Failed to register page");
+    }
+
+    // Call the auto-notes generation endpoint with DOM
+    const response = await ServerAPI.generateAutoNotesWithDOM(pageData.id, pageDom);
+
+    if (response && response.notes && response.notes.length > 0) {
+      alert(
+        `Successfully generated ${response.notes.length} study notes with DOM!\n\nBatch ID: ${response.generation_batch_id}\nCost: $${response.cost_usd.toFixed(4)}`
+      );
+
+      // Refresh the page to load the new notes
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } else {
+      alert("No notes were generated. The content might not have sufficient information.");
+    }
+  } catch (error) {
+    console.error("[Web Notes] Error generating DOM test notes:", error);
+    alert(`Failed to generate auto notes: ${error.message}`);
+  }
+}
+
+/**
  * Handle messages from background script for sharing actions
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -2570,6 +2677,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "shareNoteAtPosition":
         handleNoteContextSharing(message.data.x, message.data.y);
+        sendResponse({ success: true });
+        break;
+
+      case "generateDOMTestNotes":
+        handleGenerateDOMTestNotes();
         sendResponse({ success: true });
         break;
 

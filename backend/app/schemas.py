@@ -876,6 +876,9 @@ class AutoNoteGenerationRequest(BaseModel):
     page_source: Optional[str] = Field(
         None, description="Optional alternate page source for paywalled content"
     )
+    page_dom: Optional[str] = Field(
+        None, description="Optional page DOM/HTML content from extension"
+    )
 
 
 class GeneratedNoteData(BaseModel):
@@ -916,6 +919,9 @@ class AutoNotePreviewRequest(BaseModel):
     )
     page_source: Optional[str] = Field(
         None, description="Optional alternate page source for paywalled content"
+    )
+    page_dom: Optional[str] = Field(
+        None, description="Optional page DOM/HTML content from extension"
     )
 
 

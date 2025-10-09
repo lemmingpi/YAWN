@@ -2,6 +2,7 @@
 Available Jinja2 Template Variables:
 - page_url: str - The page URL from the database (always present)
 - page_source: str | None - Optional alternate source for paywalled content (user-provided)
+- page_dom: str | None - Optional page DOM/HTML content from extension (user-provided)
 - page_title: str - The page title (or "Untitled" if not set)
 - page_summary: str | None - Existing user-provided summary (optional)
 - user_context: str | None - AI-generated page context from prior analysis (optional)
@@ -33,7 +34,12 @@ Your task is to:
 - Add external links or references if they enhance understanding
 
 **Page Information:**
-{% if page_source %}
+{% if page_dom %}
+- Page DOM content to analyze:
+<content>
+{{ page_dom }}
+</content>
+{% elif page_source %}
 - Page source to analyze: {{ page_source }}
 {% else %}
 - Page URL to analyze: {{ page_url }}

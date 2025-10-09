@@ -170,6 +170,7 @@ class AutoNoteService:
         template_type: str,
         custom_instructions: Optional[str] = None,
         page_source: Optional[str] = None,
+        page_dom: Optional[str] = None,
     ) -> str:
         """
         Build the prompt for auto note generation.
@@ -192,6 +193,7 @@ class AutoNoteService:
             user_context=page.user_context,
             custom_instructions=custom_instructions,
             page_source=page_source,  # Optional alternate source
+            page_dom=page_dom,  # Optional DOM from extension
         )
 
         return prompt
@@ -204,6 +206,7 @@ class AutoNoteService:
         template_type: str = "study_guide",
         custom_instructions: Optional[str] = None,
         page_source: Optional[str] = None,
+        page_dom: Optional[str] = None,
     ) -> Dict:
         """
         Generate AI-powered study notes for a page.
@@ -261,7 +264,7 @@ class AutoNoteService:
 
         # Build prompt
         prompt = await self._build_prompt(
-            page, template_type, custom_instructions, page_source
+            page, template_type, custom_instructions, page_source, page_dom
         )
         logger.info(f"Built prompt: {len(prompt)} characters")
 
@@ -412,6 +415,7 @@ class AutoNoteService:
         template_type: str = "study_guide",
         custom_instructions: Optional[str] = None,
         page_source: Optional[str] = None,
+        page_dom: Optional[str] = None,
     ) -> str:
         """
         Preview the prompt that would be sent to the LLM without actually calling it.
@@ -441,7 +445,7 @@ class AutoNoteService:
 
         # Build prompt
         prompt = await self._build_prompt(
-            page, template_type, custom_instructions, page_source
+            page, template_type, custom_instructions, page_source, page_dom
         )
 
         logger.info(f"Preview generated: {len(prompt)} characters")

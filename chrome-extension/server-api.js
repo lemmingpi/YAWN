@@ -536,6 +536,42 @@ const ServerAPI = {
   },
 
   /**
+   * Generate auto notes with DOM content
+   * @param {number} pageId - Page ID
+   * @param {string} pageDom - Page DOM/HTML content
+   * @returns {Promise<Object>} Generated notes response
+   */
+  async generateAutoNotesWithDOM(pageId, pageDom) {
+    try {
+      // Check authentication before attempting
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot generate auto notes");
+      }
+
+      const requestData = {
+        llm_provider_id: 1, // Default to Gemini
+        template_type: "study_guide",
+        page_dom: pageDom, // Send DOM content in page_dom field
+        custom_instructions:
+          "Use the provided DOM content to generate precise study notes with exact text matches and accurate CSS selectors.",
+      };
+
+      const response = await this.makeRequest(`/auto-notes/pages/${pageId}/generate`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+      });
+
+      const result = await response.json();
+      console.log(`[Web Notes] Generated ${result.notes?.length || 0} auto notes with DOM`);
+      return result;
+    } catch (error) {
+      console.error(`[Web Notes] Failed to generate auto notes with DOM:`, error);
+      throw error;
+    }
+  },
+
+  /**
    * Check if current request should include authentication
    * @returns {Promise<boolean>} True if authenticated requests should be made
    */

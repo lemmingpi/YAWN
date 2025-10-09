@@ -60,6 +60,14 @@ async function createContextMenu() {
         contexts: ["page"],
         visible: false, // Hidden by default, shown when user is authenticated
       });
+
+      // DOM test auto-notes menu item (hidden by default, shown when user is authenticated)
+      chrome.contextMenus.create({
+        id: "generate-dom-test-notes",
+        title: "🤖 Generate Auto Notes with DOM",
+        contexts: ["page"],
+        visible: false, // Hidden by default, shown when user is authenticated
+      });
     }, "Creating context menu");
 
     console.log("[Web Notes Extension] Context menu created successfully");
@@ -82,6 +90,11 @@ async function updateAuthenticatedContextMenus(isAuthenticated) {
 
       // Update register page menu visibility
       chrome.contextMenus.update("register-page", {
+        visible: isAuthenticated,
+      });
+
+      // Update DOM test auto-notes menu visibility
+      chrome.contextMenus.update("generate-dom-test-notes", {
         visible: isAuthenticated,
       });
     }, "Updating authenticated context menus");
@@ -241,6 +254,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         await handleShareSite(info, tab);
         break;
 
+      case "generate-dom-test-notes":
+        // Handle DOM test auto-notes generation
+        await handleGenerateDOMTestNotes(tab);
+        break;
+
       default:
         console.log(`[Web Notes Extension] Unknown context menu item: ${info.menuItemId}`);
     }
@@ -354,6 +372,36 @@ async function handleRegisterPage(tab) {
       });
 
     logError("Error handling register page action", error);
+  }
+}
+
+/**
+ * Handle DOM test auto-notes generation
+ * @param {Object} tab - Tab object
+ */
+async function handleGenerateDOMTestNotes(tab) {
+  try {
+    console.log("[Web Notes Extension] Generate DOM test notes requested via context menu");
+
+    // Send message to content script to extract DOM and generate notes
+    chrome.tabs
+      .sendMessage(tab.id, {
+        type: "generateDOMTestNotes",
+      })
+      .then(response => {
+        if (response && response.success) {
+          console.log("[Web Notes Extension] DOM test notes generation initiated");
+        }
+      })
+      .catch(err => {
+        console.warn("[Web Notes Extension] Could not send message to tab:", err);
+        // Try to inject content script first if it's not loaded
+        injectContentScriptAndRetry(tab.id, {
+          type: "generateDOMTestNotes",
+        });
+      });
+  } catch (error) {
+    logError("Error handling DOM test notes generation", error);
   }
 }
 
