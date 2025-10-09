@@ -2599,30 +2599,32 @@ async function handleGenerateDOMTestNotes() {
     const pageUrl = window.location.href;
     const pageTitle = document.title || "Untitled";
 
-    // Send request to backend via ServerAPI
+    // Send request to background script
     console.log("[Web Notes] Sending DOM content to backend for note generation");
 
-    // Get the page ID first by registering the page
-    const pageData = await ServerAPI.registerPage(pageUrl, pageTitle);
+    const response = await chrome.runtime.sendMessage({
+      action: "API_generateDOMTestNotes",
+      url: pageUrl,
+      title: pageTitle,
+      pageDom: pageDom,
+    });
 
-    if (!pageData || !pageData.id) {
-      throw new Error("Failed to register page");
-    }
+    if (response.success && response.data) {
+      const result = response.data;
+      if (result.notes && result.notes.length > 0) {
+        alert(
+          `Successfully generated ${result.notes.length} study notes with DOM!\n\nBatch ID: ${result.generation_batch_id}\nCost: $${result.cost_usd.toFixed(4)}`
+        );
 
-    // Call the auto-notes generation endpoint with DOM
-    const response = await ServerAPI.generateAutoNotesWithDOM(pageData.id, pageDom);
-
-    if (response && response.notes && response.notes.length > 0) {
-      alert(
-        `Successfully generated ${response.notes.length} study notes with DOM!\n\nBatch ID: ${response.generation_batch_id}\nCost: $${response.cost_usd.toFixed(4)}`
-      );
-
-      // Refresh the page to load the new notes
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+        // Refresh the page to load the new notes
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        alert("No notes were generated. The content might not have sufficient information.");
+      }
     } else {
-      alert("No notes were generated. The content might not have sufficient information.");
+      throw new Error(response.error || "Failed to generate notes");
     }
   } catch (error) {
     console.error("[Web Notes] Error generating DOM test notes:", error);

@@ -473,6 +473,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           case "API_getConfig":
             result = await ServerAPI.getConfig();
             break;
+          case "API_generateDOMTestNotes":
+            // First register the page
+            const pageData = await ServerAPI.registerPage(message.url, message.title);
+            if (!pageData || !pageData.id) {
+              throw new Error("Failed to register page");
+            }
+            // Then generate notes with DOM
+            result = await ServerAPI.generateAutoNotesWithDOM(pageData.id, message.pageDom);
+            break;
           default:
             throw new Error(`Unknown API action: ${message.action}`);
         }
