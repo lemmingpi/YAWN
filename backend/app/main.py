@@ -22,6 +22,7 @@ load_dotenv(os.getenv("ENV_FILE", ".env"))
 from .config import settings  # noqa: E402
 from .database import create_tables  # noqa: E402
 from .llm.provider_manager import provider_manager  # noqa: E402
+from .logging_config import setup_logging  # noqa: E402
 from .middleware import (  # noqa: E402
     RequestLoggingMiddleware,
     SecurityHeadersMiddleware,
@@ -38,6 +39,9 @@ from .routers import (  # noqa: E402
     web,
 )
 from .schemas import HealthCheckResponse  # noqa: E402
+
+# Setup logging as early as possible
+setup_logging()
 
 
 @asynccontextmanager
