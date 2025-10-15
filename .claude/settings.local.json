@@ -38,7 +38,9 @@
       "Bash(cat:*)",
       "Bash(find:*)",
       "Bash(xargs ls:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(code chrome-extension/content.js)",
+      "Bash(code:*)"
     ],
     "deny": [
       "Bash(git commit:-amend:*)"

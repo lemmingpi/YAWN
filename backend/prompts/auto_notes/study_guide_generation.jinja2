@@ -73,6 +73,7 @@ Return ONLY a valid JSON object with this structure (no markdown code blocks, no
 
 **Positioning Requirements:**
 Your selectors MUST be specific enough to uniquely identify the text location in the DOM.
+prefer using  IDs, classes, data attributes, and hierarchical structure AVOID nth-child selectors and generic tags alone without parent and data attributes.
 
 GOOD CSS Examples:
 - "article.main-content > p:nth-of-type(3)"
@@ -87,7 +88,7 @@ GOOD XPath Examples:
 - "//section[@data-id='intro']/p[1]"
 
 AVOID:
-- Generic tags alone: "p", "div" ❌
+- Never use a nth-child especially as the start: "p:nth-child(13) -> b" ❌
 - Vague descriptions: "first paragraph", "main section" ❌
 - Non-unique selectors that match multiple elements ❌
 
