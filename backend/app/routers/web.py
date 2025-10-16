@@ -19,7 +19,9 @@ from ..models import Note, NoteArtifact, Page, Site
 router = APIRouter(prefix="/app", tags=["web"])
 
 # Initialize Jinja2 templates
-templates = Jinja2Templates(directory="app/templates")
+# Use absolute path to work from any directory
+TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Get Google Client ID from environment
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")

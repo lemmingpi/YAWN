@@ -384,8 +384,16 @@ class TestArtifactTemplates:
 
     def test_all_templates_exist(self):
         """Test that templates exist for all artifact types."""
+        # Visualization types use Jinja2 templates, not ARTIFACT_TEMPLATES
+        visualization_types = {
+            ArtifactType.SCENE_ILLUSTRATION,
+            ArtifactType.DATA_CHART,
+            ArtifactType.SCIENTIFIC_VISUALIZATION,
+        }
+
         for artifact_type in ArtifactType:
-            assert artifact_type in ARTIFACT_TEMPLATES
+            if artifact_type not in visualization_types:
+                assert artifact_type in ARTIFACT_TEMPLATES
 
     def test_templates_have_placeholders(self):
         """Test that templates have required placeholders."""

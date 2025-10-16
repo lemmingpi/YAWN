@@ -138,13 +138,16 @@ app.include_router(sharing.router)
 app.include_router(web.router)
 
 # Static files for web interface
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# Use absolute path to work from any directory
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> FileResponse:
     """Serve favicon."""
-    return FileResponse("app/static/favicon.ico")
+    favicon_path = os.path.join(STATIC_DIR, "favicon.ico")
+    return FileResponse(favicon_path)
 
 
 @app.get("/", response_class=RedirectResponse)

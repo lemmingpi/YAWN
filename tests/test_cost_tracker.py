@@ -242,8 +242,9 @@ class TestListSupportedModels:
     def test_list_models(self):
         """Test listing all supported models."""
         models = list_supported_models()
-        assert len(models) == 4
+        assert len(models) == 5
         assert LLMModel.GEMINI_2_FLASH in models
+        assert LLMModel.GEMINI_2_5_FLASH_IMAGE in models
         assert LLMModel.CLAUDE_3_5_SONNET in models
         assert LLMModel.GPT_4_TURBO in models
         assert LLMModel.GPT_4O in models

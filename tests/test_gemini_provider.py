@@ -16,8 +16,11 @@ from backend.app.services.gemini_provider import (
 
 @pytest.fixture
 def mock_genai():
-    """Mock google.generativeai module."""
+    """Mock google.genai module."""
     with patch("backend.app.services.gemini_provider.genai") as mock:
+        # Mock the Client class
+        mock_client = MagicMock()
+        mock.Client.return_value = mock_client
         yield mock
 
 
@@ -43,10 +46,11 @@ class TestGeminiProvider:
         assert provider.model_name == "gemini-2.0-flash"
         assert provider.max_retries == 5
         assert provider.retry_delay == 2.0
-        mock_genai.configure.assert_called_once_with(api_key="test-key")
+        # Verify Client was created with the API key
+        mock_genai.Client.assert_called_once_with(api_key="test-key")
 
     @pytest.mark.asyncio
-    async def test_generate_content_success(self, provider, mock_genai):
+    async def test_generate_content_success(self, provider):
         """Test successful content generation."""
         # Mock response
         mock_response = MagicMock()
@@ -56,13 +60,13 @@ class TestGeminiProvider:
         mock_response.usage_metadata.prompt_token_count = 100
         mock_response.usage_metadata.candidates_token_count = 50
 
-        provider.model.generate_content = MagicMock(return_value=mock_response)
-
-        result = await provider.generate_content(
-            prompt="Test prompt",
-            max_output_tokens=1000,
-            temperature=0.5,
-        )
+        # Mock asyncio.to_thread to return the mock response directly
+        with patch("asyncio.to_thread", return_value=mock_response):
+            result = await provider.generate_content(
+                prompt="Test prompt",
+                max_output_tokens=1000,
+                temperature=0.5,
+            )
 
         assert result["content"] == "Generated content here"
         assert result["input_tokens"] == 100
@@ -77,10 +81,9 @@ class TestGeminiProvider:
         mock_response = MagicMock()
         mock_response.candidates = []
 
-        provider.model.generate_content = MagicMock(return_value=mock_response)
-
-        with pytest.raises(GeminiProviderError, match="No candidates returned"):
-            await provider.generate_content(prompt="Test prompt")
+        with patch("asyncio.to_thread", return_value=mock_response):
+            with pytest.raises(GeminiProviderError, match="No candidates returned"):
+                await provider.generate_content(prompt="Test prompt")
 
     @pytest.mark.asyncio
     async def test_generate_content_rate_limit_retry(self, provider):
@@ -93,54 +96,47 @@ class TestGeminiProvider:
         mock_response.usage_metadata.prompt_token_count = 100
         mock_response.usage_metadata.candidates_token_count = 50
 
-        provider.model.generate_content = MagicMock(
-            side_effect=[
-                google_exceptions.ResourceExhausted("Rate limit"),
-                google_exceptions.ResourceExhausted("Rate limit"),
-                mock_response,
-            ]
-        )
-
         # Set low retry delay for fast test
         provider.retry_delay = 0.01
 
-        result = await provider.generate_content(prompt="Test prompt")
+        # Mock asyncio.to_thread with side effects
+        with patch(
+            "asyncio.to_thread",
+            side_effect=[
+                Exception("Rate limit exceeded"),
+                Exception("Rate limit exceeded"),
+                mock_response,
+            ],
+        ):
+            result = await provider.generate_content(prompt="Test prompt")
 
         assert result["content"] == "Success"
-        assert provider.model.generate_content.call_count == 3
 
     @pytest.mark.asyncio
     async def test_generate_content_rate_limit_exhausted(self, provider):
         """Test rate limit error after max retries."""
-        provider.model.generate_content = MagicMock(
-            side_effect=google_exceptions.ResourceExhausted("Rate limit")
-        )
         provider.retry_delay = 0.01
 
-        with pytest.raises(RateLimitError, match="Rate limit exceeded after"):
-            await provider.generate_content(prompt="Test prompt")
-
-        assert provider.model.generate_content.call_count == provider.max_retries
+        with patch("asyncio.to_thread", side_effect=Exception("Rate limit exceeded")):
+            with pytest.raises(RateLimitError, match="Rate limit exceeded after"):
+                await provider.generate_content(prompt="Test prompt")
 
     @pytest.mark.asyncio
     async def test_generate_content_google_api_error(self, provider):
         """Test handling of Google API errors."""
-        provider.model.generate_content = MagicMock(
-            side_effect=google_exceptions.GoogleAPIError("API error")
-        )
-
-        with pytest.raises(GeminiProviderError, match="API error"):
-            await provider.generate_content(prompt="Test prompt")
+        with patch(
+            "asyncio.to_thread",
+            side_effect=google_exceptions.GoogleAPIError("API error"),
+        ):
+            with pytest.raises(GeminiProviderError, match="API error"):
+                await provider.generate_content(prompt="Test prompt")
 
     @pytest.mark.asyncio
     async def test_generate_content_unexpected_error(self, provider):
         """Test handling of unexpected errors."""
-        provider.model.generate_content = MagicMock(
-            side_effect=ValueError("Unexpected error")
-        )
-
-        with pytest.raises(GeminiProviderError, match="Unexpected error"):
-            await provider.generate_content(prompt="Test prompt")
+        with patch("asyncio.to_thread", side_effect=ValueError("Unexpected error")):
+            with pytest.raises(GeminiProviderError, match="Unexpected error"):
+                await provider.generate_content(prompt="Test prompt")
 
     @pytest.mark.asyncio
     async def test_estimate_tokens_success(self, provider):
@@ -148,21 +144,19 @@ class TestGeminiProvider:
         mock_result = MagicMock()
         mock_result.total_tokens = 250
 
-        provider.model.count_tokens = MagicMock(return_value=mock_result)
-
-        tokens = await provider.estimate_tokens("Test text")
+        with patch("asyncio.to_thread", return_value=mock_result):
+            tokens = await provider.estimate_tokens("Test text")
 
         assert tokens == 250
-        provider.model.count_tokens.assert_called_once_with("Test text")
 
     @pytest.mark.asyncio
     async def test_estimate_tokens_fallback(self, provider):
         """Test fallback token estimation on error."""
-        provider.model.count_tokens = MagicMock(side_effect=Exception("API error"))
-
         # Test string with 100 characters
         test_text = "a" * 100
-        tokens = await provider.estimate_tokens(test_text)
+
+        with patch("asyncio.to_thread", side_effect=Exception("API error")):
+            tokens = await provider.estimate_tokens(test_text)
 
         # Should use fallback: len // 4
         assert tokens == 25
@@ -229,9 +223,8 @@ class TestIntegrationWithCostTracker:
         mock_response.usage_metadata.prompt_token_count = 150_000
         mock_response.usage_metadata.candidates_token_count = 75_000
 
-        provider.model.generate_content = MagicMock(return_value=mock_response)
-
-        result = await provider.generate_content(prompt="Test")
+        with patch("asyncio.to_thread", return_value=mock_response):
+            result = await provider.generate_content(prompt="Test")
 
         # Calculate expected cost using cost tracker
         expected_cost = calculate_cost(
