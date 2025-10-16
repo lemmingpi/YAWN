@@ -219,7 +219,7 @@ function captureSelectionData(selection) {
       commonAncestorSelector: generateOptimalSelector(
         range.commonAncestorContainer.nodeType === Node.TEXT_NODE
           ? range.commonAncestorContainer.parentElement
-          : range.commonAncestorContainer
+          : range.commonAncestorContainer,
       ).cssSelector,
     };
   } catch (error) {
@@ -636,7 +636,7 @@ function repositionAllNotes() {
       if (noteData.elementSelector || noteData.elementXPath) {
         const selectorResults = tryBothSelectors(
           noteData,
-          `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`
+          `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`,
         );
         targetElement = selectorResults.element;
       }
@@ -1258,7 +1258,7 @@ function handleEditKeydown(event, noteElement, noteData, textarea) {
         // eslint-disable-next-line max-len
         textarea.setSelectionRange(
           start - Math.min(2, lineContent.match(/^\s*/)[0].length),
-          end - Math.min(2, lineContent.match(/^\s*/)[0].length)
+          end - Math.min(2, lineContent.match(/^\s*/)[0].length),
         );
       }
     } else {
@@ -1749,7 +1749,7 @@ function displayNote(noteData) {
     console.log(
       `[Web Notes] Displaying draggable note ${finalPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
         `${noteData.elementSelector || noteData.elementXPath || "absolute coordinates"} ` +
-        `with offset (${offsetX}, ${offsetY}) at position (${finalPosition.x}, ${finalPosition.y})`
+        `with offset (${offsetX}, ${offsetY}) at position (${finalPosition.x}, ${finalPosition.y})`,
     );
   } catch (error) {
     console.error("[Web Notes] Error displaying note:", error);
@@ -2028,7 +2028,7 @@ function tryBothSelectors(noteData, _cacheKey) {
         document,
         null,
         XPathResult.FIRST_ORDERED_NODE_TYPE,
-        null
+        null,
       );
       const xpathElement = xpathResult.singleNodeValue;
       if (xpathElement) {
@@ -2052,7 +2052,7 @@ function tryBothSelectors(noteData, _cacheKey) {
         document,
         null,
         XPathResult.FIRST_ORDERED_NODE_TYPE,
-        null
+        null,
       );
       const xpathElement = xpathResult.singleNodeValue;
 
@@ -2316,7 +2316,7 @@ async function handleNoteDelete(noteElement, noteData) {
       "Delete Note",
       "Are you sure you want to delete this note? This action cannot be undone.",
       "Delete",
-      "Cancel"
+      "Cancel",
     );
 
     if (!confirmed) {
@@ -2614,7 +2614,7 @@ async function handleGenerateDOMTestNotes() {
         alert(
           `Successfully generated ${result.notes.length} study notes with DOM!\n\n` +
             `Batch ID: ${result.generation_batch_id}\n` +
-            `Cost: $${result.cost_usd.toFixed(4)}`
+            `Cost: $${result.cost_usd.toFixed(4)}`,
         );
 
         // Refresh the page to load the new notes

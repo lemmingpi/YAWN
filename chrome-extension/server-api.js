@@ -750,7 +750,7 @@ const ServerAPI = {
 
       console.log(
         `[Web Notes] Retrieved user shares: ${shares.shared_pages?.length || 0} pages, ` +
-          `${shares.shared_sites?.length || 0} sites`
+          `${shares.shared_sites?.length || 0} sites`,
       );
       return shares;
     } catch (error) {

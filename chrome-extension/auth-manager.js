@@ -129,7 +129,7 @@ const AuthManager = {
             this.STORAGE_KEYS.AUTH_STATE,
             this.STORAGE_KEYS.LAST_AUTH_CHECK,
           ],
-          resolve
+          resolve,
         );
       });
 
@@ -218,7 +218,7 @@ const AuthManager = {
             } else {
               resolve();
             }
-          }
+          },
         );
       });
 
@@ -325,7 +325,7 @@ const AuthManager = {
             } else {
               resolve(token);
             }
-          }
+          },
         );
       });
 
@@ -401,7 +401,7 @@ const AuthManager = {
 
       if (!response.success) {
         throw new Error(
-          `Authentication failed: ${response.status} ${typeof response.data === "string" ? response.data : "Unknown error"}`
+          `Authentication failed: ${response.status} ${typeof response.data === "string" ? response.data : "Unknown error"}`,
         );
       }
 

@@ -279,7 +279,7 @@ async function getNotes(urlOverride = null) {
               }
               return localNotes;
             },
-            { showUserFeedback: false }
+            { showUserFeedback: false },
           ) // Don't show feedback for background fetches
         : (async () => {
             try {

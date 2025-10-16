@@ -281,7 +281,7 @@ async function executeScriptInTab(tabId, func) {
           } else {
             resolve(result);
           }
-        }
+        },
       );
     });
 

@@ -198,7 +198,7 @@ async function createNoteWithCoordinates(tabId, noteNumber) {
           } else {
             resolve(result);
           }
-        }
+        },
       );
     });
 
@@ -453,7 +453,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               message.pageId,
               message.userId,
               message.newPermission,
-              message.isActive
+              message.isActive,
             );
             break;
           case "API_updateSiteSharePermission":
@@ -461,7 +461,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               message.siteId,
               message.userId,
               message.newPermission,
-              message.isActive
+              message.isActive,
             );
             break;
           case "API_removePageShare":
@@ -572,7 +572,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                   } else {
                     resolve({ token });
                   }
-                }
+                },
               );
             });
             sendResponse({ success: !result.error, data: result.token, error: result.error });

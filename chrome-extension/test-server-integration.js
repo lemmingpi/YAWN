@@ -64,7 +64,7 @@ const ServerIntegrationTest = {
       this.assert(
         setSuccess && retrievedConfig.syncServerUrl === testConfig.syncServerUrl,
         "Configuration setting and retrieval",
-        "Should save and retrieve server configuration"
+        "Should save and retrieve server configuration",
       );
 
       // Test ServerAPI config loading
@@ -73,7 +73,7 @@ const ServerIntegrationTest = {
         this.assert(
           apiConfig.serverUrl === testConfig.syncServerUrl,
           "ServerAPI configuration loading",
-          "ServerAPI should load configuration correctly"
+          "ServerAPI should load configuration correctly",
         );
       }
     } catch (error) {
@@ -140,7 +140,7 @@ const ServerIntegrationTest = {
       this.assert(
         createdNote && createdNote.serverId,
         "Note server ID assignment",
-        "Created note should have server ID assigned"
+        "Created note should have server ID assigned",
       );
     } catch (error) {
       this.assert(false, "Note creation", `Failed: ${error.message}`);
@@ -182,7 +182,7 @@ const ServerIntegrationTest = {
       this.assert(
         updatedNote && updatedNote.content === updatedContent,
         "Note update verification",
-        "Updated note should have new content"
+        "Updated note should have new content",
       );
     } catch (error) {
       this.assert(false, "Note update", `Failed: ${error.message}`);
@@ -265,7 +265,7 @@ const ServerIntegrationTest = {
       this.assert(
         createdNote && !createdNote.serverId,
         "Local-only save on server failure",
-        "Note should exist locally without server ID when server fails"
+        "Note should exist locally without server ID when server fails",
       );
 
       // Clean up test note
