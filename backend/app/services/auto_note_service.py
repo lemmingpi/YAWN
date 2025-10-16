@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from ..models import Note, Page
 from .gemini_provider import create_gemini_provider
+from .selector_validator import SelectorValidator
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,7 @@ class AutoNoteService:
         self.db = db
         self._study_guide_template = None
         self._content_review_template = None
+        self._validator = SelectorValidator(fuzzy_threshold=0.80)
 
     def _load_prompt_template(self, template_name: str) -> jinja2.Template:
         """
@@ -249,12 +251,14 @@ class AutoNoteService:
         if not page:
             raise ValueError(f"Page with ID {page_id} not found")
 
-        # Validate that page is not paywalled (cannot generate notes if we can't read the page)
+        # Validate that page is not paywalled
         if page.is_paywalled:
             raise ValueError(
                 "Cannot generate auto-notes for paywalled pages. "
-                "The LLM cannot accurately position notes without access to the original page content. "
-                "You can still use the preview feature to see what would be generated."
+                "The LLM cannot accurately position notes without access "
+                "to the original page content. "
+                "You can still use the preview feature to see what "
+                "would be generated."
             )
 
         logger.info(
@@ -337,6 +341,14 @@ class AutoNoteService:
             f"Creating {len(notes_data)} notes with batch_id={generation_batch_id}"
         )
 
+        # Track validation statistics
+        validation_stats = {
+            "total": len(notes_data),
+            "validated": 0,
+            "repaired": 0,
+            "failed_validation": 0,
+        }
+
         # Create Note records
         created_notes = []
         for idx, note_data in enumerate(notes_data):
@@ -351,10 +363,79 @@ class AutoNoteService:
                 if position:
                     css_selector, xpath = detect_selector_type(position)
 
+            # Validate and repair selectors if page_dom is available
+            validation_metadata = None
+            if page_dom and css_selector:
+                highlighted_text = note_data.get("highlighted_text", "")
+
+                # Try to validate the CSS selector
+                is_valid, match_count, _ = self._validator.validate_selector(
+                    page_dom, css_selector
+                )
+
+                if is_valid:
+                    validation_stats["validated"] += 1
+                    logger.debug(
+                        f"Note {idx + 1}: Selector valid - '{css_selector[:50]}...'"
+                    )
+                else:
+                    validation_stats["failed_validation"] += 1
+                    logger.info(
+                        f"Note {idx + 1}: Selector invalid (matched {match_count} elements), "
+                        f"attempting repair - '{css_selector[:50]}...'"
+                    )
+
+                    # Attempt to repair the selector
+                    repair_result = self._validator.repair_selector(
+                        page_dom, highlighted_text, css_selector, xpath
+                    )
+
+                    if repair_result["success"]:
+                        validation_stats["repaired"] += 1
+                        # Replace with repaired selectors
+                        old_css = css_selector
+                        css_selector = repair_result["css_selector"]
+                        xpath = repair_result["xpath"]
+
+                        new_selector_preview = (
+                            css_selector[:30] if css_selector else xpath[:30]
+                        )
+                        logger.info(
+                            f"Note {idx + 1}: Repaired selector "
+                            f"(similarity={repair_result['text_similarity']:.2f}, "
+                            f"matches={repair_result['match_count']}) - "
+                            f"old: '{old_css[:30]}...', "
+                            f"new: '{new_selector_preview}...'"
+                        )
+
+                        # Store validation metadata for debugging
+                        validation_metadata = {
+                            "original_selector": old_css,
+                            "was_repaired": True,
+                            "match_count": repair_result["match_count"],
+                            "text_similarity": repair_result["text_similarity"],
+                            "repair_message": repair_result["message"],
+                        }
+                    else:
+                        logger.warning(
+                            f"Note {idx + 1}: Failed to repair selector - "
+                            f"{repair_result['message']}"
+                        )
+                        validation_metadata = {
+                            "original_selector": css_selector,
+                            "was_repaired": False,
+                            "repair_failed": True,
+                            "repair_message": repair_result["message"],
+                        }
+
             # Build anchor_data with selectors
             anchor_data: Dict[str, Any] = {
                 "auto_generated": True,
             }
+
+            # Add validation metadata if available
+            if validation_metadata:
+                anchor_data["validation"] = validation_metadata
 
             if css_selector:
                 anchor_data["elementSelector"] = css_selector
@@ -405,6 +486,20 @@ class AutoNoteService:
             await self.db.refresh(note)
 
         logger.info(f"Created {len(created_notes)} auto-generated notes")
+
+        # Log validation statistics if page_dom was provided
+        if page_dom and validation_stats["total"] > 0:
+            success_rate = (
+                (validation_stats["validated"] + validation_stats["repaired"])
+                / validation_stats["total"]
+                * 100
+            )
+            logger.info(
+                f"Selector validation stats: {validation_stats['validated']} valid, "
+                f"{validation_stats['repaired']} repaired, "
+                f"{validation_stats['failed_validation'] - validation_stats['repaired']} failed "
+                f"({success_rate:.1f}% success rate)"
+            )
 
         # Calculate generation time
         generation_time_ms = int((time.time() - start_time) * 1000)

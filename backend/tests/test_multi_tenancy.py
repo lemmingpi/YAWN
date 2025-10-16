@@ -1,6 +1,7 @@
 """Tests for multi-tenancy models and relationships."""
 
 from datetime import datetime
+from typing import Any
 
 import pytest
 from app.models import (
@@ -20,7 +21,7 @@ class TestMultiTenancyModels:
     """Test cases for multi-tenancy models and relationships."""
 
     @pytest.mark.asyncio
-    async def test_site_user_relationship(self, async_session):
+    async def test_site_user_relationship(self, async_session: Any) -> None:
         """Test Site-User relationship."""
         # Create a user
         user = User(
@@ -49,7 +50,7 @@ class TestMultiTenancyModels:
         assert user.sites[0].domain == "example.com"
 
     @pytest.mark.asyncio
-    async def test_page_user_relationship(self, async_session):
+    async def test_page_user_relationship(self, async_session: Any) -> None:
         """Test Page-User relationship."""
         # Create a user
         user = User(
@@ -88,7 +89,7 @@ class TestMultiTenancyModels:
         assert user.pages[0].url == "https://pagetest.com/page1"
 
     @pytest.mark.asyncio
-    async def test_note_user_relationship(self, async_session):
+    async def test_note_user_relationship(self, async_session: Any) -> None:
         """Test Note-User relationship."""
         # Create a user
         user = User(
@@ -132,7 +133,7 @@ class TestMultiTenancyModels:
         assert user.notes[0].content == "Test note content"
 
     @pytest.mark.asyncio
-    async def test_user_site_share_creation(self, async_session):
+    async def test_user_site_share_creation(self, async_session: Any) -> None:
         """Test creating a site share."""
         # Create users
         owner = User(
@@ -176,7 +177,7 @@ class TestMultiTenancyModels:
         assert len(site.shared_with) == 1
 
     @pytest.mark.asyncio
-    async def test_user_page_share_creation(self, async_session):
+    async def test_user_page_share_creation(self, async_session: Any) -> None:
         """Test creating a page share."""
         # Create users
         owner = User(
@@ -229,7 +230,7 @@ class TestMultiTenancyModels:
         assert len(page.shared_with) == 1
 
     @pytest.mark.asyncio
-    async def test_permission_level_enum(self, async_session):
+    async def test_permission_level_enum(self, async_session: Any) -> None:
         """Test permission level enum values."""
         # Create users and site
         owner = User(
@@ -253,7 +254,11 @@ class TestMultiTenancyModels:
         await async_session.refresh(site)
 
         # Test all permission levels
-        for permission in [PermissionLevel.VIEW, PermissionLevel.EDIT, PermissionLevel.ADMIN]:
+        for permission in [
+            PermissionLevel.VIEW,
+            PermissionLevel.EDIT,
+            PermissionLevel.ADMIN,
+        ]:
             site_share = UserSiteShare(
                 user_id=shared_user.id,
                 site_id=site.id,
@@ -268,7 +273,7 @@ class TestMultiTenancyModels:
             await async_session.commit()
 
     @pytest.mark.asyncio
-    async def test_unique_site_share_constraint(self, async_session):
+    async def test_unique_site_share_constraint(self, async_session: Any) -> None:
         """Test unique constraint on user-site share."""
         # Create users and site
         owner = User(
@@ -312,7 +317,7 @@ class TestMultiTenancyModels:
             await async_session.commit()
 
     @pytest.mark.asyncio
-    async def test_unique_page_share_constraint(self, async_session):
+    async def test_unique_page_share_constraint(self, async_session: Any) -> None:
         """Test unique constraint on user-page share."""
         # Create users, site, and page
         owner = User(
@@ -365,7 +370,7 @@ class TestMultiTenancyModels:
             await async_session.commit()
 
     @pytest.mark.asyncio
-    async def test_cascade_delete_user_resources(self, async_session):
+    async def test_cascade_delete_user_resources(self, async_session: Any) -> None:
         """Test cascade deletion when user is deleted."""
         # Create user
         user = User(
@@ -411,17 +416,23 @@ class TestMultiTenancyModels:
         await async_session.commit()
 
         # Verify cascade deletion
-        site_result = await async_session.execute(select(Site).where(Site.id == site_id))
+        site_result = await async_session.execute(
+            select(Site).where(Site.id == site_id)
+        )
         assert site_result.scalar_one_or_none() is None
 
-        page_result = await async_session.execute(select(Page).where(Page.id == page_id))
+        page_result = await async_session.execute(
+            select(Page).where(Page.id == page_id)
+        )
         assert page_result.scalar_one_or_none() is None
 
-        note_result = await async_session.execute(select(Note).where(Note.id == note_id))
+        note_result = await async_session.execute(
+            select(Note).where(Note.id == note_id)
+        )
         assert note_result.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
-    async def test_cascade_delete_user_shares(self, async_session):
+    async def test_cascade_delete_user_shares(self, async_session: Any) -> None:
         """Test cascade deletion of shares when user is deleted."""
         # Create users
         owner = User(
@@ -488,14 +499,18 @@ class TestMultiTenancyModels:
         assert page_share_result.scalar_one_or_none() is None
 
         # Site and page should still exist
-        site_result = await async_session.execute(select(Site).where(Site.id == site.id))
+        site_result = await async_session.execute(
+            select(Site).where(Site.id == site.id)
+        )
         assert site_result.scalar_one_or_none() is not None
 
-        page_result = await async_session.execute(select(Page).where(Page.id == page.id))
+        page_result = await async_session.execute(
+            select(Page).where(Page.id == page.id)
+        )
         assert page_result.scalar_one_or_none() is not None
 
     @pytest.mark.asyncio
-    async def test_foreign_key_constraints(self, async_session):
+    async def test_foreign_key_constraints(self, async_session: Any) -> None:
         """Test foreign key constraints are enforced."""
         # Try to create site with non-existent user_id
         site = Site(domain="invalid.com", user_id=99999)
@@ -555,7 +570,7 @@ class TestMultiTenancyModels:
             await async_session.commit()
 
     @pytest.mark.asyncio
-    async def test_sharing_default_values(self, async_session):
+    async def test_sharing_default_values(self, async_session: Any) -> None:
         """Test default values for sharing models."""
         # Create users and resources
         owner = User(
@@ -613,7 +628,7 @@ class TestMultiTenancyModels:
         assert isinstance(page_share.updated_at, datetime)
 
     @pytest.mark.asyncio
-    async def test_complex_ownership_scenario(self, async_session):
+    async def test_complex_ownership_scenario(self, async_session: Any) -> None:
         """Test complex multi-user ownership scenario."""
         # Create multiple users
         user1 = User(

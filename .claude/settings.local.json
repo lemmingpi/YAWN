@@ -40,11 +40,13 @@
       "Bash(xargs ls:*)",
       "Bash(git log:*)",
       "Bash(code chrome-extension/content.js)",
-      "Bash(code:*)"
+      "Bash(code:*)",
+      "mcp__serena__*",
+      "mcp__serena__check_onboarding_performed",
+      "mcp__serena__onboarding",
+      "mcp__serena__list_dir"
     ],
-    "deny": [
-      "Bash(git commit:-amend:*)"
-    ],
+    "deny": [],
     "ask": [],
     "additionalDirectories": [
       "C:\\Users\\gordo\\cluade\\notes1\\"

@@ -40,7 +40,7 @@ class MarkdownRenderer {
       renderer.html = () => ""; // Block raw HTML
 
       // Customize link rendering for security
-      renderer.link = (linkRef) => {
+      renderer.link = linkRef => {
         // Only allow safe protocols
         const safeProtocols = ["http:", "https:", "mailto:"];
         try {
@@ -129,7 +129,7 @@ class MarkdownRenderer {
             "ins",
             "img",
           ],
-          ALLOWED_ATTR: ["href", "title", "target", "rel", "style", "src", "alt" , "width", "height"],
+          ALLOWED_ATTR: ["href", "title", "target", "rel", "style", "src", "alt", "width", "height"],
           ALLOW_DATA_ATTR: false,
           FORBID_CONTENTS: ["script", "style"],
           FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
@@ -297,9 +297,7 @@ const NoteDataUtils = {
     const content = noteData.text || `Note #${noteData.id.split("-").pop()}`;
 
     // eslint-disable-next-line max-len
-    console.log(
-      `[Web Notes] Migrating note ${noteData.id}: "${noteData.text}" -> "${content}"`,
-    );
+    console.log(`[Web Notes] Migrating note ${noteData.id}: "${noteData.text}" -> "${content}"`);
 
     // Create migrated note data
     const migratedNote = this.createNoteData(noteData, content);
@@ -311,19 +309,12 @@ const NoteDataUtils = {
     if (saveIfMigrated && typeof updateNote === "function") {
       try {
         // eslint-disable-next-line max-len
-        await updateNote(
-          noteData.url || window.location.href,
-          noteData.id,
-          migratedNote,
-        );
+        await updateNote(noteData.url || window.location.href, noteData.id, migratedNote);
         // eslint-disable-next-line max-len
         console.log(`[Web Notes] Migrated and saved note ${noteData.id}`);
       } catch (error) {
         // eslint-disable-next-line max-len
-        console.error(
-          `[Web Notes] Failed to save migrated note ${noteData.id}:`,
-          error,
-        );
+        console.error(`[Web Notes] Failed to save migrated note ${noteData.id}:`, error);
       }
     }
 

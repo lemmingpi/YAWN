@@ -100,7 +100,7 @@ function createColorDropdown(textarea) {
       });
 
       // Add click handler for color selection
-      colorButton.addEventListener("click", (event) => {
+      colorButton.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
         handleColorSelection(colorOption.name, textarea);
@@ -141,7 +141,7 @@ function createColorDropdown(textarea) {
     });
 
     // Toggle dropdown on button click
-    dropdownButton.addEventListener("click", (event) => {
+    dropdownButton.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
       toggleColorDropdown(dropdownMenu);
@@ -291,7 +291,6 @@ function handleColorSelection(colorName, textarea) {
     setTimeout(() => {
       textarea.focus();
     }, 0);
-
   } catch (error) {
     console.error("[Web Notes] Error handling color selection:", error);
   }
