@@ -482,6 +482,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             // Then generate notes with DOM
             result = await ServerAPI.generateAutoNotesWithDOM(pageData.id, message.pageDom);
             break;
+          case "API_registerPage":
+            // Register the page (called once before chunks)
+            result = await ServerAPI.registerPage(message.url, message.title);
+            break;
+          case "API_generateDOMTestNotesChunk":
+            // Generate notes with DOM chunk (page already registered)
+            result = await ServerAPI.generateAutoNotesWithDOMChunk(message.pageId, message.chunkData);
+            break;
           default:
             throw new Error(`Unknown API action: ${message.action}`);
         }

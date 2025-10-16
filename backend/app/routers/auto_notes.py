@@ -17,6 +17,8 @@ from ..schemas import (
     AutoNotePreviewRequest,
     AutoNotePreviewResponse,
     BatchDeleteResponse,
+    ChunkedAutoNoteRequest,
+    ChunkedAutoNoteResponse,
     GeneratedNoteData,
 )
 from ..services.auto_note_service import AutoNoteService
@@ -102,6 +104,101 @@ async def generate_auto_notes(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate auto notes: {str(e)}",
+        )
+
+
+@router.post(
+    "/pages/{page_id}/generate/chunked",
+    response_model=ChunkedAutoNoteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_auto_notes_chunked(
+    page_id: int,
+    request: ChunkedAutoNoteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> ChunkedAutoNoteResponse:
+    """
+    Generate AI-powered study notes from a DOM chunk (stateless).
+
+    This endpoint is used for processing large pages that are split into chunks.
+    Each chunk is processed independently with no backend session management.
+    The frontend aggregates results from all chunks.
+
+    This enables:
+    - Complete page coverage regardless of size
+    - Parallel processing (frontend sends 3 chunks at a time)
+    - Better quality notes across all content
+    - Simpler backend (no session state)
+
+    Args:
+        page_id: ID of page to generate notes for (already registered)
+        request: Chunked generation configuration with chunk metadata
+        db: Database session
+        current_user: Authenticated user
+
+    Returns:
+        Single chunk response with notes and metadata
+
+    Raises:
+        HTTPException: If page not found or generation fails
+    """
+    logger.info(
+        f"Chunked auto note generation requested for page_id={page_id}, "
+        f"chunk {request.chunk_index + 1}/{request.total_chunks}, "
+        f"batch_id={request.batch_id}, user_id={current_user.id}"
+    )
+
+    service = AutoNoteService(db)
+
+    try:
+        result = await service.generate_auto_notes_chunked(
+            page_id=page_id,
+            user_id=current_user.id,
+            llm_provider_id=request.llm_provider_id,
+            chunk_index=request.chunk_index,
+            total_chunks=request.total_chunks,
+            chunk_dom=request.chunk_dom,
+            batch_id=request.batch_id,
+            position_offset=request.position_offset,
+            template_type=request.template_type,
+            parent_context=request.parent_context,
+            custom_instructions=request.custom_instructions,
+        )
+
+        # Convert Note objects to schema
+        notes_data = [
+            GeneratedNoteData(
+                id=note.id,
+                content=note.content,
+                highlighted_text=note.highlighted_text,
+                position_x=note.position_x,
+                position_y=note.position_y,
+            )
+            for note in result["notes"]
+        ]
+
+        # Return single chunk response (stateless, no aggregation)
+        return ChunkedAutoNoteResponse(
+            notes=notes_data,
+            chunk_index=request.chunk_index,
+            total_chunks=request.total_chunks,
+            batch_id=request.batch_id,
+            tokens_used=result["tokens_used"],
+            cost_usd=result["cost_usd"],
+            input_tokens=result["input_tokens"],
+            output_tokens=result["output_tokens"],
+            generation_time_ms=result["generation_time_ms"],
+        )
+
+    except ValueError as e:
+        logger.error(f"Value error during chunked auto note generation: {e}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error during chunked auto note generation: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate auto notes from chunk: {str(e)}",
         )
 
 

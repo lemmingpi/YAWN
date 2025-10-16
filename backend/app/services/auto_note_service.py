@@ -515,6 +515,229 @@ class AutoNoteService:
             "output_tokens": generation_result["output_tokens"],
         }
 
+    async def generate_auto_notes_chunked(
+        self,
+        page_id: int,
+        user_id: int,
+        llm_provider_id: int,
+        chunk_index: int,
+        total_chunks: int,
+        chunk_dom: str,
+        batch_id: str,
+        position_offset: int = 0,
+        template_type: str = "study_guide",
+        parent_context: Optional[Dict[str, Any]] = None,
+        custom_instructions: Optional[str] = None,
+    ) -> Dict:
+        """
+        Generate AI-powered study notes from a DOM chunk (stateless).
+
+        Each chunk is processed independently with no backend session management.
+        Frontend-generated batch_id links all notes together.
+
+        This enables:
+        - Complete page coverage by processing chunks in parallel (3 at a time)
+        - Simpler backend with no session state
+        - Better scalability for large pages
+
+        Args:
+            page_id: ID of page to generate notes for (already registered)
+            user_id: ID of user creating the notes
+            llm_provider_id: LLM provider to use
+            chunk_index: Index of current chunk (0-based)
+            total_chunks: Total number of chunks
+            chunk_dom: DOM content for this chunk
+            batch_id: Frontend-generated batch ID (shared across all chunks)
+            position_offset: Position offset for notes in this chunk
+            template_type: Type of template ('study_guide' or 'content_review')
+            parent_context: Parent document context for selectors
+            custom_instructions: Optional user instructions
+
+        Returns:
+            Dictionary with notes and metadata for this chunk only
+
+        Raises:
+            ValueError: If page not found or JSON parsing fails
+        """
+        start_time = time.time()
+
+        logger.info(
+            f"Processing chunk {chunk_index + 1}/{total_chunks}, "
+            f"batch_id={batch_id}, page_id={page_id}"
+        )
+
+        # Fetch page with site relationship
+        result = await self.db.execute(
+            select(Page).options(selectinload(Page.site)).where(Page.id == page_id)
+        )
+        page = result.scalar_one_or_none()
+
+        if not page:
+            raise ValueError(f"Page with ID {page_id} not found")
+
+        # Build prompt with chunk context
+        chunk_instructions = (
+            f"Processing chunk {chunk_index + 1} of {total_chunks}. "
+            f"Generate notes only for content in this chunk. "
+        )
+        if custom_instructions:
+            chunk_instructions += custom_instructions
+
+        prompt = await self._build_prompt(
+            page,
+            template_type,
+            chunk_instructions,
+            page_source=None,
+            page_dom=chunk_dom,
+        )
+
+        logger.info(
+            f"Chunk {chunk_index + 1}/{total_chunks}: Prompt built, {len(prompt)} chars"
+        )
+
+        # Generate using Gemini
+        provider = await create_gemini_provider()
+        generation_result = await provider.generate_content_large(prompt=prompt)
+
+        logger.info(
+            f"Chunk {chunk_index + 1}/{total_chunks}: Generation complete, "
+            f"{generation_result['input_tokens']} in, {generation_result['output_tokens']} out"
+        )
+
+        # Parse JSON response
+        generated_content = generation_result["content"]
+
+        # Remove markdown code blocks if present
+        if generated_content.startswith("```json"):
+            generated_content = generated_content.replace("```json", "", 1)
+        if generated_content.startswith("```"):
+            generated_content = generated_content.replace("```", "", 1)
+        if generated_content.endswith("```"):
+            generated_content = generated_content.rsplit("```", 1)[0]
+
+        generated_content = generated_content.strip()
+
+        try:
+            parsed_data = json.loads(generated_content)
+            notes_data = parsed_data.get("notes", [])
+        except json.JSONDecodeError as e:
+            logger.error(
+                f"Failed to parse JSON response for chunk {chunk_index + 1}: {e}"
+            )
+            raise ValueError(f"Failed to parse LLM response as JSON: {e}")
+
+        # Create Note records for this chunk
+        created_notes = []
+        if notes_data:
+            for idx, note_data in enumerate(notes_data):
+                # Extract selectors
+                css_selector = note_data.get("css_selector")
+                xpath = note_data.get("xpath")
+
+                # Fallback to old format
+                if not css_selector and not xpath:
+                    position = note_data.get("position") or note_data.get(
+                        "position_hint"
+                    )
+                    if position:
+                        css_selector, xpath = detect_selector_type(position)
+
+                # Validate and repair selectors if chunk_dom available
+                validation_metadata = None
+                if chunk_dom and css_selector:
+                    highlighted_text = note_data.get("highlighted_text", "")
+
+                    is_valid, match_count, _ = self._validator.validate_selector(
+                        chunk_dom, css_selector
+                    )
+
+                    if not is_valid:
+                        repair_result = self._validator.repair_selector(
+                            chunk_dom, highlighted_text, css_selector, xpath
+                        )
+
+                        if repair_result["success"]:
+                            css_selector = repair_result["css_selector"]
+                            xpath = repair_result["xpath"]
+                            validation_metadata = {
+                                "original_selector": note_data.get("css_selector"),
+                                "was_repaired": True,
+                                "match_count": repair_result["match_count"],
+                                "text_similarity": repair_result["text_similarity"],
+                            }
+
+                # Build anchor_data
+                anchor_data: Dict[str, Any] = {
+                    "auto_generated": True,
+                    "chunk_index": chunk_index,
+                }
+
+                if validation_metadata:
+                    anchor_data["validation"] = validation_metadata
+
+                if css_selector:
+                    anchor_data["elementSelector"] = css_selector
+                if xpath:
+                    anchor_data["elementXPath"] = xpath
+
+                # Build selectionData
+                highlighted_text = note_data.get("highlighted_text", "")
+                if highlighted_text and (css_selector or xpath):
+                    selector = css_selector or xpath
+                    anchor_data["selectionData"] = {
+                        "selectedText": highlighted_text,
+                        "startSelector": selector,
+                        "endSelector": selector,
+                        "startOffset": 0,
+                        "endOffset": len(highlighted_text),
+                        "startContainerType": 3,
+                        "endContainerType": 3,
+                        "commonAncestorSelector": selector,
+                    }
+
+                # Create unique server_link_id using batch_id + chunk_index + idx
+                server_link_id = f"{batch_id}_{chunk_index}_{idx}"
+
+                note = Note(
+                    content=note_data.get("commentary", ""),
+                    highlighted_text=highlighted_text,
+                    page_section_html=None,
+                    position_x=100 + position_offset + (idx * 20),
+                    position_y=100 + position_offset + (idx * 20),
+                    anchor_data=anchor_data,
+                    page_id=page_id,
+                    user_id=user_id,
+                    generation_batch_id=batch_id,  # Use frontend-provided batch_id
+                    server_link_id=server_link_id,
+                    is_active=True,
+                )
+                self.db.add(note)
+                created_notes.append(note)
+
+            await self.db.commit()
+
+            # Refresh to get IDs
+            for note in created_notes:
+                await self.db.refresh(note)
+
+            logger.info(
+                f"Chunk {chunk_index + 1}/{total_chunks}: Created {len(created_notes)} notes"
+            )
+
+        # Calculate generation time for this chunk
+        generation_time_ms = int((time.time() - start_time) * 1000)
+
+        # Return results for this chunk only (stateless)
+        return {
+            "notes": created_notes,
+            "tokens_used": generation_result["input_tokens"]
+            + generation_result["output_tokens"],
+            "cost_usd": generation_result["cost"],
+            "input_tokens": generation_result["input_tokens"],
+            "output_tokens": generation_result["output_tokens"],
+            "generation_time_ms": generation_time_ms,
+        }
+
     async def preview_prompt(
         self,
         page_id: int,

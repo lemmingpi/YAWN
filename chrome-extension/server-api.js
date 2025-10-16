@@ -572,6 +572,52 @@ const ServerAPI = {
   },
 
   /**
+   * Generate auto notes with DOM chunk (for large pages)
+   * Used in batched parallel processing - processes multiple chunks simultaneously
+   * @param {number} pageId - Page ID (already registered)
+   * @param {Object} chunkData - Chunk metadata and content
+   * @returns {Promise<Object>} Generation response for this chunk
+   */
+  async generateAutoNotesWithDOMChunk(pageId, chunkData) {
+    try {
+      // Check authentication before attempting
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot generate auto notes");
+      }
+
+      const requestData = {
+        llm_provider_id: 1, // Default to Gemini
+        template_type: "study_guide",
+        chunk_index: chunkData.chunk_index,
+        total_chunks: chunkData.total_chunks,
+        chunk_dom: chunkData.chunk_dom,
+        parent_context: chunkData.parent_context,
+        batch_id: chunkData.batch_id, // Frontend-generated batch ID
+        position_offset: chunkData.position_offset, // Position offset for this chunk
+        custom_instructions:
+          "Use the provided DOM content chunk to generate precise study notes. " +
+          `This is chunk ${chunkData.chunk_index + 1} of ${chunkData.total_chunks}.`,
+      };
+
+      const response = await this.makeRequest(`/auto-notes/pages/${pageId}/generate/chunked`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+      });
+
+      const result = await response.json();
+      console.log(
+        `[Web Notes] Generated ${result.notes?.length || 0} notes ` +
+          `from chunk ${chunkData.chunk_index + 1}/${chunkData.total_chunks}`,
+      );
+      return result;
+    } catch (error) {
+      console.error("[Web Notes] Failed to generate auto notes with DOM chunk:", error);
+      throw error;
+    }
+  },
+
+  /**
    * Check if current request should include authentication
    * @returns {Promise<boolean>} True if authenticated requests should be made
    */

@@ -2577,12 +2577,273 @@ function extractPageDOMForTest() {
   }
 }
 
+// ============================================================================
+// DOM CHUNKING UTILITY FUNCTIONS
+// ============================================================================
+
 /**
- * Handle DOM test auto-notes generation
+ * Configuration constant for rate limiting parallel chunk processing.
+ * This controls how many chunks are processed simultaneously to avoid
+ * overwhelming the backend or hitting rate limits.
+ */
+const MAX_CONCURRENT_CHUNKS = 3; // Process 3 chunks at a time
+
+/**
+ * Estimate token count from text using a conservative heuristic.
+ * HTML typically uses ~4 characters per token due to markup overhead.
+ *
+ * @param {string} text - Text content to estimate tokens for
+ * @returns {number} Estimated token count
+ */
+function estimateTokenCount(text) {
+  // Conservative estimate: 1 token ≈ 4 characters for HTML
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Find semantic boundaries in HTML for intelligent chunking.
+ * Prioritizes meaningful HTML boundaries to avoid splitting mid-content.
+ *
+ * Priority order:
+ * 1. <section> elements with IDs or classes
+ * 2. <article> elements
+ * 3. <div> elements with semantic classes (content, main, article)
+ * 4. <div> elements with IDs
+ * 5. Major headings (h1, h2)
+ * 6. Fallback to paragraphs and divs
+ *
+ * @param {HTMLElement} element - Root element to analyze for boundaries
+ * @returns {Array<HTMLElement>} Array of boundary elements to use for chunking
+ */
+function findSemanticBoundaries(element) {
+  // Priority order for splitting - try each until we find multiple boundaries
+  const selectors = [
+    "section[id], section[class]", // Semantic sections with IDs/classes
+    "article", // Article elements
+    'div[class*="content"], div[class*="main"], div[class*="article"]', // Content containers
+    "div[id]", // Divs with IDs
+    "h1, h2", // Major headings
+  ];
+
+  // Try each selector until we find at least 2 boundaries
+  for (const selector of selectors) {
+    const boundaries = Array.from(element.querySelectorAll(selector));
+    if (boundaries.length > 1) {
+      return boundaries;
+    }
+  }
+
+  // Fallback: split by paragraphs and divs if no semantic boundaries found
+  return Array.from(element.querySelectorAll("p, div"));
+}
+
+/**
+ * Extract parent context metadata for selector accuracy.
+ * This context helps the LLM generate accurate CSS selectors relative
+ * to the full document structure, even when processing a chunk.
+ *
+ * @param {HTMLElement} element - Root element (typically documentElement)
+ * @returns {Object} Context metadata including body classes, IDs, and structure
+ */
+function extractParentContext(element) {
+  const body = element.querySelector("body") || element;
+  return {
+    body_classes: Array.from(body.classList || []),
+    body_id: body.id || null,
+    main_container: body.querySelector('main, [role="main"]')?.tagName.toLowerCase(),
+    document_title: element.querySelector("title")?.textContent || "",
+  };
+}
+
+/**
+ * Chunk DOM content into semantic pieces that fit within token limits.
+ * Uses intelligent boundary detection to avoid splitting mid-content.
+ *
+ * Algorithm:
+ * 1. If content fits in one chunk, return single chunk
+ * 2. Parse HTML and find semantic boundaries
+ * 3. Group boundaries into chunks staying under maxTokensPerChunk
+ * 4. Merge small chunks to meet minimum size requirement
+ * 5. Build chunk objects with metadata
+ *
+ * @param {string} htmlContent - Full HTML content to chunk
+ * @param {number} maxTokensPerChunk - Maximum tokens per chunk (default: 10000)
+ * @returns {Array<Object>} Array of chunk objects with metadata
+ */
+function chunkDOMContent(htmlContent, maxTokensPerChunk = 10000) {
+  const maxCharsPerChunk = maxTokensPerChunk * 4; // ~4 chars per token
+  const minCharsPerChunk = 10000; // Minimum ~2500 tokens to avoid tiny chunks
+
+  // If small enough, return as single chunk
+  if (htmlContent.length <= maxCharsPerChunk) {
+    return [
+      {
+        chunk_index: 0,
+        total_chunks: 1,
+        chunk_dom: htmlContent,
+        parent_context: null,
+        is_final_chunk: true,
+      },
+    ];
+  }
+
+  // Parse HTML into DOM for analysis
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, "text/html");
+  const body = doc.body;
+
+  // Extract parent context once for all chunks
+  const parentContext = extractParentContext(doc.documentElement);
+
+  // Find semantic boundaries for intelligent splitting
+  const boundaries = findSemanticBoundaries(body);
+
+  // Group boundaries into chunks staying under size limit
+  const chunks = [];
+  let currentChunk = [];
+  let currentSize = 0;
+
+  for (const element of boundaries) {
+    const elementHTML = element.outerHTML;
+    const elementSize = elementHTML.length;
+
+    // If adding this element would exceed limit and we have content, start new chunk
+    if (currentSize + elementSize > maxCharsPerChunk && currentChunk.length > 0) {
+      chunks.push(currentChunk);
+      currentChunk = [element];
+      currentSize = elementSize;
+    } else {
+      currentChunk.push(element);
+      currentSize += elementSize;
+    }
+  }
+
+  // Add final chunk
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  // Merge small chunks to meet minimum size requirement
+  const mergedChunks = [];
+  let currentMerged = [];
+  let currentMergedSize = 0;
+
+  for (const chunk of chunks) {
+    const chunkSize = chunk.reduce((sum, el) => sum + el.outerHTML.length, 0);
+
+    // If current merged chunk is empty, start with this chunk
+    if (currentMerged.length === 0) {
+      currentMerged = chunk;
+      currentMergedSize = chunkSize;
+    } else if (
+      // If current merged is too small and adding this won't exceed max, merge
+      currentMergedSize < minCharsPerChunk &&
+      currentMergedSize + chunkSize <= maxCharsPerChunk
+    ) {
+      currentMerged = currentMerged.concat(chunk);
+      currentMergedSize += chunkSize;
+    } else {
+      // Otherwise, finalize current merged chunk and start new one
+      mergedChunks.push(currentMerged);
+      currentMerged = chunk;
+      currentMergedSize = chunkSize;
+    }
+  }
+
+  // Add final merged chunk
+  if (currentMerged.length > 0) {
+    mergedChunks.push(currentMerged);
+  }
+
+  // Build chunk objects with metadata
+  const totalChunks = mergedChunks.length;
+  return mergedChunks.map((elements, index) => {
+    const chunkDOM = elements.map(el => el.outerHTML).join("\n");
+    return {
+      chunk_index: index,
+      total_chunks: totalChunks,
+      chunk_dom: chunkDOM,
+      parent_context: parentContext,
+      is_final_chunk: index === totalChunks - 1,
+    };
+  });
+}
+
+/**
+ * Extract page DOM in chunks for large pages.
+ * This is the main entry point for chunked DOM extraction.
+ *
+ * Process:
+ * 1. Clone and clean document (same as extractPageDOMForTest)
+ * 2. Remove non-content elements (scripts, styles, etc.)
+ * 3. Remove non-semantic attributes
+ * 4. Chunk the content intelligently using semantic boundaries
+ *
+ * @returns {Array<Object>} Array of chunk objects with metadata
+ */
+function extractPageDOMInChunks() {
+  try {
+    console.log("[Web Notes] Extracting page DOM in chunks for auto-note generation");
+
+    // Clone and clean document (same as extractPageDOMForTest)
+    const clonedDoc = document.documentElement.cloneNode(true);
+
+    // Remove scripts, styles, and other non-content elements
+    const removeSelectors = ["script", "style", "noscript", "iframe", "object", "embed", "svg", ".web-note"];
+    removeSelectors.forEach(selector => {
+      clonedDoc.querySelectorAll(selector).forEach(el => el.remove());
+    });
+
+    // Remove all attributes except for semantic ones
+    const preserveAttrs = ["id", "class", "data-section", "data-paragraph", "role", "aria-label"];
+    clonedDoc.querySelectorAll("*").forEach(el => {
+      const attrs = Array.from(el.attributes);
+      attrs.forEach(attr => {
+        if (!preserveAttrs.includes(attr.name)) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+
+    // Get the body content
+    const bodyElement = clonedDoc.querySelector("body");
+    if (!bodyElement) {
+      console.warn("[Web Notes] No body element found");
+      return [
+        {
+          chunk_index: 0,
+          total_chunks: 1,
+          chunk_dom: document.body.innerHTML.substring(0, 50000),
+          parent_context: null,
+          is_final_chunk: true,
+        },
+      ];
+    }
+
+    let contentHTML = bodyElement.innerHTML;
+    // Clean up excessive whitespace
+    contentHTML = contentHTML.replace(/\s+/g, " ").trim();
+
+    // Chunk the content
+    const chunks = chunkDOMContent(contentHTML);
+
+    const totalSize = contentHTML.length;
+    console.log(`[Web Notes] Split ${Math.round(totalSize / 1000)}KB into ${chunks.length} chunks`);
+
+    return chunks;
+  } catch (error) {
+    console.error("[Web Notes] Error extracting page DOM in chunks:", error);
+    throw error;
+  }
+}
+
+/**
+ * Handle DOM test auto-notes generation with batched parallel processing
+ * Processes large pages by splitting into chunks and processing 3 chunks at a time
  */
 async function handleGenerateDOMTestNotes() {
   try {
-    console.log("[Web Notes] Starting DOM test auto-note generation");
+    console.log("[Web Notes] Starting DOM test auto-note generation with chunking");
 
     // Check authentication
     const isAuth = await isServerAuthenticated();
@@ -2591,41 +2852,114 @@ async function handleGenerateDOMTestNotes() {
       return;
     }
 
-    // Extract page DOM
-    const pageDom = extractPageDOMForTest();
+    // Extract page DOM in chunks
+    const chunks = extractPageDOMInChunks();
+    const totalChunks = chunks.length;
 
-    // Get or create page registration
+    console.log(`[Web Notes] Processing ${totalChunks} chunk(s) in batches of ${MAX_CONCURRENT_CHUNKS}`);
+
+    // Generate batch ID upfront (shared across all chunks)
+    const batchId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Add batch_id and position_offset to all chunks
+    chunks.forEach((chunk, index) => {
+      chunk.batch_id = batchId;
+      chunk.position_offset = index * 20; // Stagger positions by 20px per chunk
+    });
+
+    // Show initial progress for large pages
+    const numBatches = Math.ceil(totalChunks / MAX_CONCURRENT_CHUNKS);
+    if (totalChunks > 1) {
+      alert(
+        `Large page detected! Processing ${totalChunks} chunks in ${numBatches} batches.\n\n` +
+          `This will take approximately ${Math.ceil((numBatches * 30) / 60)} minute(s). You'll be notified when complete.`,
+      );
+    }
+
+    // Get page info
     const pageUrl = window.location.href;
     const pageTitle = document.title || "Untitled";
 
-    // Send request to background script
-    console.log("[Web Notes] Sending DOM content to backend for note generation");
-
-    const response = await chrome.runtime.sendMessage({
-      action: "API_generateDOMTestNotes",
+    // Register page first (before any chunks)
+    const pageData = await chrome.runtime.sendMessage({
+      action: "API_registerPage",
       url: pageUrl,
       title: pageTitle,
-      pageDom: pageDom,
     });
 
-    if (response.success && response.data) {
-      const result = response.data;
-      if (result.notes && result.notes.length > 0) {
-        alert(
-          `Successfully generated ${result.notes.length} study notes with DOM!\n\n` +
-            `Batch ID: ${result.generation_batch_id}\n` +
-            `Cost: $${result.cost_usd.toFixed(4)}`,
-        );
+    if (!pageData || !pageData.id) {
+      alert("Failed to register page. Please try again.");
+      return;
+    }
 
-        // Refresh the page to load the new notes
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else {
-        alert("No notes were generated. The content might not have sufficient information.");
+    console.log(`[Web Notes] Page registered with ID: ${pageData.id}`);
+
+    // Process chunks in batches (parallel within batch, sequential between batches)
+    const allResults = [];
+
+    for (let i = 0; i < chunks.length; i += MAX_CONCURRENT_CHUNKS) {
+      const batch = chunks.slice(i, i + MAX_CONCURRENT_CHUNKS);
+      const batchNum = Math.floor(i / MAX_CONCURRENT_CHUNKS) + 1;
+
+      console.log(
+        `[Web Notes] Processing batch ${batchNum}/${numBatches} ` +
+          `(chunks ${i + 1}-${Math.min(i + MAX_CONCURRENT_CHUNKS, totalChunks)})`,
+      );
+
+      // Process batch in parallel (up to MAX_CONCURRENT_CHUNKS at once)
+      const batchPromises = batch.map(chunk =>
+        chrome.runtime
+          .sendMessage({
+            action: "API_generateDOMTestNotesChunk",
+            pageId: pageData.id, // Use the already-registered page ID
+            chunkData: chunk,
+          })
+          .catch(error => ({
+            success: false,
+            error: error.message,
+            chunk_index: chunk.chunk_index,
+          })),
+      );
+
+      // Wait for all chunks in this batch to complete
+      const batchResults = await Promise.all(batchPromises);
+      allResults.push(...batchResults);
+
+      console.log(`[Web Notes] Batch ${batchNum}/${numBatches} complete`);
+    }
+
+    // Aggregate successful results
+    const successful = allResults.filter(r => r.success && r.data);
+    const failed = allResults.filter(r => !r.success || !r.data);
+
+    const allNotes = successful.flatMap(r => r.data.notes || []);
+    const totalCost = successful.reduce((sum, r) => sum + (r.data.cost_usd || 0), 0);
+    const totalTokens = successful.reduce((sum, r) => sum + (r.data.tokens_used || 0), 0);
+
+    // Show final results
+    if (allNotes.length > 0) {
+      let message =
+        `Successfully generated ${allNotes.length} study notes from ${successful.length}/${totalChunks} chunks!\n\n` +
+        `Batch ID: ${batchId}\n` +
+        `Total Cost: $${totalCost.toFixed(4)}\n` +
+        `Total Tokens: ${totalTokens.toLocaleString()}`;
+
+      if (failed.length > 0) {
+        message += `\n\nWarning: ${failed.length} chunk(s) failed to process.`;
       }
+
+      alert(message);
+
+      // Refresh the page to load the new notes
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } else {
-      throw new Error(response.error || "Failed to generate notes");
+      alert(
+        `No notes were generated from ${totalChunks} chunk(s).\n` +
+          `Successful: ${successful.length}, Failed: ${failed.length}\n\n` +
+          "The content might not have sufficient information or all chunks failed.",
+      );
     }
   } catch (error) {
     console.error("[Web Notes] Error generating DOM test notes:", error);

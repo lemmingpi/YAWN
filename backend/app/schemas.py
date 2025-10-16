@@ -944,3 +944,55 @@ class BatchDeleteResponse(BaseModel):
 
     deleted_count: int = Field(..., description="Number of notes deleted")
     generation_batch_id: str = Field(..., description="Batch ID that was deleted")
+
+
+class ChunkedAutoNoteRequest(BaseModel):
+    """Schema for chunked auto note generation requests (stateless).
+
+    Used for processing large pages by splitting them into chunks.
+    Frontend generates batch_id and sends chunks in parallel (3 at a time).
+    Backend processes each chunk independently without session management.
+    """
+
+    llm_provider_id: int = Field(1, description="LLM provider ID to use")
+    template_type: str = Field(
+        "study_guide",
+        description="Type of template: 'study_guide' or 'content_review'",
+    )
+    chunk_index: int = Field(..., ge=0, description="Index of current chunk (0-based)")
+    total_chunks: int = Field(..., gt=0, description="Total number of chunks")
+    chunk_dom: str = Field(..., min_length=1, description="DOM content for this chunk")
+    parent_context: Optional[Dict[str, Any]] = Field(
+        None, description="Parent document context for selector accuracy"
+    )
+    batch_id: str = Field(
+        ..., description="Frontend-generated batch ID (shared across all chunks)"
+    )
+    position_offset: int = Field(
+        0, description="Position offset for notes in this chunk"
+    )
+    custom_instructions: Optional[str] = Field(
+        None, description="Optional custom instructions for generation"
+    )
+
+
+class ChunkedAutoNoteResponse(BaseModel):
+    """Schema for single chunk response (stateless, no aggregation).
+
+    Each chunk returns its generated notes immediately.
+    Frontend aggregates results from all chunks.
+    """
+
+    notes: List[GeneratedNoteData] = Field(
+        ..., description="Notes generated from this chunk"
+    )
+    chunk_index: int = Field(..., description="Index of processed chunk")
+    total_chunks: int = Field(..., description="Total chunks in request")
+    batch_id: str = Field(..., description="Batch ID for this set of notes")
+    tokens_used: int = Field(..., description="Tokens consumed for this chunk")
+    cost_usd: float = Field(..., description="Cost for this chunk in USD")
+    input_tokens: int = Field(..., description="Input tokens for this chunk")
+    output_tokens: int = Field(..., description="Output tokens for this chunk")
+    generation_time_ms: int = Field(
+        ..., description="Generation time for this chunk in milliseconds"
+    )
