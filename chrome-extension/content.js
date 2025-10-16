@@ -927,9 +927,8 @@ function makeDraggable(noteElement, noteData, targetElement) {
       ensureNoteVisibility(noteElement, noteData);
     }, TIMING.DOM_UPDATE_DELAY);
 
-    console.log(
-      `[Web Notes] Finished dragging note ${noteData.id} to offset ` + `(${noteData.offsetX || 0}, ${noteData.offsetY || 0})`
-    );
+    const offset = `(${noteData.offsetX || 0}, ${noteData.offsetY || 0})`;
+    console.log(`[Web Notes] Finished dragging note ${noteData.id} to offset ${offset}`);
   }
 
   // Add mousedown event listener to start dragging
@@ -2613,7 +2612,9 @@ async function handleGenerateDOMTestNotes() {
       const result = response.data;
       if (result.notes && result.notes.length > 0) {
         alert(
-          `Successfully generated ${result.notes.length} study notes with DOM!\n\nBatch ID: ${result.generation_batch_id}\nCost: $${result.cost_usd.toFixed(4)}`
+          `Successfully generated ${result.notes.length} study notes with DOM!\n\n` +
+            `Batch ID: ${result.generation_batch_id}\n` +
+            `Cost: $${result.cost_usd.toFixed(4)}`
         );
 
         // Refresh the page to load the new notes

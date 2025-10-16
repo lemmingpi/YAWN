@@ -44,12 +44,15 @@
       "mcp__serena__*",
       "mcp__serena__check_onboarding_performed",
       "mcp__serena__onboarding",
-      "mcp__serena__list_dir"
+      "mcp__serena__list_dir",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/pre-commit run:*)"
     ],
     "deny": [],
     "ask": [],
     "additionalDirectories": [
       "C:\\Users\\gordo\\cluade\\notes1\\"
     ]
-  }
+  },
+  "outputStyle": "default"
 }

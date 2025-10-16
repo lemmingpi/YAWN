@@ -527,10 +527,10 @@ const ServerAPI = {
       });
 
       const createdPage = await response.json();
-      console.log(`[Web Notes] Page registered successfully:`, createdPage);
+      console.log("[Web Notes] Page registered successfully:", createdPage);
       return createdPage;
     } catch (error) {
-      console.error(`[Web Notes] Failed to register page:`, error);
+      console.error("[Web Notes] Failed to register page:", error);
       throw error;
     }
   },
@@ -566,7 +566,7 @@ const ServerAPI = {
       console.log(`[Web Notes] Generated ${result.notes?.length || 0} auto notes with DOM`);
       return result;
     } catch (error) {
-      console.error(`[Web Notes] Failed to generate auto notes with DOM:`, error);
+      console.error("[Web Notes] Failed to generate auto notes with DOM:", error);
       throw error;
     }
   },

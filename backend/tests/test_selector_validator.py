@@ -103,6 +103,46 @@ class TestValidateSelector:
         assert count == 1
         assert element is not None
 
+    def test_validate_with_text_containment_success(
+        self, validator: SelectorValidator, sample_html: str
+    ) -> None:
+        """Test validation succeeds when selector matches and contains expected text."""
+        is_valid, count, element = validator.validate_selector(
+            sample_html,
+            "article#article-1 > p.intro",
+            expected_text="introduction paragraph",
+        )
+        assert is_valid is True
+        assert count == 1
+        assert element is not None
+
+    def test_validate_with_text_containment_failure(
+        self, validator: SelectorValidator, sample_html: str
+    ) -> None:
+        """Test validation fails when selector matches but text not in element."""
+        is_valid, count, element = validator.validate_selector(
+            sample_html,
+            "article#article-1 > p.intro",
+            expected_text="text that does not exist",
+        )
+        assert is_valid is False  # Should fail due to text mismatch
+        assert count == 1  # Element was found
+        assert element is not None  # Element returned
+
+    def test_validate_with_text_containment_wrong_element(
+        self, validator: SelectorValidator, sample_html: str
+    ) -> None:
+        """Test validation fails when selector points to wrong element."""
+        # Selector points to first article, but text is in second article
+        is_valid, count, element = validator.validate_selector(
+            sample_html,
+            "#article-1",
+            expected_text="Introduction for second article",
+        )
+        assert is_valid is False
+        assert count == 1
+        assert element is not None
+
 
 class TestFindTextInDom:
     """Tests for finding text in DOM."""
@@ -237,6 +277,143 @@ class TestRepairSelector:
 
         # Should still succeed by picking best match
         assert result["match_count"] >= 1
+
+    def test_repair_generates_valid_selector(
+        self, validator: SelectorValidator, sample_html: str
+    ) -> None:
+        """Test that repaired selector actually works on the DOM."""
+        bad_selector = "#does-not-exist"
+        text = "This is the introduction paragraph."
+
+        result = validator.repair_selector(sample_html, text, bad_selector, None)
+
+        assert result["success"] is True
+
+        # Validate the repaired CSS selector actually works
+        assert result["css_selector"] is not None
+        is_valid, count, element = validator.validate_selector(
+            sample_html, result["css_selector"], expected_text=text
+        )
+        assert is_valid is True, "Repaired selector should uniquely match one element"
+        assert count == 1
+        assert element is not None
+
+    def test_repair_validates_selector_contains_text(
+        self, validator: SelectorValidator, sample_html: str
+    ) -> None:
+        """Test that repaired selector points to element containing the text."""
+        bad_selector = "#wrong"
+        text = "Another paragraph here."
+
+        result = validator.repair_selector(sample_html, text, bad_selector, None)
+
+        assert result["success"] is True
+        assert result["css_selector"] is not None
+
+        # Verify the selector contains the expected text
+        from lxml import html as lxml_html
+        from lxml.cssselect import CSSSelector
+
+        dom = lxml_html.fromstring(sample_html)
+        selector = CSSSelector(result["css_selector"])
+        matches = selector(dom)
+
+        assert len(matches) == 1
+        matched_text = validator._get_element_text(matches[0])
+        assert text in matched_text, "Matched element must contain the highlighted text"
+
+    def test_repair_fails_validation_for_non_unique_selector(
+        self, validator: SelectorValidator, sample_html: str
+    ) -> None:
+        """Test repair fails if generated selector is not unique."""
+        # This test verifies the validation catches non-unique selectors
+        # In practice, generate_robust_selector should create unique selectors,
+        # but we want to ensure validation would catch it if it didn't
+        bad_selector = "#wrong"
+        text = "This is the introduction paragraph."
+
+        result = validator.repair_selector(sample_html, text, bad_selector, None)
+
+        # The repair should succeed with a unique selector
+        assert result["success"] is True
+
+        # Double-check uniqueness
+        is_valid, count, _ = validator.validate_selector(
+            sample_html, result["css_selector"]
+        )
+        assert count == 1, "Repaired selector must be unique"
+
+
+class TestSelectorGeneration:
+    """Tests for CSS selector generation logic."""
+
+    def test_skip_generic_wrapper_divs(self, validator: SelectorValidator) -> None:
+        """Test that generic divs without IDs or classes are skipped."""
+        html_with_wrapper = """
+        <div>
+          <article id="main">
+            <p class="intro">Test paragraph</p>
+          </article>
+        </div>
+        """
+        matches = validator.find_text_in_dom(html_with_wrapper, "Test paragraph")
+        assert len(matches) > 0
+
+        elem, _ = matches[0]
+        css, _ = validator.generate_robust_selector(elem)
+
+        # Should start with article, not div
+        assert css is not None
+        assert "article" in css
+        assert not css.startswith("div >"), "Should skip generic wrapper div"
+
+    def test_keep_divs_with_classes(self, validator: SelectorValidator) -> None:
+        """Test that divs with classes are kept in selector."""
+        html_with_classes = """
+        <div class="container">
+          <div>
+            <p class="text">Content here</p>
+          </div>
+        </div>
+        """
+        matches = validator.find_text_in_dom(html_with_classes, "Content here")
+        assert len(matches) > 0
+
+        elem, _ = matches[0]
+        css, _ = validator.generate_robust_selector(elem)
+
+        # Should keep div.container but skip generic div
+        assert css is not None
+        assert "div.container" in css
+
+    def test_stop_at_semantic_elements(self, validator: SelectorValidator) -> None:
+        """Test that selector generation stops at semantic anchor elements."""
+        html_semantic = """
+        <body>
+          <div>
+            <main>
+              <div>
+                <article>
+                  <p>Semantic content</p>
+                </article>
+              </div>
+            </main>
+          </div>
+        </body>
+        """
+        matches = validator.find_text_in_dom(html_semantic, "Semantic content")
+        assert len(matches) > 0
+
+        elem, _ = matches[0]
+        css, _ = validator.generate_robust_selector(elem)
+
+        # Should stop at semantic element (main or article)
+        assert css is not None
+        assert any(
+            semantic in css for semantic in ["main", "article"]
+        ), "Should include semantic anchor"
+        # Should not traverse all the way to body through generic divs
+        assert css.count(">") <= 2, "Should have short path due to semantic anchors"
 
 
 class TestEdgeCases:

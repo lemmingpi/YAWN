@@ -36,3 +36,7 @@ google-genai>=1.41.0        # New Gemini API client with image generation suppor
 # Authentication and Security
 google-auth==2.40.3         # Google authentication library
 PyJWT==2.10.1              # JWT token handling
+
+# DOM Processing and Validation (for auto-note selector validation)
+lxml>=5.1.0                # HTML/XML parsing and DOM manipulation
+cssselect>=1.2.0           # CSS selector evaluation

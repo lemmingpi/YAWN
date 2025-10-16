@@ -30,7 +30,10 @@ class SelectorValidator:
         self.fuzzy_threshold = fuzzy_threshold
 
     def validate_selector(
-        self, page_dom: str, css_selector: str
+        self,
+        page_dom: str,
+        css_selector: str,
+        expected_text: Optional[str] = None,
     ) -> Tuple[bool, int, Optional[Any]]:
         """
         Validate if CSS selector works and is unique.
@@ -38,10 +41,11 @@ class SelectorValidator:
         Args:
             page_dom: HTML content as string
             css_selector: CSS selector to validate
+            expected_text: Optional text that should be contained in matched element
 
         Returns:
             Tuple of (is_valid, match_count, first_element)
-            - is_valid: True if exactly one element matches
+            - is_valid: True if exactly one element matches AND contains expected_text (if provided)
             - match_count: Number of elements matched
             - first_element: The matched element if any, else None
         """
@@ -50,11 +54,23 @@ class SelectorValidator:
             selector = CSSSelector(css_selector)
             matches = selector(dom)
 
-            is_valid = len(matches) == 1
             match_count = len(matches)
             first_element = matches[0] if matches else None
 
-            if not is_valid and match_count > 0:
+            # Check uniqueness
+            is_valid = match_count == 1
+
+            # Additionally check text containment if expected_text provided
+            if is_valid and expected_text and first_element is not None:
+                element_text = self._get_element_text(first_element)
+                if expected_text not in element_text:
+                    is_valid = False
+                    logger.debug(
+                        f"CSS selector '{css_selector}' matched element but does not "
+                        f"contain expected text: '{expected_text[:50]}...'"
+                    )
+
+            if not is_valid and match_count > 0 and not expected_text:
                 logger.debug(
                     f"CSS selector '{css_selector}' matched {match_count} elements "
                     "(expected 1)"
@@ -75,6 +91,7 @@ class SelectorValidator:
         Strategy:
         1. Try exact text match first (fast)
         2. If no exact match and use_fuzzy=True, try fuzzy matching
+        3. Prioritize most specific (leaf-most) elements
 
         Args:
             page_dom: HTML content as string
@@ -82,7 +99,7 @@ class SelectorValidator:
             use_fuzzy: Whether to use fuzzy matching as fallback
 
         Returns:
-            List of (element, similarity_score) tuples, sorted by score descending
+            List of (element, similarity_score) tuples, sorted by specificity and score
         """
         if not highlighted_text:
             return []
@@ -100,13 +117,15 @@ class SelectorValidator:
                 if highlighted_text in element_text:
                     candidates.append((element, 1.0))  # Perfect match
 
-            # If we found exact matches, return them
+            # If we found exact matches, prioritize leaf elements
             if candidates:
                 logger.debug(
                     f"Found {len(candidates)} exact matches for text: "
                     f"'{highlighted_text[:50]}...'"
                 )
-                return sorted(candidates, key=lambda x: x[1], reverse=True)
+                # Sort by specificity: prefer elements with fewer descendants
+                candidates = self._sort_by_specificity(candidates)
+                return candidates
 
             # Strategy 2: Fuzzy matching (fallback)
             if use_fuzzy:
@@ -127,18 +146,42 @@ class SelectorValidator:
                         f"Found {len(candidates)} fuzzy matches for text: "
                         f"'{highlighted_text[:50]}...' (threshold={self.fuzzy_threshold})"
                     )
+                    # Sort by specificity first, then similarity
+                    candidates = self._sort_by_specificity(candidates)
                 else:
                     logger.debug(
                         f"No fuzzy matches found for text: '{highlighted_text[:50]}...'"
                     )
 
-                return sorted(candidates, key=lambda x: x[1], reverse=True)
+                return candidates
 
             return []
 
         except Exception as e:
             logger.error(f"Error finding text in DOM: {e}")
             return []
+
+    def _sort_by_specificity(
+        self, candidates: List[Tuple[Any, float]]
+    ) -> List[Tuple[Any, float]]:
+        """
+        Sort candidates by specificity (prefer leaf elements over parents).
+
+        Args:
+            candidates: List of (element, score) tuples
+
+        Returns:
+            Sorted list with most specific elements first
+        """
+
+        def specificity_key(item: Tuple[Any, float]) -> Tuple[float, int]:
+            element, score = item
+            # Count descendants (fewer is more specific)
+            descendant_count = len(list(element.iter())) - 1  # -1 to exclude self
+            # Prefer elements with fewer descendants, higher score
+            return (-score, descendant_count)
+
+        return sorted(candidates, key=specificity_key)
 
     def _get_element_text(self, element: Any) -> str:
         """
@@ -151,22 +194,28 @@ class SelectorValidator:
             Combined text content, stripped
         """
         try:
-            # Get text from element and all descendants
-            text_parts = []
+            # Use text_content() which gets all text from element and descendants
+            return element.text_content().strip() if element.text_content() else ""
+        except Exception:
+            return ""
 
-            # Element's direct text
+    def _get_element_direct_text(self, element: Any) -> str:
+        """
+        Get only the direct text content of an element (not from descendants).
+
+        Args:
+            element: lxml element
+
+        Returns:
+            Direct text content, stripped
+        """
+        try:
+            text_parts = []
             if element.text:
                 text_parts.append(element.text.strip())
-
-            # Text from descendants
-            for child in element.iter():
-                if child.text:
-                    text_parts.append(child.text.strip())
-                if child.tail:
-                    text_parts.append(child.tail.strip())
-
+            if element.tail:
+                text_parts.append(element.tail.strip())
             return " ".join(filter(None, text_parts))
-
         except Exception:
             return ""
 
@@ -204,7 +253,21 @@ class SelectorValidator:
         1. Unique IDs
         2. Unique class combinations
         3. Hierarchical path with nth-of-type (not nth-child)
+        4. Skips generic wrapper divs without IDs
+        5. Stops at semantic anchor elements (article, main, section, body)
         """
+        # Semantic elements that make good anchor points
+        SEMANTIC_ANCHORS = {
+            "body",
+            "main",
+            "article",
+            "section",
+            "nav",
+            "aside",
+            "header",
+            "footer",
+        }
+
         try:
             # Check for unique ID
             element_id = element.get("id")
@@ -226,6 +289,14 @@ class SelectorValidator:
                 classes = current.get("class", "").split()
                 class_str = "." + ".".join(classes) if classes else ""
 
+                # Check if this is a generic wrapper div to skip
+                is_generic_div = tag == "div" and not element_id and not classes
+
+                # Skip generic divs unless it's the starting element
+                if is_generic_div and path_parts:
+                    current = current.getparent()
+                    continue
+
                 # Get position among siblings of same type
                 parent = current.getparent()
                 if parent is not None:
@@ -240,11 +311,13 @@ class SelectorValidator:
                 else:
                     path_parts.insert(0, f"{tag}{class_str}")
 
-                current = parent
-
-                # Stop if we have a good anchor point
+                # Stop at semantic anchor points or after sufficient specificity
+                if tag in SEMANTIC_ANCHORS:
+                    break
                 if element_id or (classes and len(path_parts) >= 3):
                     break
+
+                current = parent
 
             if not path_parts:
                 return None
@@ -350,22 +423,52 @@ class SelectorValidator:
         # Generate new selectors for the found element
         new_css, new_xpath = self.generate_robust_selector(best_element)
 
-        if new_css or new_xpath:
+        if not new_css and not new_xpath:
+            result["message"] = "Text found but failed to generate selectors"
+            logger.warning(
+                f"Found text but failed to generate selectors for '{highlighted_text[:50]}...'"
+            )
+            return result
+
+        # Validate the generated CSS selector
+        validated_css = None
+        if new_css:
+            is_valid, count, matched_element = self.validate_selector(
+                page_dom, new_css, highlighted_text
+            )
+            if is_valid:
+                validated_css = new_css
+                logger.debug(
+                    f"Generated CSS selector validated successfully: {new_css}"
+                )
+            else:
+                logger.warning(
+                    f"Generated CSS selector failed validation: {new_css} "
+                    f"(matches={count}, text_match={matched_element is not None})"
+                )
+
+        # TODO: Add XPath validation when needed (currently extension uses CSS primarily)
+        validated_xpath = new_xpath  # Accept XPath for now as fallback
+
+        # Success only if at least one selector is validated
+        if validated_css or validated_xpath:
             result["success"] = True
-            result["css_selector"] = new_css
-            result["xpath"] = new_xpath
+            result["css_selector"] = validated_css
+            result["xpath"] = validated_xpath
             result["message"] = (
                 f"Repaired selector (similarity={similarity:.2f}, "
                 f"matches={len(matches)})"
             )
             logger.info(
                 f"Successfully repaired selector for text '{highlighted_text[:30]}...' - "
-                f"new CSS: {new_css}, new XPath: {new_xpath}"
+                f"validated CSS: {validated_css}, XPath: {validated_xpath}"
             )
         else:
-            result["message"] = "Text found but failed to generate selectors"
+            result["message"] = (
+                "Text found and selectors generated but failed validation"
+            )
             logger.warning(
-                f"Found text but failed to generate selectors for '{highlighted_text[:50]}...'"
+                f"Generated selectors failed validation for '{highlighted_text[:50]}...'"
             )
 
         return result

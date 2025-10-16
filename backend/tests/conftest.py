@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from typing import AsyncGenerator, Generator
+from typing import Any, AsyncGenerator, Dict, Generator
 
 import pytest
 import pytest_asyncio
@@ -11,7 +11,6 @@ from app.main import app
 from app.models import User
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -45,7 +44,7 @@ app.dependency_overrides[get_db] = override_get_db
 
 
 @pytest_asyncio.fixture(scope="session")
-async def setup_database():
+async def setup_database() -> AsyncGenerator[None, None]:
     """Set up test database."""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -55,7 +54,9 @@ async def setup_database():
 
 
 @pytest_asyncio.fixture
-async def async_session(setup_database) -> AsyncGenerator[AsyncSession, None]:
+async def async_session(
+    setup_database: AsyncGenerator[None, None],
+) -> AsyncGenerator[AsyncSession, None]:
     """Provide async database session for tests."""
     async with TestingSessionLocal() as session:
         yield session
@@ -116,7 +117,7 @@ async def test_admin_user(async_session: AsyncSession) -> User:
 
 
 @pytest.fixture
-def mock_chrome_token_data():
+def mock_chrome_token_data() -> Dict[str, Any]:
     """Mock Chrome token data for testing."""
     return {
         "sub": "test_chrome_user_123",
@@ -128,7 +129,7 @@ def mock_chrome_token_data():
 
 
 @pytest.fixture
-def mock_admin_chrome_token_data():
+def mock_admin_chrome_token_data() -> Dict[str, Any]:
     """Mock Chrome token data for admin user."""
     return {
         "sub": "test_admin_chrome_123",

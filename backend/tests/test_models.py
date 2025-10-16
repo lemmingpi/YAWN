@@ -5,13 +5,15 @@ from datetime import datetime
 import pytest
 from app.models import User
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class TestUserModel:
     """Test cases for User model."""
 
     @pytest.mark.asyncio
-    async def test_create_user(self, async_session):
+    async def test_create_user(self, async_session: AsyncSession) -> None:
         """Test creating a new user."""
         user = User(
             chrome_user_id="test_chrome_123",
@@ -35,7 +37,7 @@ class TestUserModel:
         assert isinstance(user.updated_at, datetime)
 
     @pytest.mark.asyncio
-    async def test_user_default_values(self, async_session):
+    async def test_user_default_values(self, async_session: AsyncSession) -> None:
         """Test user model default values."""
         user = User(
             chrome_user_id="test_chrome_456",
@@ -52,7 +54,7 @@ class TestUserModel:
         assert user.is_active is True
 
     @pytest.mark.asyncio
-    async def test_user_unique_constraints(self, async_session):
+    async def test_user_unique_constraints(self, async_session: AsyncSession) -> None:
         """Test user unique constraints."""
         # Create first user
         user1 = User(
@@ -71,7 +73,7 @@ class TestUserModel:
         )
         async_session.add(user2)
 
-        with pytest.raises(Exception):  # Should raise integrity error
+        with pytest.raises(IntegrityError):  # Should raise integrity error
             await async_session.commit()
 
         await async_session.rollback()
@@ -84,11 +86,13 @@ class TestUserModel:
         )
         async_session.add(user3)
 
-        with pytest.raises(Exception):  # Should raise integrity error
+        with pytest.raises(IntegrityError):  # Should raise integrity error
             await async_session.commit()
 
     @pytest.mark.asyncio
-    async def test_user_email_length_constraint(self, async_session):
+    async def test_user_email_length_constraint(
+        self, async_session: AsyncSession
+    ) -> None:
         """Test user email length constraint."""
         # Email should not exceed 320 characters (RFC 5321)
         long_email = "a" * 310 + "@example.com"  # 321 characters
@@ -110,7 +114,7 @@ class TestUserModel:
         assert user.email == short_email
 
     @pytest.mark.asyncio
-    async def test_user_display_name_length(self, async_session):
+    async def test_user_display_name_length(self, async_session: AsyncSession) -> None:
         """Test user display name length constraint."""
         long_name = "a" * 255  # At the limit
 
@@ -127,7 +131,7 @@ class TestUserModel:
         assert user.display_name == long_name
 
     @pytest.mark.asyncio
-    async def test_user_query_by_chrome_id(self, async_session):
+    async def test_user_query_by_chrome_id(self, async_session: AsyncSession) -> None:
         """Test querying user by Chrome user ID."""
         user = User(
             chrome_user_id="query_test_chrome_123",
@@ -148,7 +152,7 @@ class TestUserModel:
         assert found_user.email == "query@example.com"
 
     @pytest.mark.asyncio
-    async def test_user_query_by_email(self, async_session):
+    async def test_user_query_by_email(self, async_session: AsyncSession) -> None:
         """Test querying user by email."""
         user = User(
             chrome_user_id="email_query_chrome_123",
@@ -169,7 +173,7 @@ class TestUserModel:
         assert found_user.chrome_user_id == "email_query_chrome_123"
 
     @pytest.mark.asyncio
-    async def test_user_active_filter(self, async_session):
+    async def test_user_active_filter(self, async_session: AsyncSession) -> None:
         """Test filtering users by active status."""
         # Create active user
         active_user = User(
@@ -191,7 +195,7 @@ class TestUserModel:
         await async_session.commit()
 
         # Query only active users
-        stmt = select(User).where(User.is_active == True)
+        stmt = select(User).where(User.is_active.is_(True))
         result = await async_session.execute(stmt)
         active_users = result.scalars().all()
 
@@ -201,7 +205,7 @@ class TestUserModel:
         assert "inactive@example.com" not in active_emails
 
     @pytest.mark.asyncio
-    async def test_user_admin_filter(self, async_session):
+    async def test_user_admin_filter(self, async_session: AsyncSession) -> None:
         """Test filtering users by admin status."""
         # Create regular user
         regular_user = User(
@@ -223,7 +227,7 @@ class TestUserModel:
         await async_session.commit()
 
         # Query only admin users
-        stmt = select(User).where(User.is_admin == True)
+        stmt = select(User).where(User.is_admin.is_(True))
         result = await async_session.execute(stmt)
         admin_users = result.scalars().all()
 

@@ -7,7 +7,7 @@ necessary routers, middleware, and startup/shutdown events.
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import AsyncGenerator, Dict
+from typing import Any, AsyncGenerator, Dict
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -111,7 +111,7 @@ app.add_middleware(RequestLoggingMiddleware)
 
 # Configure CORS middleware
 # Use regex if configured, otherwise use explicit origins list
-cors_config = {
+cors_config: Dict[str, Any] = {
     "allow_credentials": True,
     "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     "allow_headers": ["*"],

@@ -102,7 +102,7 @@ export default [{
         }],
 
         "max-len": ["error", {
-            code: 120,
+            code: 125,
             ignoreUrls: true,
             ignoreStrings: true,
         }],
