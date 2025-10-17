@@ -2881,12 +2881,12 @@ async function handleGenerateDOMTestNotes() {
     const pageTitle = document.title || "Untitled";
 
     // Register page first (before any chunks)
-    const pageData = await chrome.runtime.sendMessage({
+    const registerResult = await chrome.runtime.sendMessage({
       action: "API_registerPage",
       url: pageUrl,
       title: pageTitle,
     });
-
+    const pageData = registerResult && registerResult.data ? registerResult.data : null;
     if (!pageData || !pageData.id) {
       alert("Failed to register page. Please try again.");
       return;

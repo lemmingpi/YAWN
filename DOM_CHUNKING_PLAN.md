@@ -1,403 +1,892 @@
-# DOM Chunking Implementation Plan
+# DOM Chunking Implementation Plan - Server-Side Architecture v3.0
+
+## Critical Issue: CSS Selector Validation Problem
+
+### The Core Problem
+When processing chunk 2+ of a large page, the LLM generates document-relative CSS selectors like:
+```css
+body > main > article > section:nth-child(2) > p#p3
+```
+
+But the validation only has chunk 2's DOM:
+```html
+<section id="main">
+  <p id="p3">Text</p>
+</section>
+```
+
+**Result**: The selector fails validation because `body > main > article` doesn't exist in the chunk DOM. This breaks note positioning for all chunks except the first.
+
+### The Solution
+**Server-side chunking with backend parallelization**: Backend receives full DOM, chunks it internally, processes chunks in parallel with asyncio, and always validates against the full DOM.
+
+---
 
 ## Executive Summary
 
-### Problem
-Currently, the auto-note generation system truncates page DOM content at 50KB to fit within LLM token limits. This results in incomplete analysis of large pages, missing potentially important content and generating fewer useful study notes.
+### Current State
+- **Partial Implementation**: Frontend chunking functions exist (content.js lines 2589-2909)
+- **Backend endpoint exists**: `/generate/chunked` but validates against chunk DOM only
+- **Problem**: CSS selectors fail validation for chunks 2+
 
-### Solution
-Implement smart semantic chunking that splits large DOM content into multiple batches, processes chunks **in parallel with rate limiting** (3 concurrent requests), and aggregates results on the frontend. This enables complete page coverage while respecting token limits and maximizing performance.
+### New Architecture
+- **Single Request**: Frontend sends full DOM to backend in one request
+- **Server Chunks**: Backend splits DOM using ported chunking algorithm
+- **Parallel Processing**: Backend uses `asyncio.gather()` for 3 concurrent LLM calls
+- **Full DOM Validation**: Every chunk validates selectors against complete DOM
+- **Aggregated Response**: Backend returns all notes in single response
 
-### Impact
-- **Complete Coverage**: Process entire pages regardless of size
-- **5x Faster**: Parallel processing (3 chunks at a time) vs sequential
-- **Better Quality**: More comprehensive note generation across all content
-- **Simpler Backend**: No session state, stateless chunk processing
-- **User Control**: No manual truncation or content loss
-- **Scalability**: Handle pages from small to very large
-
----
-
-## Current State Analysis
-
-### Existing Flow
-```
-User triggers context menu "Generate Auto Notes with DOM"
-  ↓
-content.js: extractPageDOMForTest() - cleans and extracts DOM (truncates at 50KB)
-  ↓
-content.js: handleGenerateDOMTestNotes() - sends to background
-  ↓
-background.js: API_generateDOMTestNotes handler - registers page
-  ↓
-server-api.js: generateAutoNotesWithDOM() - POST to /auto-notes/pages/{id}/generate
-  ↓
-auto_notes.py router: generate_auto_notes() - receives request
-  ↓
-auto_note_service.py: generate_auto_notes() - builds prompt with DOM
-  ↓
-gemini_provider.py: generate_content_large() - sends to LLM
-  ↓
-auto_note_service.py: parses JSON response, validates selectors, creates Notes
-  ↓
-Returns AutoNoteGenerationResponse with notes array
-  ↓
-Extension reloads page to display new notes
-```
-
-### Current Limitations
-1. **Hard 50KB truncation** in `content.js:2567-2569`
-2. **No chunking mechanism** - single request only
-3. **Content loss** for large pages (e.g., long articles, documentation)
-4. **Alert shown to user** when truncating, but no alternative
-
-### Files Involved
-
-#### Frontend (Chrome Extension)
-- `chrome-extension/content.js:2529-2578` - `extractPageDOMForTest()` function
-- `chrome-extension/content.js:2583-2634` - `handleGenerateDOMTestNotes()` function
-- `chrome-extension/background.js:476-484` - Message handler for DOM generation
-- `chrome-extension/server-api.js:544-571` - `generateAutoNotesWithDOM()` method
-
-#### Backend
-- `backend/app/routers/auto_notes.py:28-104` - `generate_auto_notes()` endpoint
-- `backend/app/services/auto_note_service.py:203-314` - `generate_auto_notes()` service
-- `backend/app/schemas.py:864-908` - Request/Response schemas
-- `backend/prompts/auto_notes/study_guide_generation.jinja2` - Prompt template
+### Benefits
+- ✅ **Correct Validation**: Selectors work for all chunks
+- ✅ **Same Performance**: 90s for 15 chunks (parallel processing)
+- ✅ **Simpler Frontend**: No chunking complexity
+- ✅ **Better Error Handling**: Backend manages retries
+- ✅ **Truly Stateless**: No session/cache management
 
 ---
 
-## Architecture Design
+## Test-First Implementation Strategy
 
-### Core Principles
+### Phase 0: Write Critical Validation Tests (FIRST!)
 
-1. **Semantic Chunking**: Split by meaningful HTML boundaries (sections, articles, divs)
-2. **Token-Aware**: Estimate tokens and target ~40KB per chunk (buffer for safety)
-3. **Context Preservation**: Include parent hierarchy for accurate CSS selectors
-4. **Batched Parallel Processing**: Process 3 chunks at a time (frontend rate limiting)
-5. **Stateless Backend**: No session management, each chunk independent
-6. **Frontend Aggregation**: Frontend collects and aggregates all results
-7. **Progress Feedback**: Show user "Processing batch X of Y" with live updates
+Create `backend/tests/test_critical_selector_validation.py`:
 
-### Token Estimation
-- **Heuristic**: 1 token ≈ 4 characters (conservative for HTML)
-- **Target**: ~40KB per chunk (~10,000 tokens)
-- **Buffer**: Leave headroom for prompt template, instructions, context
+```python
+"""
+Critical tests proving CSS selector validation issue with chunked DOM.
+These tests MUST pass before the implementation is complete.
+"""
 
-### Chunking Strategy
+import pytest
+from unittest.mock import Mock, MagicMock, patch
+from backend.app.services.auto_note_service import AutoNoteService
+from backend.app.services.selector_validator import SelectorValidator
 
-#### Semantic Boundaries (Priority Order)
-1. `<section>` elements with meaningful IDs/classes
-2. `<article>` elements
-3. `<div>` elements with semantic classes (content, main, article-body)
-4. `<div>` elements with IDs
-5. Major heading boundaries (`<h1>`, `<h2>`)
-6. Paragraph groups if sections still too large
 
-#### Chunk Structure
-```javascript
-{
-  chunk_index: 0,           // 0-based index
-  total_chunks: 5,          // Total number of chunks
-  chunk_dom: "<html>...</html>", // Cleaned DOM fragment
-  parent_context: {         // For selector accuracy
-    body_classes: ["article", "post"],
-    main_id: "content",
-    document_structure: "article > div.main > section"
-  },
-  batch_id: "auto_abc123", // Frontend-generated batch ID (shared across all chunks)
-  position_offset: 40      // Position offset for this chunk (index * 20)
-}
+class TestCriticalSelectorValidation:
+    """Prove that selector validation must use full DOM, not chunk DOM."""
+
+    @pytest.fixture
+    def full_dom(self):
+        """Complete DOM as it exists on the page."""
+        return """
+        <html>
+        <body class="article-page">
+            <header id="site-header">
+                <h1>Site Title</h1>
+            </header>
+            <main>
+                <article class="content">
+                    <section id="intro" class="section-1">
+                        <h2>Introduction</h2>
+                        <p id="p1">First paragraph in intro.</p>
+                        <p id="p2">Second paragraph.</p>
+                    </section>
+                    <section id="main" class="section-2">
+                        <h2>Main Content</h2>
+                        <p id="p3">Target paragraph to annotate.</p>
+                        <p id="p4">Another paragraph.</p>
+                    </section>
+                    <section id="conclusion" class="section-3">
+                        <h2>Conclusion</h2>
+                        <p id="p5">Final thoughts.</p>
+                    </section>
+                </article>
+            </main>
+        </body>
+        </html>
+        """
+
+    @pytest.fixture
+    def chunk_2_dom(self):
+        """Chunk 2: Just the main section (missing all parent context)."""
+        return """
+        <section id="main" class="section-2">
+            <h2>Main Content</h2>
+            <p id="p3">Target paragraph to annotate.</p>
+            <p id="p4">Another paragraph.</p>
+        </section>
+        """
+
+    def test_problem_selectors_fail_with_chunk_dom(self, chunk_2_dom):
+        """
+        CURRENT STATE (FAILS): Selectors fail validation with chunk DOM only.
+        This test documents the problem we're fixing.
+        """
+        selectors_from_llm = [
+            "body > main > article > section:nth-child(2) > p#p3",
+            "article.content > section#main > p:first-of-type",
+            "main > article > section:nth-child(2) > p:nth-child(2)",
+        ]
+
+        validator = SelectorValidator()
+        for selector in selectors_from_llm:
+            is_valid = validator.validate_selector(chunk_2_dom, selector)[0]
+            assert is_valid == False, f"Selector '{selector}' fails with chunk DOM"
+
+    def test_solution_selectors_work_with_full_dom(self, full_dom):
+        """
+        DESIRED STATE (MUST PASS): Same selectors work with full DOM.
+        This is what we're implementing.
+        """
+        selectors_from_llm = [
+            "body > main > article > section:nth-child(2) > p#p3",
+            "article.content > section#main > p:first-of-type",
+            "main > article > section:nth-child(2) > p:nth-child(2)",
+        ]
+
+        validator = SelectorValidator()
+        for selector in selectors_from_llm:
+            is_valid, match_count, _ = validator.validate_selector(full_dom, selector)
+            assert is_valid == True, f"Selector '{selector}' must work with full DOM"
+            assert match_count > 0, f"Selector '{selector}' must find matches"
+
+    @pytest.mark.asyncio
+    async def test_service_validates_with_full_dom(self, full_dom, chunk_2_dom):
+        """
+        Integration test: Service method uses full DOM for validation.
+        """
+        mock_db = MagicMock()
+        service = AutoNoteService(mock_db)
+
+        # This is the NEW method we'll implement
+        result = await service.process_chunk_with_full_dom(
+            chunk_dom=chunk_2_dom,  # For LLM prompt
+            full_dom=full_dom,       # For validation (KEY!)
+            chunk_index=1,
+            total_chunks=3,
+            # ... other params
+        )
+
+        assert result['validation_success'] == True
+        assert len(result['notes']) > 0
 ```
 
-### Data Flow for Chunked Processing
+### Phase 0.1: Chunking Algorithm Tests
 
+Create `backend/tests/test_dom_chunking.py`:
+
+```python
+"""Test the DOM chunking algorithm ported from JavaScript."""
+
+import pytest
+from backend.app.services.dom_chunker import DOMChunker
+
+
+class TestDOMChunking:
+
+    def test_small_dom_single_chunk(self):
+        """DOM < 40KB returns single chunk."""
+        small_dom = "<body>" + "<p>Text</p>" * 100 + "</body>"  # ~2KB
+        chunker = DOMChunker()
+        chunks = chunker.chunk_html(small_dom)
+
+        assert len(chunks) == 1
+        assert chunks[0]['chunk_index'] == 0
+        assert chunks[0]['total_chunks'] == 1
+
+    def test_large_dom_multiple_chunks(self):
+        """Large DOM splits into multiple chunks."""
+        # Create 200KB DOM
+        large_dom = "<body>"
+        for i in range(50):
+            large_dom += f'<section id="s{i}">' + "<p>Text</p>" * 100 + '</section>'
+        large_dom += "</body>"
+
+        chunker = DOMChunker()
+        chunks = chunker.chunk_html(large_dom, max_chars=40000)
+
+        assert len(chunks) > 1
+        assert all(len(c['chunk_dom']) <= 40000 for c in chunks)
+
+    def test_semantic_boundaries_respected(self):
+        """Chunks split at semantic boundaries (sections/articles)."""
+        dom_with_sections = """
+        <body>
+            <section id="intro">
+                <p>Intro content</p>
+            </section>
+            <section id="main">
+                <p>Main content</p>
+            </section>
+            <section id="conclusion">
+                <p>Conclusion content</p>
+            </section>
+        </body>
+        """
+
+        chunker = DOMChunker()
+        chunks = chunker.chunk_html(dom_with_sections, max_chars=500)
+
+        # Each chunk should contain complete sections
+        for chunk in chunks:
+            assert '<section' in chunk['chunk_dom']
+            assert '</section>' in chunk['chunk_dom']
 ```
-User triggers "Generate Auto Notes with DOM"
-  ↓
-content.js: extractPageDOMInChunks() - returns array of chunks
-  ↓
-content.js: Generate batch_id (shared across all chunks)
-  ↓
-content.js: handleGenerateDOMTestNotes() - batched parallel processing
-  ↓
-  FOR EACH BATCH OF 3 CHUNKS (in parallel):
-    background.js: API_generateDOMTestNotesChunk - sends chunk (×3)
-    ↓
-    server-api.js: generateAutoNotesWithDOMChunk() - POST with chunk metadata (×3)
-    ↓
-    auto_notes.py: generate_auto_notes_chunked() - stateless endpoint (×3)
-    ↓
-    auto_note_service.py: generate_auto_notes_chunked() - processes chunk (×3)
-    ↓
-    Saves notes to DB with batch_id, returns immediately (×3)
-    ↓
-    Returns ChunkedAutoNoteResponse with notes from this chunk (×3)
-  ↓
-  WAIT for batch to complete, then process next batch
-  ↓
-content.js: Aggregates all successful results
-  ↓
-  - Flatten all notes arrays
-  - Sum costs and tokens
-  - Calculate success rate
-  ↓
-Extension displays all notes (DB handles deduplication via batch_id)
+
+### Phase 0.2: Parallel Processing Tests
+
+Create `backend/tests/test_parallel_processing.py`:
+
+```python
+"""Test parallel chunk processing with asyncio."""
+
+import pytest
+import asyncio
+import time
+from unittest.mock import AsyncMock, patch
+from backend.app.services.auto_note_service import AutoNoteService
+
+
+class TestParallelProcessing:
+
+    @pytest.mark.asyncio
+    async def test_chunks_process_in_parallel(self):
+        """Verify chunks process in parallel, not sequentially."""
+
+        async def mock_llm_call(prompt):
+            """Simulate LLM call with 1 second delay."""
+            await asyncio.sleep(1)
+            return {"content": '{"notes": []}', "tokens": 1000, "cost": 0.01}
+
+        service = AutoNoteService(AsyncMock())
+
+        with patch.object(service, '_call_llm', side_effect=mock_llm_call):
+            start_time = time.time()
+
+            # Process 6 chunks with max 3 concurrent
+            results = await service.process_chunks_parallel(
+                chunks=[{'chunk_dom': f'<div>{i}</div>'} for i in range(6)],
+                full_dom="<body>...</body>",
+                max_concurrent=3
+            )
+
+            elapsed = time.time() - start_time
+
+            # Should take ~2 seconds (2 batches of 3), not 6 seconds
+            assert 1.8 < elapsed < 2.5, f"Parallel processing took {elapsed}s"
+            assert len(results) == 6
+
+    @pytest.mark.asyncio
+    async def test_rate_limiting_enforced(self):
+        """Max 3 concurrent LLM calls at a time."""
+        concurrent_count = 0
+        max_concurrent_seen = 0
+
+        async def mock_llm_with_tracking(prompt):
+            nonlocal concurrent_count, max_concurrent_seen
+            concurrent_count += 1
+            max_concurrent_seen = max(max_concurrent_seen, concurrent_count)
+            await asyncio.sleep(0.1)
+            concurrent_count -= 1
+            return {"content": '{"notes": []}', "tokens": 1000, "cost": 0.01}
+
+        service = AutoNoteService(AsyncMock())
+
+        with patch.object(service, '_call_llm', side_effect=mock_llm_with_tracking):
+            await service.process_chunks_parallel(
+                chunks=[{'chunk_dom': f'<div>{i}</div>'} for i in range(10)],
+                full_dom="<body>...</body>",
+                max_concurrent=3
+            )
+
+            assert max_concurrent_seen == 3, f"Max concurrent was {max_concurrent_seen}"
+
+    @pytest.mark.asyncio
+    async def test_chunk_failure_doesnt_stop_others(self):
+        """One chunk failing doesn't prevent others from processing."""
+
+        async def mock_llm_some_fail(prompt):
+            if "chunk_2" in prompt:
+                raise Exception("LLM error for chunk 2")
+            return {"content": '{"notes": [{"content": "Note"}]}', "tokens": 1000, "cost": 0.01}
+
+        service = AutoNoteService(AsyncMock())
+
+        with patch.object(service, '_call_llm', side_effect=mock_llm_some_fail):
+            results = await service.process_chunks_parallel(
+                chunks=[
+                    {'chunk_dom': '<div>chunk_1</div>'},
+                    {'chunk_dom': '<div>chunk_2</div>'},  # This will fail
+                    {'chunk_dom': '<div>chunk_3</div>'},
+                ],
+                full_dom="<body>...</body>",
+                max_concurrent=3
+            )
+
+            # Should get results for chunks 1 and 3
+            assert len(results) == 2
+            assert any('chunk_1' in str(r) for r in results)
+            assert any('chunk_3' in str(r) for r in results)
 ```
 
 ---
 
-## Implementation Phases
+## Implementation Plan
 
-### Phase 1: Frontend Chunking (Chrome Extension)
+### Phase 1: Backend - Port Chunking Algorithm
 
-#### Phase 1.1: Add Utility Functions to `content.js`
+#### Step 1.1: Create DOM Chunker Service
 
-**Location**: `chrome-extension/content.js` (after `extractPageDOMForTest()`)
+**File**: `backend/app/services/dom_chunker.py` (NEW)
 
-**New Functions**:
+```python
+"""
+DOM chunking service ported from JavaScript.
+Splits large HTML into semantic chunks for LLM processing.
+"""
 
-```javascript
-// Configuration constant for rate limiting
-const MAX_CONCURRENT_CHUNKS = 3;  // Process 3 chunks at a time
+from typing import List, Dict, Optional
+from bs4 import BeautifulSoup
+import re
 
-/**
- * Estimate token count from text
- * @param {string} text - Text to estimate
- * @returns {number} Estimated token count
- */
-function estimateTokenCount(text) {
-  // Conservative estimate: 1 token ≈ 4 characters for HTML
-  return Math.ceil(text.length / 4);
-}
 
-/**
- * Find semantic boundaries in HTML for chunking
- * @param {HTMLElement} element - Root element to analyze
- * @returns {Array<HTMLElement>} Array of boundary elements
- */
-function findSemanticBoundaries(element) {
-  // Priority order for splitting
-  const selectors = [
-    'section[id], section[class]',
-    'article',
-    'div[class*="content"], div[class*="main"], div[class*="article"]',
-    'div[id]',
-    'h1, h2'
-  ];
+class DOMChunker:
+    """Handles semantic chunking of HTML content."""
 
-  for (const selector of selectors) {
-    const boundaries = Array.from(element.querySelectorAll(selector));
-    if (boundaries.length > 1) {
-      return boundaries;
-    }
-  }
+    # Semantic boundaries in priority order
+    BOUNDARY_SELECTORS = [
+        'section[id], section[class]',
+        'article',
+        'div.content, div.main, div.article',
+        'div[id]',
+        'h1, h2',
+    ]
 
-  // Fallback: split by paragraphs
-  return Array.from(element.querySelectorAll('p, div'));
-}
+    def __init__(self, max_chars: int = 40000, min_chars: int = 10000):
+        """
+        Initialize chunker with size constraints.
 
-/**
- * Extract parent context for selector accuracy
- * @param {HTMLElement} element - Element to extract context from
- * @returns {Object} Context metadata
- */
-function extractParentContext(element) {
-  const body = element.querySelector('body') || element;
-  return {
-    body_classes: Array.from(body.classList || []),
-    body_id: body.id || null,
-    main_container: body.querySelector('main, [role="main"]')?.tagName.toLowerCase(),
-    document_title: element.querySelector('title')?.textContent || ''
-  };
-}
+        Args:
+            max_chars: Maximum characters per chunk (~10k tokens)
+            min_chars: Minimum characters to avoid tiny chunks
+        """
+        self.max_chars = max_chars
+        self.min_chars = min_chars
 
-/**
- * Chunk DOM content into semantic pieces
- * @param {string} htmlContent - Full HTML content
- * @param {number} maxTokensPerChunk - Maximum tokens per chunk
- * @returns {Array<Object>} Array of chunk objects
- */
-function chunkDOMContent(htmlContent, maxTokensPerChunk = 10000) {
-  const maxCharsPerChunk = maxTokensPerChunk * 4; // ~4 chars per token
-  const minCharsPerChunk = 10000; // Minimum ~2500 tokens to avoid tiny chunks
+    def chunk_html(self, html_content: str) -> List[Dict]:
+        """
+        Split HTML into semantic chunks.
 
-  // If small enough, return as single chunk
-  if (htmlContent.length <= maxCharsPerChunk) {
-    return [{
-      chunk_index: 0,
-      total_chunks: 1,
-      chunk_dom: htmlContent,
-      parent_context: null,
-      is_final_chunk: true
-    }];
-  }
+        Args:
+            html_content: Full HTML content to chunk
 
-  // Parse HTML into DOM
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(htmlContent, 'text/html');
-  const body = doc.body;
+        Returns:
+            List of chunk dictionaries with metadata
+        """
+        # Small enough for single chunk?
+        if len(html_content) <= self.max_chars:
+            return [{
+                'chunk_index': 0,
+                'total_chunks': 1,
+                'chunk_dom': html_content,
+                'parent_context': self._extract_parent_context(html_content),
+            }]
 
-  // Extract parent context once
-  const parentContext = extractParentContext(doc.documentElement);
+        # Parse HTML
+        soup = BeautifulSoup(html_content, 'html.parser')
+        body = soup.body if soup.body else soup
 
-  // Find semantic boundaries
-  const boundaries = findSemanticBoundaries(body);
+        # Extract parent context once
+        parent_context = self._extract_parent_context(html_content)
 
-  // Group boundaries into chunks
-  const chunks = [];
-  let currentChunk = [];
-  let currentSize = 0;
+        # Find semantic boundaries
+        boundaries = self._find_semantic_boundaries(body)
 
-  for (const element of boundaries) {
-    const elementHTML = element.outerHTML;
-    const elementSize = elementHTML.length;
+        # Group into chunks
+        raw_chunks = self._group_boundaries_into_chunks(boundaries)
 
-    // If adding this would exceed limit and we have content, start new chunk
-    if (currentSize + elementSize > maxCharsPerChunk && currentChunk.length > 0) {
-      chunks.push(currentChunk);
-      currentChunk = [element];
-      currentSize = elementSize;
-    } else {
-      currentChunk.push(element);
-      currentSize += elementSize;
-    }
-  }
+        # Merge small chunks
+        merged_chunks = self._merge_small_chunks(raw_chunks)
 
-  // Add final chunk
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
-  }
+        # Build final chunk objects
+        return self._build_chunk_objects(merged_chunks, parent_context)
 
-  // Merge small chunks to meet minimum size requirement
-  const mergedChunks = [];
-  let currentMerged = [];
-  let currentMergedSize = 0;
+    def _extract_parent_context(self, html: str) -> Dict:
+        """Extract document metadata for selector accuracy."""
+        soup = BeautifulSoup(html, 'html.parser')
+        body = soup.body if soup.body else soup
 
-  for (const chunk of chunks) {
-    const chunkSize = chunk.reduce((sum, el) => sum + el.outerHTML.length, 0);
-
-    // If current merged chunk is empty, start with this chunk
-    if (currentMerged.length === 0) {
-      currentMerged = chunk;
-      currentMergedSize = chunkSize;
-    }
-    // If current merged is too small and adding this won't exceed max, merge
-    else if (currentMergedSize < minCharsPerChunk &&
-             currentMergedSize + chunkSize <= maxCharsPerChunk) {
-      currentMerged = currentMerged.concat(chunk);
-      currentMergedSize += chunkSize;
-    }
-    // Otherwise, finalize current merged chunk and start new one
-    else {
-      mergedChunks.push(currentMerged);
-      currentMerged = chunk;
-      currentMergedSize = chunkSize;
-    }
-  }
-
-  // Add final merged chunk
-  if (currentMerged.length > 0) {
-    mergedChunks.push(currentMerged);
-  }
-
-  // Build chunk objects
-  const totalChunks = mergedChunks.length;
-  return mergedChunks.map((elements, index) => {
-    const chunkDOM = elements.map(el => el.outerHTML).join('\n');
-    return {
-      chunk_index: index,
-      total_chunks: totalChunks,
-      chunk_dom: chunkDOM,
-      parent_context: parentContext,
-      is_final_chunk: index === totalChunks - 1
-    };
-  });
-}
-
-/**
- * Extract page DOM in chunks for large pages
- * @returns {Array<Object>} Array of chunk objects with metadata
- */
-function extractPageDOMInChunks() {
-  try {
-    console.log("[Web Notes] Extracting page DOM in chunks for auto-note generation");
-
-    // Clone and clean document (same as extractPageDOMForTest)
-    const clonedDoc = document.documentElement.cloneNode(true);
-
-    const removeSelectors = ["script", "style", "noscript", "iframe", "object", "embed", "svg", ".web-note"];
-    removeSelectors.forEach(selector => {
-      clonedDoc.querySelectorAll(selector).forEach(el => el.remove());
-    });
-
-    const preserveAttrs = ["id", "class", "data-section", "data-paragraph", "role", "aria-label"];
-    clonedDoc.querySelectorAll("*").forEach(el => {
-      const attrs = Array.from(el.attributes);
-      attrs.forEach(attr => {
-        if (!preserveAttrs.includes(attr.name)) {
-          el.removeAttribute(attr.name);
+        return {
+            'body_classes': body.get('class', []) if hasattr(body, 'get') else [],
+            'body_id': body.get('id', '') if hasattr(body, 'get') else '',
+            'main_container': bool(soup.select_one('main, [role="main"]')),
+            'document_title': soup.title.string if soup.title else ''
         }
-      });
-    });
 
-    const bodyElement = clonedDoc.querySelector("body");
-    if (!bodyElement) {
-      console.warn("[Web Notes] No body element found");
-      return [{
-        chunk_index: 0,
-        total_chunks: 1,
-        chunk_dom: document.body.innerHTML.substring(0, 50000),
-        parent_context: null,
-        is_final_chunk: true
-      }];
-    }
+    def _find_semantic_boundaries(self, element) -> List:
+        """Find elements to use as chunk boundaries."""
+        for selector in self.BOUNDARY_SELECTORS:
+            # BeautifulSoup uses select() for CSS selectors
+            boundaries = element.select(selector)
+            if len(boundaries) > 1:
+                return boundaries
 
-    let contentHTML = bodyElement.innerHTML;
-    contentHTML = contentHTML.replace(/\s+/g, " ").trim();
+        # Fallback to paragraphs
+        return element.select('p, div')
 
-    // Chunk the content
-    const chunks = chunkDOMContent(contentHTML);
+    def _group_boundaries_into_chunks(self, boundaries: List) -> List[List]:
+        """Group boundary elements into size-appropriate chunks."""
+        chunks = []
+        current_chunk = []
+        current_size = 0
 
-    const totalSize = contentHTML.length;
-    console.log(`[Web Notes] Split ${Math.round(totalSize / 1000)}KB into ${chunks.length} chunks`);
+        for element in boundaries:
+            element_html = str(element)
+            element_size = len(element_html)
 
-    return chunks;
-  } catch (error) {
-    console.error("[Web Notes] Error extracting page DOM in chunks:", error);
-    throw error;
-  }
-}
+            # Start new chunk if adding would exceed limit
+            if current_size + element_size > self.max_chars and current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = [element]
+                current_size = element_size
+            else:
+                current_chunk.append(element)
+                current_size += element_size
+
+        # Add final chunk
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        return chunks
+
+    def _merge_small_chunks(self, chunks: List[List]) -> List[List]:
+        """Merge chunks smaller than minimum size."""
+        merged = []
+        current_merged = []
+        current_size = 0
+
+        for chunk in chunks:
+            chunk_size = sum(len(str(el)) for el in chunk)
+
+            if not current_merged:
+                current_merged = chunk
+                current_size = chunk_size
+            elif current_size < self.min_chars and current_size + chunk_size <= self.max_chars:
+                current_merged.extend(chunk)
+                current_size += chunk_size
+            else:
+                merged.append(current_merged)
+                current_merged = chunk
+                current_size = chunk_size
+
+        if current_merged:
+            merged.append(current_merged)
+
+        return merged
+
+    def _build_chunk_objects(self, chunks: List[List], parent_context: Dict) -> List[Dict]:
+        """Convert chunk elements to final chunk dictionaries."""
+        total_chunks = len(chunks)
+        return [
+            {
+                'chunk_index': i,
+                'total_chunks': total_chunks,
+                'chunk_dom': '\n'.join(str(el) for el in elements),
+                'parent_context': parent_context,
+            }
+            for i, elements in enumerate(chunks)
+        ]
 ```
 
-**Implementation Details**:
-- Add functions after line 2578 in `content.js`
-- Use existing DOM cleaning logic from `extractPageDOMForTest()`
-- Generate unique session IDs for chunk tracking
-- Log chunk statistics for debugging
+**Testing with Serena**:
+```bash
+# Use Serena to verify the chunking logic matches JavaScript version
+mcp__serena__find_symbol "chunkDOMContent" "chrome-extension/content.js"
+# Compare the JavaScript implementation with Python port
+```
 
-**Testing Requirements**:
-- Test with small pages (< 40KB) → single chunk
-- Test with medium pages (40-200KB) → 2-5 chunks
-- Test with large pages (> 200KB) → 5+ chunks
-- Verify semantic boundaries are respected
-- Check parent context extraction
+### Phase 2: Backend - Implement Parallel Processing
 
----
+#### Step 2.1: Update Auto Note Service
 
-#### Phase 1.2: Update `handleGenerateDOMTestNotes()` Function
+**File**: `backend/app/services/auto_note_service.py`
 
-**Location**: `chrome-extension/content.js:2583-2634`
+Add these methods to the existing service:
 
-**Modifications**:
+```python
+# Add imports at top
+import asyncio
+from typing import List, Dict, Any, Optional
+from .dom_chunker import DOMChunker
+
+class AutoNoteService:
+    # ... existing code ...
+
+    async def generate_auto_notes_with_full_dom(
+        self,
+        page_id: int,
+        user_id: int,
+        full_dom: str,
+        llm_provider_id: int = 1,
+        template_type: str = "study_guide",
+        max_concurrent: int = 3,
+    ) -> Dict:
+        """
+        Generate notes from large DOM using server-side chunking and parallel processing.
+
+        This is the main entry point that:
+        1. Chunks the DOM server-side
+        2. Processes chunks in parallel (max 3 concurrent)
+        3. Validates all selectors against full DOM
+        4. Returns aggregated results
+
+        Args:
+            page_id: ID of page to generate notes for
+            user_id: ID of user creating notes
+            full_dom: Complete DOM content from frontend
+            llm_provider_id: LLM provider to use
+            template_type: Template type for generation
+            max_concurrent: Max parallel LLM calls (rate limit)
+
+        Returns:
+            Dictionary with all notes and metadata
+        """
+        start_time = time.time()
+
+        # Generate batch ID for all notes
+        batch_id = f"auto_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+
+        logger.info(f"Starting server-side chunking for page_id={page_id}, batch_id={batch_id}")
+
+        # 1. Chunk the DOM server-side
+        chunker = DOMChunker(max_chars=40000)
+        chunks = chunker.chunk_html(full_dom)
+        total_chunks = len(chunks)
+
+        logger.info(f"Split {len(full_dom)/1000:.1f}KB into {total_chunks} chunks")
+
+        # 2. Process chunks in parallel batches
+        all_notes = []
+        all_costs = []
+        all_tokens = []
+        failed_chunks = []
+
+        # Process in batches to respect rate limit
+        for batch_start in range(0, total_chunks, max_concurrent):
+            batch_end = min(batch_start + max_concurrent, total_chunks)
+            batch = chunks[batch_start:batch_end]
+            batch_num = (batch_start // max_concurrent) + 1
+            total_batches = (total_chunks + max_concurrent - 1) // max_concurrent
+
+            logger.info(f"Processing batch {batch_num}/{total_batches} (chunks {batch_start}-{batch_end-1})")
+
+            # Create tasks for parallel processing
+            tasks = []
+            for chunk in batch:
+                task = self._process_single_chunk_with_full_dom(
+                    chunk_dom=chunk['chunk_dom'],
+                    full_dom=full_dom,  # KEY: Pass full DOM for validation!
+                    chunk_index=chunk['chunk_index'],
+                    total_chunks=chunk['total_chunks'],
+                    parent_context=chunk['parent_context'],
+                    page_id=page_id,
+                    user_id=user_id,
+                    batch_id=batch_id,
+                    llm_provider_id=llm_provider_id,
+                    template_type=template_type,
+                    position_offset=chunk['chunk_index'] * 20,  # Stagger note positions
+                )
+                tasks.append(task)
+
+            # Execute batch in parallel
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Process results
+            for idx, result in enumerate(batch_results):
+                chunk_idx = batch_start + idx
+                if isinstance(result, Exception):
+                    logger.error(f"Chunk {chunk_idx} failed: {result}")
+                    failed_chunks.append(chunk_idx)
+                    continue
+
+                if result and 'notes' in result:
+                    all_notes.extend(result['notes'])
+                    all_costs.append(result.get('cost_usd', 0))
+                    all_tokens.append(result.get('tokens_used', 0))
+
+        # 3. Calculate totals
+        total_time = int((time.time() - start_time) * 1000)
+
+        # 4. Return aggregated results
+        return {
+            "notes": all_notes,
+            "batch_id": batch_id,
+            "total_chunks": total_chunks,
+            "successful_chunks": total_chunks - len(failed_chunks),
+            "failed_chunks": failed_chunks,
+            "tokens_used": sum(all_tokens),
+            "cost_usd": sum(all_costs),
+            "generation_time_ms": total_time,
+        }
+
+    async def _process_single_chunk_with_full_dom(
+        self,
+        chunk_dom: str,
+        full_dom: str,  # Critical: Full DOM for validation
+        chunk_index: int,
+        total_chunks: int,
+        parent_context: Dict,
+        page_id: int,
+        user_id: int,
+        batch_id: str,
+        llm_provider_id: int,
+        template_type: str,
+        position_offset: int,
+    ) -> Dict:
+        """
+        Process a single chunk with full DOM for validation.
+
+        This is where the fix happens: We generate from chunk_dom but
+        validate against full_dom.
+        """
+        try:
+            # Fetch page info
+            result = await self.db.execute(
+                select(Page).options(selectinload(Page.site)).where(Page.id == page_id)
+            )
+            page = result.scalar_one_or_none()
+
+            if not page:
+                raise ValueError(f"Page {page_id} not found")
+
+            # Build prompt with chunk DOM
+            chunk_instructions = (
+                f"This is chunk {chunk_index + 1} of {total_chunks} from a large page. "
+                f"Generate notes only for content in this chunk. "
+                f"Use CSS selectors relative to the full document structure."
+            )
+
+            prompt = await self._build_prompt(
+                page,
+                template_type,
+                chunk_instructions,
+                page_source=None,
+                page_dom=chunk_dom,  # Use chunk for generation
+            )
+
+            # Call LLM
+            provider = await create_gemini_provider()
+            generation_result = await provider.generate_content_large(prompt=prompt)
+
+            # Parse response
+            generated_content = generation_result["content"]
+            generated_content = self._clean_json_response(generated_content)
+
+            try:
+                parsed_data = json.loads(generated_content)
+                notes_data = parsed_data.get("notes", [])
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON for chunk {chunk_index}: {e}")
+                raise
+
+            # Create notes with FULL DOM validation
+            created_notes = []
+            for idx, note_data in enumerate(notes_data):
+                css_selector = note_data.get("css_selector")
+                highlighted_text = note_data.get("highlighted_text", "")
+
+                # CRITICAL FIX: Validate against full DOM, not chunk!
+                if css_selector and full_dom:
+                    is_valid, match_count, _ = self._validator.validate_selector(
+                        full_dom,  # NOT chunk_dom!
+                        css_selector
+                    )
+
+                    if not is_valid:
+                        # Try to repair using full DOM
+                        repair_result = self._validator.repair_selector(
+                            full_dom,  # NOT chunk_dom!
+                            highlighted_text,
+                            css_selector,
+                            note_data.get("xpath")
+                        )
+
+                        if repair_result["success"]:
+                            css_selector = repair_result["css_selector"]
+                            logger.info(f"Repaired selector for chunk {chunk_index}, note {idx}")
+
+                # Create note with validated selector
+                note = Note(
+                    content=note_data.get("commentary", ""),
+                    highlighted_text=highlighted_text,
+                    position_x=100 + position_offset + (idx * 20),
+                    position_y=100 + position_offset + (idx * 20),
+                    anchor_data={
+                        "auto_generated": True,
+                        "chunk_index": chunk_index,
+                        "elementSelector": css_selector,
+                        "batch_id": batch_id,
+                    },
+                    page_id=page_id,
+                    user_id=user_id,
+                    generation_batch_id=batch_id,
+                    server_link_id=f"{batch_id}_{chunk_index}_{idx}",
+                    is_active=True,
+                )
+
+                self.db.add(note)
+                created_notes.append(note)
+
+            await self.db.commit()
+
+            # Refresh to get IDs
+            for note in created_notes:
+                await self.db.refresh(note)
+
+            logger.info(f"Chunk {chunk_index + 1}/{total_chunks}: Created {len(created_notes)} notes")
+
+            return {
+                "notes": created_notes,
+                "tokens_used": generation_result["input_tokens"] + generation_result["output_tokens"],
+                "cost_usd": generation_result["cost"],
+                "chunk_index": chunk_index,
+            }
+
+        except Exception as e:
+            logger.error(f"Error processing chunk {chunk_index}: {e}")
+            raise
+
+    def _clean_json_response(self, content: str) -> str:
+        """Clean LLM response for JSON parsing."""
+        if content.startswith("```json"):
+            content = content.replace("```json", "", 1)
+        if content.startswith("```"):
+            content = content.replace("```", "", 1)
+        if content.endswith("```"):
+            content = content.rsplit("```", 1)[0]
+        return content.strip()
+```
+
+### Phase 3: Backend - Create New Endpoint
+
+#### Step 3.1: Add Schema
+
+**File**: `backend/app/schemas.py`
+
+Add after existing schemas (around line 950):
+
+```python
+class FullDOMAutoNoteRequest(BaseModel):
+    """Request schema for server-side chunking with full DOM."""
+
+    llm_provider_id: int = Field(1, description="LLM provider ID")
+    template_type: str = Field("study_guide", description="Template type")
+    full_dom: str = Field(..., min_length=1, description="Complete page DOM")
+    custom_instructions: Optional[str] = Field(None, description="Custom instructions")
+
+
+class FullDOMAutoNoteResponse(BaseModel):
+    """Response schema for server-side chunking."""
+
+    notes: List[GeneratedNoteData] = Field(..., description="All generated notes")
+    batch_id: str = Field(..., description="Batch ID for this generation")
+    total_chunks: int = Field(..., description="Number of chunks processed")
+    successful_chunks: int = Field(..., description="Successfully processed chunks")
+    failed_chunks: List[int] = Field(default_factory=list, description="Failed chunk indices")
+    tokens_used: int = Field(..., description="Total tokens consumed")
+    cost_usd: float = Field(..., description="Total cost in USD")
+    generation_time_ms: int = Field(..., description="Total generation time")
+```
+
+#### Step 3.2: Add Endpoint
+
+**File**: `backend/app/routers/auto_notes.py`
+
+Add new endpoint after existing ones:
+
+```python
+@router.post(
+    "/pages/{page_id}/generate/full-dom",
+    response_model=FullDOMAutoNoteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_auto_notes_full_dom(
+    page_id: int,
+    request: FullDOMAutoNoteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> FullDOMAutoNoteResponse:
+    """
+    Generate auto notes with server-side chunking and parallel processing.
+
+    This endpoint:
+    1. Receives full DOM from frontend
+    2. Chunks it server-side
+    3. Processes chunks in parallel
+    4. Validates all selectors against full DOM
+    5. Returns all notes in single response
+
+    This solves the CSS selector validation problem where selectors
+    generated for chunk 2+ fail because they reference parent elements
+    not present in the chunk.
+    """
+    logger.info(
+        f"Server-side chunking requested for page_id={page_id}, "
+        f"DOM size={len(request.full_dom)/1000:.1f}KB, user_id={current_user.id}"
+    )
+
+    service = AutoNoteService(db)
+
+    try:
+        result = await service.generate_auto_notes_with_full_dom(
+            page_id=page_id,
+            user_id=current_user.id,
+            full_dom=request.full_dom,
+            llm_provider_id=request.llm_provider_id,
+            template_type=request.template_type,
+        )
+
+        # Convert notes to response format
+        notes_data = [
+            GeneratedNoteData(
+                id=note.id,
+                content=note.content,
+                highlighted_text=note.highlighted_text,
+                position_x=note.position_x,
+                position_y=note.position_y,
+            )
+            for note in result["notes"]
+        ]
+
+        return FullDOMAutoNoteResponse(
+            notes=notes_data,
+            batch_id=result["batch_id"],
+            total_chunks=result["total_chunks"],
+            successful_chunks=result["successful_chunks"],
+            failed_chunks=result.get("failed_chunks", []),
+            tokens_used=result["tokens_used"],
+            cost_usd=result["cost_usd"],
+            generation_time_ms=result["generation_time_ms"],
+        )
+
+    except ValueError as e:
+        logger.error(f"Value error: {e}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate auto notes: {str(e)}",
+        )
+```
+
+### Phase 4: Frontend - Simplify to Single Request
+
+#### Step 4.1: Update Content.js
+
+**File**: `chrome-extension/content.js`
+
+Replace the complex `handleGenerateDOMTestNotes()` function (lines 2850-2950) with simplified version:
 
 ```javascript
 /**
- * Handle DOM test auto-notes generation with batched parallel processing
+ * Handle DOM auto-notes generation with server-side chunking
+ * Simplified: Send full DOM, let backend handle chunking and parallelization
  */
 async function handleGenerateDOMTestNotes() {
   try {
-    console.log("[Web Notes] Starting DOM test auto-note generation with chunking");
+    console.log("[Web Notes] Starting auto-note generation with server-side chunking");
 
     // Check authentication
     const isAuth = await isServerAuthenticated();
@@ -406,35 +895,30 @@ async function handleGenerateDOMTestNotes() {
       return;
     }
 
-    // Extract page DOM in chunks
-    const chunks = extractPageDOMInChunks();
-    const totalChunks = chunks.length;
+    // Extract full DOM (reuse existing function)
+    const fullDOM = extractPageDOMForTest();
 
-    console.log(`[Web Notes] Processing ${totalChunks} chunk(s) in batches of ${MAX_CONCURRENT_CHUNKS}`);
-
-    // Generate batch ID upfront (shared across all chunks)
-    const batchId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // Add batch_id and position_offset to all chunks
-    chunks.forEach((chunk, index) => {
-      chunk.batch_id = batchId;
-      chunk.position_offset = index * 20;  // Stagger positions
-    });
-
-    // Show initial progress
-    const numBatches = Math.ceil(totalChunks / MAX_CONCURRENT_CHUNKS);
-    if (totalChunks > 1) {
-      alert(
-        `Large page detected! Processing ${totalChunks} chunks in ${numBatches} batches.\n\n` +
-        `This will take approximately ${Math.ceil(numBatches * 30 / 60)} minute(s). You'll be notified when complete.`
-      );
+    if (!fullDOM) {
+      alert("Failed to extract page content");
+      return;
     }
 
-    // Get page info and register page ONCE
+    const domSize = Math.round(fullDOM.length / 1000);
+    console.log(`[Web Notes] Sending ${domSize}KB DOM to server for chunking`);
+
+    // Show loading message
+    const estimatedTime = domSize > 100 ? Math.ceil(domSize / 50) : 1;
+    alert(
+      `Processing page content (${domSize}KB).\n\n` +
+      `This may take ${estimatedTime} minute(s). ` +
+      `The server will chunk and process the content in parallel.\n\n` +
+      `You'll be notified when complete.`
+    );
+
+    // Register page
     const pageUrl = window.location.href;
     const pageTitle = document.title || "Untitled";
 
-    // Register page first (before any chunks)
     const pageData = await chrome.runtime.sendMessage({
       action: "API_registerPage",
       url: pageUrl,
@@ -448,1148 +932,311 @@ async function handleGenerateDOMTestNotes() {
 
     console.log(`[Web Notes] Page registered with ID: ${pageData.id}`);
 
-    // Process chunks in batches (parallel within batch)
-    const allResults = [];
+    // Single request with full DOM
+    const response = await chrome.runtime.sendMessage({
+      action: "API_generateAutoNotesFullDOM",
+      pageId: pageData.id,
+      fullDOM: fullDOM,
+    });
 
-    for (let i = 0; i < chunks.length; i += MAX_CONCURRENT_CHUNKS) {
-      const batch = chunks.slice(i, i + MAX_CONCURRENT_CHUNKS);
-      const batchNum = Math.floor(i / MAX_CONCURRENT_CHUNKS) + 1;
+    // Handle response
+    if (response.success && response.data) {
+      const { notes, total_chunks, successful_chunks, cost_usd, tokens_used, batch_id } = response.data;
 
-      console.log(`[Web Notes] Processing batch ${batchNum}/${numBatches} (chunks ${i + 1}-${Math.min(i + MAX_CONCURRENT_CHUNKS, totalChunks)})`);
+      let message = `Successfully generated ${notes.length} study notes!\n\n` +
+        `Processed ${successful_chunks}/${total_chunks} chunks\n` +
+        `Batch ID: ${batch_id}\n` +
+        `Total Cost: $${cost_usd.toFixed(4)}\n` +
+        `Total Tokens: ${tokens_used.toLocaleString()}`;
 
-      // Process batch in parallel
-      const batchPromises = batch.map(chunk =>
-        chrome.runtime.sendMessage({
-          action: "API_generateDOMTestNotesChunk",
-          pageId: pageData.id,  // Use the already-registered page ID
-          chunkData: chunk,
-        }).catch(error => ({
-          success: false,
-          error: error.message,
-          chunk_index: chunk.chunk_index
-        }))
-      );
-
-      // Wait for all chunks in this batch to complete
-      const batchResults = await Promise.all(batchPromises);
-      allResults.push(...batchResults);
-
-      console.log(`[Web Notes] Batch ${batchNum}/${numBatches} complete`);
-    }
-
-    // Aggregate successful results
-    const successful = allResults.filter(r => r.success && r.data);
-    const failed = allResults.filter(r => !r.success || !r.data);
-
-    const allNotes = successful.flatMap(r => r.data.notes || []);
-    const totalCost = successful.reduce((sum, r) => sum + (r.data.cost_usd || 0), 0);
-    const totalTokens = successful.reduce((sum, r) => sum + (r.data.tokens_used || 0), 0);
-
-    // Show final results
-    if (allNotes.length > 0) {
-      let message = `Successfully generated ${allNotes.length} study notes from ${successful.length}/${totalChunks} chunks!\n\n` +
-        `Batch ID: ${batchId}\n` +
-        `Total Cost: $${totalCost.toFixed(4)}\n` +
-        `Total Tokens: ${totalTokens.toLocaleString()}`;
-
-      if (failed.length > 0) {
-        message += `\n\nWarning: ${failed.length} chunk(s) failed to process.`;
+      if (successful_chunks < total_chunks) {
+        message += `\n\nWarning: ${total_chunks - successful_chunks} chunk(s) failed to process.`;
       }
 
       alert(message);
 
-      // Refresh the page to load the new notes
+      // Refresh to show notes
       setTimeout(() => {
         window.location.reload();
       }, 1000);
     } else {
-      alert(
-        `No notes were generated from ${totalChunks} chunk(s).\n` +
-        `Successful: ${successful.length}, Failed: ${failed.length}\n\n` +
-        `The content might not have sufficient information or all chunks failed.`
-      );
+      alert(`Failed to generate auto notes: ${response.error || 'Unknown error'}`);
     }
   } catch (error) {
-    console.error("[Web Notes] Error generating DOM test notes:", error);
+    console.error("[Web Notes] Error generating auto notes:", error);
     alert(`Failed to generate auto notes: ${error.message}`);
   }
 }
+
+// Keep the chunking functions for reference but mark as deprecated
+// They contain valuable logic that was ported to Python
+/** @deprecated Now handled server-side */
+function chunkDOMContent(htmlContent, maxTokensPerChunk = 10000) {
+  // ... existing code ...
+}
+
+/** @deprecated Now handled server-side */
+function extractPageDOMInChunks() {
+  // ... existing code ...
+}
 ```
 
-**Implementation Details**:
-- Replace existing function at lines 2583-2634
-- Add `MAX_CONCURRENT_CHUNKS` constant at top of file
-- Use batched parallel processing with `Promise.all()`
-- Frontend generates `batch_id` (no backend session needed)
-- Accumulate results from all chunks with error handling
-- Show batch progress alerts
+#### Step 4.2: Update Background.js
 
-**Testing Requirements**:
-- Verify batched parallel processing (3 at a time)
-- Check error handling for failed chunks (continue with others)
-- Validate result accumulation across batches
-- Test progress messages for multiple batches
-- Verify batch_id is used consistently
+**File**: `chrome-extension/background.js`
 
----
-
-#### Phase 1.3: Update `background.js` Message Handler
-
-**Location**: `chrome-extension/background.js:476-484`
-
-**Modifications**:
+Add handler for new message:
 
 ```javascript
-// In the chrome.runtime.onMessage.addListener handler
-// Add new case after line 484:
+// In chrome.runtime.onMessage.addListener, add:
 
-case "API_registerPage":
-  // Register the page (called once before chunks)
-  result = await ServerAPI.registerPage(message.url, message.title);
+case "API_generateAutoNotesFullDOM":
+  // New endpoint: server-side chunking
+  result = await ServerAPI.generateAutoNotesWithFullDOM(message.pageId, message.fullDOM);
   break;
 
-case "API_generateDOMTestNotesChunk":
-  // Generate notes with DOM chunk (page already registered)
-  result = await ServerAPI.generateAutoNotesWithDOMChunk(message.pageId, message.chunkData);
-  break;
+// Keep old handlers for backward compatibility but mark deprecated
 ```
 
-**Implementation Details**:
-- Add two cases after existing `API_generateDOMTestNotes` handler
-- `API_registerPage`: Handles page registration (called once)
-- `API_generateDOMTestNotesChunk`: Processes chunks (uses pageId directly)
-- No duplicate registration in chunk handler
+#### Step 4.3: Update Server API
 
-**Testing Requirements**:
-- Verify page registration happens exactly once
-- Check pageId is passed correctly to chunks
-- Verify chunk metadata is passed correctly
+**File**: `chrome-extension/server-api.js`
 
----
-
-#### Phase 1.4: Update `server-api.js` with Chunk Support
-
-**Location**: `chrome-extension/server-api.js` (after line 571)
-
-**New Method**:
+Add new method:
 
 ```javascript
 /**
- * Generate auto notes with DOM chunk
+ * Generate auto notes with server-side chunking
+ * Server handles all chunking and parallel processing
  * @param {number} pageId - Page ID
- * @param {Object} chunkData - Chunk metadata and content
- * @returns {Promise<Object>} Generation response
+ * @param {string} fullDOM - Complete DOM content
+ * @returns {Promise<Object>} Generation response with all notes
  */
-async generateAutoNotesWithDOMChunk(pageId, chunkData) {
+async generateAutoNotesWithFullDOM(pageId, fullDOM) {
   try {
     if (!this.isAuthenticated()) {
-      throw new Error("User not authenticated - cannot generate auto notes");
+      throw new Error("User not authenticated");
     }
 
     const requestData = {
-      llm_provider_id: 1, // Default to Gemini
+      llm_provider_id: 1,  // Default to Gemini
       template_type: "study_guide",
-      chunk_index: chunkData.chunk_index,
-      total_chunks: chunkData.total_chunks,
-      chunk_dom: chunkData.chunk_dom,
-      parent_context: chunkData.parent_context,
-      batch_id: chunkData.batch_id,  // Frontend-generated batch ID
-      position_offset: chunkData.position_offset,  // Position offset for this chunk
-      custom_instructions:
-        "Use the provided DOM content chunk to generate precise study notes. " +
-        `This is chunk ${chunkData.chunk_index + 1} of ${chunkData.total_chunks}.`,
+      full_dom: fullDOM,
+      custom_instructions: "Generate comprehensive study notes from this page content.",
     };
 
-    const response = await this.makeRequest(`/auto-notes/pages/${pageId}/generate/chunked`, {
+    // New endpoint that handles everything server-side
+    const response = await this.makeRequest(`/auto-notes/pages/${pageId}/generate/full-dom`, {
       method: "POST",
       body: JSON.stringify(requestData),
+      // Increase timeout for large pages
+      signal: AbortSignal.timeout(180000),  // 3 minutes
     });
 
     const result = await response.json();
     console.log(
-      `[Web Notes] Generated ${result.notes?.length || 0} notes from chunk ${chunkData.chunk_index + 1}/${chunkData.total_chunks}`
+      `[Web Notes] Generated ${result.notes?.length || 0} notes from ${result.total_chunks} chunks`
     );
     return result;
   } catch (error) {
-    console.error("[Web Notes] Failed to generate auto notes with DOM chunk:", error);
+    console.error("[Web Notes] Failed to generate auto notes:", error);
     throw error;
   }
 }
-```
 
-**Implementation Details**:
-- Add method after `generateAutoNotesWithDOM()` at line 571
-- Send chunk metadata including `batch_id` and `position_offset`
-- Use new `/generate/chunked` endpoint
-- No session management needed
-
-**Testing Requirements**:
-- Verify chunk metadata is sent correctly (especially batch_id)
-- Check authentication handling
-- Test error propagation
-- Verify parallel requests work correctly
-
----
-
-### Phase 2: Backend Schema & Endpoints
-
-#### Phase 2.1: Add Chunked Request/Response Schemas
-
-**Location**: `backend/app/schemas.py` (after line 946)
-
-**New Schemas**:
-
-```python
-class ChunkedAutoNoteRequest(BaseModel):
-    """Schema for chunked auto note generation requests (stateless)."""
-
-    llm_provider_id: int = Field(1, description="LLM provider ID to use")
-    template_type: str = Field(
-        "study_guide",
-        description="Type of template: 'study_guide' or 'content_review'",
-    )
-    chunk_index: int = Field(..., ge=0, description="Index of current chunk (0-based)")
-    total_chunks: int = Field(..., gt=0, description="Total number of chunks")
-    chunk_dom: str = Field(..., min_length=1, description="DOM content for this chunk")
-    parent_context: Optional[Dict[str, Any]] = Field(
-        None, description="Parent document context for selector accuracy"
-    )
-    batch_id: str = Field(..., description="Frontend-generated batch ID (shared across all chunks)")
-    position_offset: int = Field(0, description="Position offset for notes in this chunk")
-    custom_instructions: Optional[str] = Field(
-        None, description="Optional custom instructions for generation"
-    )
-
-
-class ChunkedAutoNoteResponse(BaseModel):
-    """Schema for single chunk response (stateless, no aggregation)."""
-
-    notes: List[GeneratedNoteData] = Field(
-        ..., description="Notes generated from this chunk"
-    )
-    chunk_index: int = Field(..., description="Index of processed chunk")
-    total_chunks: int = Field(..., description="Total chunks in request")
-    batch_id: str = Field(..., description="Batch ID for this set of notes")
-    tokens_used: int = Field(..., description="Tokens consumed for this chunk")
-    cost_usd: float = Field(..., description="Cost for this chunk in USD")
-    input_tokens: int = Field(..., description="Input tokens for this chunk")
-    output_tokens: int = Field(..., description="Output tokens for this chunk")
-    generation_time_ms: int = Field(..., description="Generation time for this chunk in milliseconds")
-```
-
-**Implementation Details**:
-- Add after `BatchDeleteResponse` at line 946
-- Reuse existing `GeneratedNoteData` schema
-- Single response type (no partial/final distinction)
-- Backend is stateless - no session management needed
-
-**Testing Requirements**:
-- Validate schema with Pydantic
-- Test serialization/deserialization
-- Check field constraints
-- Verify batch_id field works correctly
-
----
-
-#### Phase 2.2: Create Chunked Endpoint
-
-**Location**: `backend/app/routers/auto_notes.py` (after line 104)
-
-**New Endpoint**:
-
-```python
-@router.post(
-    "/pages/{page_id}/generate/chunked",
-    response_model=ChunkedAutoNoteResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def generate_auto_notes_chunked(
-    page_id: int,
-    request: ChunkedAutoNoteRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-) -> ChunkedAutoNoteResponse:
-    """
-    Generate AI-powered study notes from a DOM chunk (stateless).
-
-    Each chunk is processed independently with no backend session management.
-    Frontend aggregates results from all chunks.
-
-    Args:
-        page_id: ID of page to generate notes for
-        request: Chunked generation configuration
-        db: Database session
-        current_user: Authenticated user
-
-    Returns:
-        Single chunk response with notes and metadata
-
-    Raises:
-        HTTPException: If page not found or generation fails
-    """
-    logger.info(
-        f"Chunked auto note generation requested for page_id={page_id}, "
-        f"chunk {request.chunk_index + 1}/{request.total_chunks}, "
-        f"batch_id={request.batch_id}, user_id={current_user.id}"
-    )
-
-    service = AutoNoteService(db)
-
-    try:
-        result = await service.generate_auto_notes_chunked(
-            page_id=page_id,
-            user_id=current_user.id,
-            llm_provider_id=request.llm_provider_id,
-            template_type=request.template_type,
-            chunk_index=request.chunk_index,
-            total_chunks=request.total_chunks,
-            chunk_dom=request.chunk_dom,
-            parent_context=request.parent_context,
-            batch_id=request.batch_id,
-            position_offset=request.position_offset,
-            custom_instructions=request.custom_instructions,
-        )
-
-        # Return single chunk response
-        notes_data = [
-            GeneratedNoteData(
-                id=note.id,
-                content=note.content,
-                highlighted_text=note.highlighted_text,
-                position_x=note.position_x,
-                position_y=note.position_y,
-            )
-            for note in result["notes"]
-        ]
-
-        return ChunkedAutoNoteResponse(
-            notes=notes_data,
-            chunk_index=request.chunk_index,
-            total_chunks=request.total_chunks,
-            batch_id=request.batch_id,
-            tokens_used=result["tokens_used"],
-            cost_usd=result["cost_usd"],
-            input_tokens=result["input_tokens"],
-            output_tokens=result["output_tokens"],
-            generation_time_ms=result["generation_time_ms"],
-        )
-
-    except ValueError as e:
-        logger.error(f"Value error during chunked auto note generation: {e}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        logger.error(f"Unexpected error during chunked auto note generation: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate auto notes from chunk: {str(e)}",
-        )
-```
-
-**Implementation Details**:
-- Add after existing `generate_auto_notes()` endpoint
-- No need for `Union` import - single response type
-- Stateless endpoint - no session management
-- Log chunk and batch_id for debugging
-
-**Testing Requirements**:
-- Test with single chunk
-- Test with multiple parallel chunks
-- Verify batch_id is stored correctly in DB
-- Verify error handling
-- Test concurrent requests (3 at a time)
-
----
-
-### Phase 3: Service Layer
-
-#### Phase 3.1: Add `generate_auto_notes_chunked()` Method (Stateless)
-
-**Location**: `backend/app/services/auto_note_service.py` (after line 314)
-
-**New Method**:
-
-```python
-async def generate_auto_notes_chunked(
-    self,
-    page_id: int,
-    user_id: int,
-    llm_provider_id: int,
-    chunk_index: int,
-    total_chunks: int,
-    chunk_dom: str,
-    batch_id: str,
-    position_offset: int = 0,
-    template_type: str = "study_guide",
-    parent_context: Optional[Dict[str, Any]] = None,
-    custom_instructions: Optional[str] = None,
-) -> Dict:
-    """
-    Generate AI-powered study notes from a DOM chunk (stateless).
-
-    Each chunk is processed independently. Frontend-generated batch_id links
-    all notes together. No backend session management.
-
-    Args:
-        page_id: ID of page to generate notes for
-        user_id: ID of user creating the notes
-        llm_provider_id: LLM provider to use
-        chunk_index: Index of current chunk (0-based)
-        total_chunks: Total number of chunks
-        chunk_dom: DOM content for this chunk
-        batch_id: Frontend-generated batch ID (shared across all chunks)
-        position_offset: Position offset for notes in this chunk
-        template_type: Type of template ('study_guide' or 'content_review')
-        parent_context: Parent document context for selectors
-        custom_instructions: Optional user instructions
-
-    Returns:
-        Dictionary with notes and metadata for this chunk only
-
-    Raises:
-        ValueError: If page not found
-    """
-    start_time = time.time()
-
-    logger.info(
-        f"Processing chunk {chunk_index + 1}/{total_chunks}, "
-        f"batch_id={batch_id}, page_id={page_id}"
-    )
-
-    # Fetch page
-    result = await self.db.execute(
-        select(Page).options(selectinload(Page.site)).where(Page.id == page_id)
-    )
-    page = result.scalar_one_or_none()
-
-    if not page:
-        raise ValueError(f"Page with ID {page_id} not found")
-
-    # Build prompt with chunk context
-    chunk_instructions = (
-        f"Processing chunk {chunk_index + 1} of {total_chunks}. "
-        f"Generate notes only for content in this chunk. "
-    )
-    if custom_instructions:
-        chunk_instructions += custom_instructions
-
-    prompt = await self._build_prompt(
-        page,
-        template_type,
-        chunk_instructions,
-        page_source=None,
-        page_dom=chunk_dom,
-    )
-
-    logger.info(f"Chunk {chunk_index + 1}/{total_chunks}: Prompt built, {len(prompt)} chars")
-
-    # Generate using Gemini
-    provider = await create_gemini_provider()
-    generation_result = await provider.generate_content_large(prompt=prompt)
-
-    logger.info(
-        f"Chunk {chunk_index + 1}/{total_chunks}: Generation complete, "
-        f"{generation_result['input_tokens']} in, {generation_result['output_tokens']} out"
-    )
-
-    # Parse JSON response
-    generated_content = generation_result["content"]
-
-    # Remove markdown code blocks if present
-    if generated_content.startswith("```json"):
-        generated_content = generated_content.replace("```json", "", 1)
-    if generated_content.startswith("```"):
-        generated_content = generated_content.replace("```", "", 1)
-    if generated_content.endswith("```"):
-        generated_content = generated_content.rsplit("```", 1)[0]
-
-    generated_content = generated_content.strip()
-
-    try:
-        parsed_data = json.loads(generated_content)
-        notes_data = parsed_data.get("notes", [])
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON response for chunk {chunk_index + 1}: {e}")
-        raise ValueError(f"Failed to parse LLM response as JSON: {e}")
-
-    # Create Note records for this chunk
-    created_notes = []
-    if notes_data:
-        for idx, note_data in enumerate(notes_data):
-            # Extract selectors
-            css_selector = note_data.get("css_selector")
-            xpath = note_data.get("xpath")
-
-            # Fallback to old format
-            if not css_selector and not xpath:
-                position = note_data.get("position") or note_data.get("position_hint")
-                if position:
-                    css_selector, xpath = detect_selector_type(position)
-
-            # Validate and repair selectors if chunk_dom available
-            validation_metadata = None
-            if chunk_dom and css_selector:
-                highlighted_text = note_data.get("highlighted_text", "")
-
-                is_valid, match_count, _ = self._validator.validate_selector(
-                    chunk_dom, css_selector
-                )
-
-                if not is_valid:
-                    repair_result = self._validator.repair_selector(
-                        chunk_dom, highlighted_text, css_selector, xpath
-                    )
-
-                    if repair_result["success"]:
-                        css_selector = repair_result["css_selector"]
-                        xpath = repair_result["xpath"]
-                        validation_metadata = {
-                            "original_selector": note_data.get("css_selector"),
-                            "was_repaired": True,
-                            "match_count": repair_result["match_count"],
-                            "text_similarity": repair_result["text_similarity"],
-                        }
-
-            # Build anchor_data
-            anchor_data: Dict[str, Any] = {
-                "auto_generated": True,
-                "chunk_index": chunk_index,
-            }
-
-            if validation_metadata:
-                anchor_data["validation"] = validation_metadata
-
-            if css_selector:
-                anchor_data["elementSelector"] = css_selector
-            if xpath:
-                anchor_data["elementXPath"] = xpath
-
-            # Build selectionData
-            highlighted_text = note_data.get("highlighted_text", "")
-            if highlighted_text and (css_selector or xpath):
-                selector = css_selector or xpath
-                anchor_data["selectionData"] = {
-                    "selectedText": highlighted_text,
-                    "startSelector": selector,
-                    "endSelector": selector,
-                    "startOffset": 0,
-                    "endOffset": len(highlighted_text),
-                    "startContainerType": 3,
-                    "endContainerType": 3,
-                    "commonAncestorSelector": selector,
-                }
-
-            # Create unique server_link_id
-            server_link_id = f"{batch_id}_{chunk_index}_{idx}"
-
-            note = Note(
-                content=note_data.get("commentary", ""),
-                highlighted_text=highlighted_text,
-                page_section_html=None,
-                position_x=100 + position_offset + (idx * 20),
-                position_y=100 + position_offset + (idx * 20),
-                anchor_data=anchor_data,
-                page_id=page_id,
-                user_id=user_id,
-                generation_batch_id=batch_id,  # Use frontend-provided batch_id
-                server_link_id=server_link_id,
-                is_active=True,
-            )
-            self.db.add(note)
-            created_notes.append(note)
-
-        await self.db.commit()
-
-        # Refresh to get IDs
-        for note in created_notes:
-            await self.db.refresh(note)
-
-        logger.info(
-            f"Chunk {chunk_index + 1}/{total_chunks}: Created {len(created_notes)} notes"
-        )
-
-    # Calculate generation time for this chunk
-    generation_time_ms = int((time.time() - start_time) * 1000)
-
-    # Return results for this chunk only (stateless)
-    return {
-        "notes": created_notes,
-        "tokens_used": generation_result["input_tokens"] + generation_result["output_tokens"],
-        "cost_usd": generation_result["cost"],
-        "input_tokens": generation_result["input_tokens"],
-        "output_tokens": generation_result["output_tokens"],
-        "generation_time_ms": generation_time_ms,
-    }
-```
-
-**Implementation Details**:
-- Add after existing `generate_auto_notes()` method
-- **No session state management** - completely stateless
-- Use frontend-provided `batch_id` for linking notes
-- Use `position_offset` for staggered note positioning
-- Reuse existing validation and selector repair logic
-- Return results immediately (no waiting for other chunks)
-
-**Testing Requirements**:
-- Test single chunk processing
-- Test parallel chunk processing (simulate 3 concurrent)
-- Verify batch_id is stored correctly in DB
-- Verify position_offset works correctly
-- Test error handling
-- Verify no race conditions with concurrent requests
-
----
-
-#### Phase 3.2: Update Prompt Template for Chunking
-
-**Location**: `backend/prompts/auto_notes/study_guide_generation.jinja2`
-
-**Modifications**:
-
-Add context about chunking at the beginning of the template:
-
-```jinja2
-{% if chunk_index is defined %}
-**CHUNKING CONTEXT**:
-This is chunk {{ chunk_index + 1 }} of {{ total_chunks }} from a large page.
-- Generate notes ONLY for content visible in this chunk
-- Use CSS selectors relative to the full document structure (not just this chunk)
-- The page may have been split at semantic boundaries (sections, articles, divs)
-- Previous/next chunks may contain related content, but focus on this chunk
-
-{% endif %}
-```
-
-**Implementation Details**:
-- Add variables: `chunk_index`, `total_chunks`
-- Pass from `_build_prompt()` when chunking
-- Instruct LLM about partial content
-
-**Testing Requirements**:
-- Verify template renders with chunk context
-- Test without chunk variables (backward compatible)
-- Validate selector generation accuracy
-
----
-
-### Phase 4: Testing & Refinement
-
-#### Phase 4.1: Functional Testing
-
-**Test Cases**:
-
-1. **Small Page (< 40KB)**
-   - Should use single chunk
-   - No chunking overhead
-   - Identical behavior to non-chunked
-
-2. **Medium Page (40-150KB)**
-   - Should split into 2-4 chunks
-   - All chunks processed successfully
-   - Notes distributed across chunks
-
-3. **Large Page (> 200KB)**
-   - Should split into 5+ chunks
-   - Sequential processing
-   - Progress feedback shown
-   - All notes aggregated
-
-4. **Error Scenarios**
-   - Network failure mid-chunk → retry logic
-   - LLM error on one chunk → continue with others
-   - Invalid session ID → error message
-   - Browser refresh during processing → session timeout
-
-**Testing Files**:
-- Create test HTML pages of various sizes
-- Mock DOM structures with semantic boundaries
-- Test with real Wikipedia articles, documentation pages
-
----
-
-#### Phase 4.2: Error Handling & Retry
-
-**Enhancements**:
-
-1. **Retry Failed Chunks**
-   ```javascript
-   // In content.js
-   async function processChunkWithRetry(chunk, maxRetries = 3) {
-     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-       try {
-         return await sendChunkToBackend(chunk);
-       } catch (error) {
-         if (attempt === maxRetries) throw error;
-         await sleep(1000 * attempt); // Exponential backoff
-       }
-     }
-   }
-   ```
-
-2. **Session Timeout**
-   ```python
-   # In auto_note_service.py
-   SESSION_TIMEOUT = 600  # 10 minutes
-
-   def cleanup_old_sessions():
-     now = time.time()
-     for session_id, session in list(_chunk_sessions.items()):
-       if now - session["start_time"] > SESSION_TIMEOUT:
-         del _chunk_sessions[session_id]
-   ```
-
-3. **Partial Success Handling**
-   - Track which chunks succeeded
-   - Allow user to retry failed chunks only
-   - Display partial results even if some chunks fail
-
----
-
-#### Phase 4.3: Performance Optimization
-
-**Optimizations**:
-
-1. **Parallel Validation**
-   - Validate selectors in parallel after generation
-   - Use asyncio.gather() for multiple validators
-
-2. **Smarter Chunking**
-   - Learn optimal chunk sizes based on page structure
-   - Adjust boundaries to avoid splitting mid-paragraph
-
-3. **Caching**
-   - Cache cleaned DOM for retry scenarios
-   - Cache page registration to avoid duplicate lookups
-
-4. **Streaming Responses**
-   - Show notes as each chunk completes (don't wait for all)
-   - Progressive rendering in extension
-
----
-
-#### Phase 4.4: User Experience Improvements
-
-**Enhancements**:
-
-1. **Progress Bar**
-   - Replace alerts with persistent progress indicator
-   - Show current chunk, total chunks, notes generated so far
-
-2. **Cancel Operation**
-   - Allow user to cancel mid-processing
-   - Clean up session and partial notes
-
-3. **Preview Before Processing**
-   - Show estimated chunks and cost before starting
-   - Give user option to proceed or cancel
-
-4. **Chunk Size Configuration**
-   - Let advanced users adjust chunk size
-   - Store preference in extension settings
-
----
-
-## Edge Cases & Error Handling
-
-### Edge Case Matrix
-
-| Scenario | Behavior | Mitigation |
-|----------|----------|------------|
-| Page < 40KB | Single chunk, no overhead | Auto-detect, use non-chunked endpoint |
-| Very large section (> 40KB) | Section exceeds chunk size | Split by paragraphs or headings |
-| Network interruption | Chunk request fails | Retry with exponential backoff (3x) |
-| LLM timeout on chunk | Chunk processing stalls | Timeout after 60s, mark as failed |
-| Session expires | State lost | 10-minute timeout, prompt to restart |
-| Concurrent sessions | State collision | Unique session IDs, isolated state |
-| Selector invalid after repair | Note positioning fails | Use fallback x/y coordinates |
-| No semantic boundaries | Can't chunk intelligently | Fall back to character-based splits |
-| Browser refresh mid-process | Session lost | Warn user, offer to restart |
-
-### Error Messages
-
-**User-Facing**:
-- "Processing large page in 5 chunks. This may take 2-3 minutes..."
-- "Chunk 3 of 5 failed. Retrying... (attempt 2 of 3)"
-- "Successfully processed 4 of 5 chunks. 47 notes generated."
-- "Processing cancelled. Partial notes have been saved."
-
-**Developer Logs**:
-- `[CHUNK] Session abc123: Processing chunk 2/5 (40KB)`
-- `[CHUNK] Session abc123: Chunk 2 complete, 8 notes, $0.0012`
-- `[CHUNK] Session abc123: Chunk 3 failed, retrying...`
-- `[CHUNK] Session abc123: All chunks complete, 42 total notes`
-
----
-
-## Rollout Strategy
-
-### Phase A: Feature Flag Implementation
-
-**Add Configuration**:
-```javascript
-// chrome-extension/content.js
-const CHUNKING_CONFIG = {
-  enabled: true,              // Master switch
-  threshold: 40000,           // KB to trigger chunking
-  chunkSize: 40000,           // Target chunk size
-  maxChunks: 20,              // Safety limit
-  retryAttempts: 3,           // Retry failed chunks
-};
-```
-
-**Gradual Rollout**:
-1. **Week 1**: Internal testing only (flag disabled in prod)
-2. **Week 2**: Enable for pages > 200KB
-3. **Week 3**: Enable for pages > 100KB
-4. **Week 4**: Enable for all pages > 40KB
-5. **Week 5+**: Monitor metrics, adjust thresholds
-
-### Phase B: Backward Compatibility
-
-**Maintain Old Endpoint**:
-- Keep `/pages/{page_id}/generate` endpoint
-- Users on old extension versions continue to work
-- Deprecate after 2 months with warning
-
-**Version Detection**:
-```javascript
-// Extension manifest.json
-"version": "1.5.0"  // Chunking support
-
-// Server checks version header
-if (extensionVersion < "1.5.0") {
-  // Use old single-request flow
-} else {
-  // Use new chunked flow
+// Mark old chunking methods as deprecated
+/** @deprecated Use generateAutoNotesWithFullDOM instead */
+async generateAutoNotesWithDOMChunk(pageId, chunkData) {
+  // ... existing code ...
 }
 ```
 
-### Phase C: Monitoring & Metrics
+---
 
-**Track**:
-- Average chunks per page
-- Chunk processing time distribution
-- Chunk failure rate
-- Selector repair rate per chunk
-- User satisfaction (notes kept vs. deleted)
+## Rollback Strategy
 
-**Dashboards**:
-- Real-time chunk processing monitor
-- Daily chunk statistics
-- Error rate by chunk index (first chunks fail more?)
-- Cost per chunk vs. cost per page
+### What to Keep
+1. **Chunking Algorithm Logic** - Port from JavaScript to Python (valuable)
+2. **Existing Backend Models** - Note, Page, etc. (unchanged)
+3. **Authentication Flow** - Works fine (unchanged)
+
+### What to Remove/Replace
+1. **Frontend Chunking** in content.js - Simplify to single request
+2. **Parallel Frontend Calls** - Move to backend
+3. **Chunk Endpoints** - Keep for compatibility, mark deprecated
+4. **Batch Processing in Frontend** - No longer needed
+
+### Migration Path
+1. Deploy new endpoint alongside old ones
+2. Update extension to use new endpoint
+3. Keep old endpoints for 2 months (backward compatibility)
+4. Monitor usage, deprecate old endpoints
 
 ---
 
-## Success Metrics
+## Testing Strategy
 
-### Quantitative Metrics
+### Run Tests in Order:
+1. **Critical Validation Tests** - Must pass to prove fix works
+2. **Chunking Algorithm Tests** - Verify Python port matches JS
+3. **Parallel Processing Tests** - Ensure performance maintained
+4. **Integration Tests** - Full flow with real pages
 
-1. **Page Coverage**
-   - **Target**: 100% of page content processed
-   - **Measure**: Average % of DOM included across all generations
-   - **Current**: ~60% (due to 50KB truncation)
-
-2. **Note Quality**
-   - **Target**: > 90% selector accuracy after repair
-   - **Measure**: % of notes that position correctly
-   - **Current**: ~75%
-
-3. **Performance**
-   - **Target**: < 2 minutes for 15-chunk page (batches of 3)
-   - **Measure**: Average time from start to completion
-   - **Acceptable**: ~30s per batch of 3 chunks
-   - **Improvement**: 5x faster than sequential (90s vs 450s for 15 chunks)
-
-4. **Reliability**
-   - **Target**: > 95% chunk success rate
-   - **Measure**: % of chunks that complete without error
-   - **Threshold**: Retry up to 3x before marking failed
-
-### Qualitative Metrics
-
-1. **User Satisfaction**
-   - Survey users: "Did chunking improve note quality?"
-   - Track batch deletion rate (lower = better)
-   - Monitor feature usage (adoption rate)
-
-2. **Note Usefulness**
-   - Track notes edited vs. kept unchanged
-   - Monitor time spent on pages with auto-notes
-   - Collect user feedback on chunk quality
-
----
-
-## Development Checklist
-
-### Phase 1: Frontend (Chrome Extension)
-- [ ] Add MAX_CONCURRENT_CHUNKS constant (set to 3)
-- [ ] Add token estimation function
-- [ ] Add semantic boundary detection
-- [ ] Add DOM chunking function
-- [ ] Add extractPageDOMInChunks() function (no session_id needed)
-- [ ] Update handleGenerateDOMTestNotes() for batched parallel processing
-- [ ] Generate batch_id on frontend (shared across all chunks)
-- [ ] Use Promise.all() for parallel chunk processing
-- [ ] Add chunk retry logic (optional)
-- [ ] Update background.js message handler
-- [ ] Add generateAutoNotesWithDOMChunk() to server-api.js
-- [ ] Test with various page sizes
-- [ ] Test error handling (continue on chunk failure)
-- [ ] Add batch progress feedback UI
-
-### Phase 2: Backend Schemas
-- [ ] Add ChunkedAutoNoteRequest schema (with batch_id and position_offset)
-- [ ] Add ChunkedAutoNoteResponse schema (single response type)
-- [ ] Test schema validation
-- [ ] Add to API documentation
-
-### Phase 2.2: Backend Endpoint
-- [ ] Create /pages/{page_id}/generate/chunked endpoint (stateless)
-- [ ] Add request validation
-- [ ] Single response type (no Union needed)
-- [ ] Add error handling
-- [ ] Add logging with batch_id
-- [ ] Test with parallel API requests
-
-### Phase 3: Backend Service (Stateless)
-- [ ] Add generate_auto_notes_chunked() method (stateless)
-- [ ] Use frontend-provided batch_id
-- [ ] Use position_offset for note positioning
-- [ ] No session management needed
-- [ ] Test parallel chunk processing
-- [ ] Test batch_id consistency in DB
-
-### Phase 5: Testing
-- [ ] Unit tests for chunking functions
-- [ ] Integration tests for full flow
-- [ ] Test small pages (single chunk)
-- [ ] Test medium pages (2-5 chunks)
-- [ ] Test large pages (5+ chunks)
-- [ ] Test error scenarios
-- [ ] Test concurrent sessions
-- [ ] Performance testing
-- [ ] Load testing
-
-### Phase 6: Documentation
-- [ ] Update API documentation
-- [ ] Add user guide for chunking
-- [ ] Add developer notes
-- [ ] Update CHANGELOG
-- [ ] Create migration guide
-
-### Phase 7: Deployment
-- [ ] Feature flag implementation
-- [ ] Gradual rollout plan
-- [ ] Monitoring setup
-- [ ] Alert configuration
-- [ ] Rollback plan
-- [ ] User communication
-
----
-
-## File Reference
-
-### Files to Create
-- None (all modifications to existing files)
-
-### Files to Modify
-
-#### Frontend (Chrome Extension)
-1. **chrome-extension/content.js**
-   - Lines 2529-2578: Keep extractPageDOMForTest() (fallback)
-   - After 2578: Add new chunking functions
-   - Lines 2583-2634: Replace handleGenerateDOMTestNotes()
-
-2. **chrome-extension/background.js**
-   - After line 484: Add chunk message handler
-
-3. **chrome-extension/server-api.js**
-   - After line 571: Add generateAutoNotesWithDOMChunk()
-
-#### Backend
-4. **backend/app/schemas.py**
-   - After line 946: Add chunked schemas
-
-5. **backend/app/routers/auto_notes.py**
-   - After line 104: Add chunked endpoint
-   - Add Union import
-
-6. **backend/app/services/auto_note_service.py**
-   - After line 314: Add generate_auto_notes_chunked() (stateless)
-
-7. **backend/prompts/auto_notes/study_guide_generation.jinja2**
-   - Beginning: Add chunk context section
-
----
-
-## Timeline Estimate
-
-### Parallel Development Tracks
-
-**Track 1: Frontend (3-4 days)**
-- Day 1: Chunking utility functions
-- Day 2: Update handlers and API client
-- Day 3: Testing and refinement
-- Day 4: Error handling and UX
-
-**Track 2: Backend (3-4 days)**
-- Day 1: Schemas and endpoint
-- Day 2: Service layer implementation
-- Day 3: Session management and caching
-- Day 4: Testing and optimization
-
-**Track 3: Integration & Testing (2-3 days)**
-- Day 1: End-to-end testing
-- Day 2: Performance testing
-- Day 3: Bug fixes and polish
-
-**Total: 8-11 days** (with parallel work)
-**Total: 15-20 days** (sequential work)
-
----
-
-## Appendix
-
-### Glossary
-
-- **Chunk**: A semantic portion of a page's DOM, sized to fit within LLM token limits
-- **Session**: A collection of related chunks being processed together
-- **Semantic Boundary**: Natural split points in HTML (sections, articles, divs)
-- **Parent Context**: Metadata about the full document structure for selector accuracy
-- **Batch ID**: Unique identifier for all notes generated in a session
-- **Selector Repair**: Process of fixing invalid CSS selectors using fuzzy matching
-
-### Related Documents
-
-- `CLAUDE.md` - Project session rules
-- `PROJECT_SPEC.md` - Architecture specification
-- `LLM_TODO.md` - LLM integration plan (Phases 1-5)
-- `dom_auto_notes_context` memory - Current DOM auto-notes implementation
-
-### API Examples
-
-**Chunk Request (all chunks use same format)**:
-```json
-POST /auto-notes/pages/123/generate/chunked
-{
-  "llm_provider_id": 1,
-  "template_type": "study_guide",
-  "chunk_index": 1,
-  "total_chunks": 5,
-  "chunk_dom": "<div class='section-2'>...</div>",
-  "parent_context": {
-    "body_classes": ["article", "post"],
-    "body_id": "main-content"
-  },
-  "batch_id": "auto_1234567890_abc",  // Frontend-generated, shared across all chunks
-  "position_offset": 20  // 20 pixels per chunk for staggering
-}
-```
-
-**Chunk Response (same for all chunks)**:
-```json
-{
-  "notes": [
-    {"id": 101, "content": "...", "highlighted_text": "..."},
-    {"id": 102, "content": "...", "highlighted_text": "..."}
-  ],
-  "chunk_index": 1,
-  "total_chunks": 5,
-  "batch_id": "auto_1234567890_abc",
-  "tokens_used": 8500,
-  "cost_usd": 0.0023,
-  "input_tokens": 7000,
-  "output_tokens": 1500,
-  "generation_time_ms": 28000
-}
-```
-
-**Frontend Aggregation (example)**:
-```javascript
-// Frontend aggregates all responses
-const allNotes = responses.flatMap(r => r.notes);  // [notes1, notes2, ...]
-const totalCost = responses.reduce((sum, r) => sum + r.cost_usd, 0);  // 0.0115
-const totalTokens = responses.reduce((sum, r) => sum + r.tokens_used, 0);  // 42000
-```
-
----
-
-## Notes for Future Sessions
-
-### Context Loading
-When starting a new session to implement chunking:
-
-1. **Read this document** (`DOM_CHUNKING_PLAN.md`)
-2. **Read memory**: `dom_auto_notes_context`
-3. **Check current files**: Verify line numbers haven't changed
-4. **Choose a phase**: Pick from Phase 1-4 based on priority
-5. **Update checklist**: Mark completed items as you go
-
-### Recommended Session Split
-
-**Session 1: Frontend Chunking**
-- Implement Phase 1.1 (utility functions)
-- Implement Phase 1.2 (handler updates)
-- Test locally with console logs
-
-**Session 2: Frontend Integration**
-- Implement Phase 1.3 (background.js)
-- Implement Phase 1.4 (server-api.js)
-- Test with mock backend responses
-
-**Session 3: Backend Schemas & Endpoint**
-- Implement Phase 2.1 (schemas)
-- Implement Phase 2.2 (endpoint)
-- Test with Swagger/Postman
-
-**Session 4: Backend Service**
-- Implement Phase 3.1 (stateless chunked generation)
-- No session management needed
-- Test with parallel chunks
-
-**Session 5: Integration & Testing**
-- End-to-end testing
-- Error handling
-- Performance optimization
-
-**Session 6: Polish & Deploy**
-- UX improvements
-- Documentation
-- Deployment
-
-### Quick Start Commands
-
+### Test Commands:
 ```bash
-# Backend
+# Backend tests
 cd backend
-source .venv/Scripts/activate  # Windows
-python -m pytest tests/  # Run tests
-uvicorn app.main:app --reload  # Start server
+source .venv/Scripts/activate
 
-# Frontend
-cd chrome-extension
-# Load unpacked extension in Chrome
-# Open DevTools console to see logs
+# Run critical tests first
+pytest tests/test_critical_selector_validation.py -v
 
-# Testing
-# Visit large pages:
-# - Wikipedia long articles
-# - MDN documentation
-# - News articles
+# Then chunking tests
+pytest tests/test_dom_chunking.py -v
+
+# Then parallel processing
+pytest tests/test_parallel_processing.py -v
+
+# Full suite
+pytest tests/ -v
+
+# With coverage
+pytest tests/ --cov=app --cov-report=html
+```
+
+### Manual Testing:
+1. Small page (< 40KB) - Should work unchanged
+2. Medium page (Wikipedia article) - 2-5 chunks
+3. Large page (MDN docs) - 5+ chunks
+4. Check all selectors position correctly
+
+---
+
+## Session Management Guide
+
+### For Next Session
+
+When picking up this implementation:
+
+1. **Check Current State**:
+   ```bash
+   # Use Serena to check what's implemented
+   mcp__serena__find_symbol "generate_auto_notes_with_full_dom" "backend"
+   mcp__serena__find_symbol "handleGenerateDOMTestNotes" "chrome-extension/content.js"
+   ```
+
+2. **Run Critical Tests**:
+   ```bash
+   pytest backend/tests/test_critical_selector_validation.py -v
+   ```
+   - If tests FAIL: Problem not fixed yet
+   - If tests PASS: Solution implemented correctly
+
+3. **Check Implementation Progress**:
+   - [ ] DOM Chunker service created
+   - [ ] Parallel processing implemented
+   - [ ] Full DOM validation in place
+   - [ ] New endpoint created
+   - [ ] Frontend simplified
+   - [ ] Old code marked deprecated
+
+4. **Next Steps Based on State**:
+   - Tests failing? → Implement Phase 2 (parallel processing)
+   - Backend done? → Simplify frontend (Phase 4)
+   - All code done? → Integration testing
+   - Tests passing? → Documentation and cleanup
+
+### Key Files to Check:
+
+**Backend**:
+- `backend/app/services/dom_chunker.py` - NEW file
+- `backend/app/services/auto_note_service.py` - Check for new methods
+- `backend/app/routers/auto_notes.py` - Check for `/full-dom` endpoint
+- `backend/app/schemas.py` - Check for FullDOM schemas
+
+**Frontend**:
+- `chrome-extension/content.js` - Should be simplified
+- `chrome-extension/server-api.js` - Check for new method
+- `chrome-extension/background.js` - Check for new handler
+
+### Common Issues:
+
+**If selectors still fail**:
+- Check that `full_dom` is passed to validator, not `chunk_dom`
+- Verify repair also uses `full_dom`
+- Check test `test_solution_selectors_work_with_full_dom`
+
+**If performance is slow**:
+- Check `asyncio.gather()` is used
+- Verify `max_concurrent=3` is set
+- Check batching logic
+
+**If chunks are too large**:
+- Adjust `max_chars` in DOMChunker
+- Check semantic boundary detection
+- Verify merging logic
+
+---
+
+## Success Criteria
+
+The implementation is complete when:
+
+1. ✅ **All critical validation tests pass**
+   - `test_problem_selectors_fail_with_chunk_dom` - Documents issue
+   - `test_solution_selectors_work_with_full_dom` - Proves fix
+   - `test_service_validates_with_full_dom` - Integration works
+
+2. ✅ **Performance maintained**
+   - 15-chunk page processes in ~90 seconds
+   - Parallel processing verified in tests
+
+3. ✅ **Frontend simplified**
+   - Single request to backend
+   - No chunking complexity
+   - Clean code
+
+4. ✅ **Backward compatibility**
+   - Old endpoints still work
+   - Graceful migration path
+
+---
+
+## Appendix: Key Code Snippets
+
+### The Fix in One Line:
+```python
+# OLD (BROKEN):
+is_valid = self._validator.validate_selector(chunk_dom, css_selector)
+
+# NEW (FIXED):
+is_valid = self._validator.validate_selector(full_dom, css_selector)
+```
+
+### Parallel Processing Pattern:
+```python
+# Process chunks in batches of 3
+tasks = [process_chunk(c) for c in batch[:3]]
+results = await asyncio.gather(*tasks, return_exceptions=True)
+```
+
+### Serena Commands for Analysis:
+```bash
+# Find all validation calls
+mcp__serena__search_for_pattern "validate_selector.*chunk_dom" "backend"
+
+# Check if fix is applied
+mcp__serena__search_for_pattern "validate_selector.*full_dom" "backend"
+
+# Find chunking implementations
+mcp__serena__find_symbol "chunk" "backend"
 ```
 
 ---
 
-**Document Version**: 2.0 (Parallel + Rate Limited)
+**Document Version**: 3.0 - Server-Side Architecture
 **Last Updated**: 2025-01-16
-**Author**: Claude (Sonnet 4.5)
-**Status**: Ready for Implementation
+**Focus**: Fix CSS selector validation with server-side chunking
+**Status**: Ready for Test-First Implementation
 
-**Key Changes in v2.0**:
-- ✅ Batched parallel processing (3 chunks at a time) instead of sequential
-- ✅ Frontend rate limiting via MAX_CONCURRENT_CHUNKS constant
-- ✅ Stateless backend (no session management)
-- ✅ Frontend-generated batch_id for linking notes
-- ✅ Single response type (no partial/final distinction)
-- ✅ 5x faster performance (90s vs 450s for 15 chunks)
-- ✅ Simpler architecture and easier to maintain
+**Critical Change**: All validation must use full DOM, not chunk DOM
