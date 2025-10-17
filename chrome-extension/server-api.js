@@ -618,6 +618,44 @@ const ServerAPI = {
   },
 
   /**
+   * Generate auto notes with server-side chunking
+   * Server handles all chunking and parallel processing
+   * @param {number} pageId - Page ID
+   * @param {string} fullDOM - Complete DOM content
+   * @returns {Promise<Object>} Generation response with all notes
+   */
+  async generateAutoNotesWithFullDOM(pageId, fullDOM) {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated");
+      }
+
+      const requestData = {
+        llm_provider_id: 1, // Default to Gemini
+        template_type: "study_guide",
+        full_dom: fullDOM,
+        custom_instructions: "Generate comprehensive study notes from this page content.",
+      };
+
+      // New endpoint that handles everything server-side
+      const response = await this.makeRequest(`/auto-notes/pages/${pageId}/generate/full-dom`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+        // Increase timeout for large pages
+        signal: AbortSignal.timeout(180000), // 3 minutes
+      });
+
+      const result = await response.json();
+      console.log(`[Web Notes] Generated ${result.notes?.length || 0} notes from ${result.total_chunks} chunks`);
+      return result;
+    } catch (error) {
+      console.error("[Web Notes] Failed to generate auto notes:", error);
+      throw error;
+    }
+  },
+
+  /**
    * Check if current request should include authentication
    * @returns {Promise<boolean>} True if authenticated requests should be made
    */

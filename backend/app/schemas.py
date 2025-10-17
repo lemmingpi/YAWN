@@ -975,6 +975,62 @@ class ChunkedAutoNoteRequest(BaseModel):
         None, description="Optional custom instructions for generation"
     )
 
+    """Schema for generating chunked auto notes (DOM processed in chunks)."""
+
+    chunk_index: int = Field(..., ge=0, description="Index of the current chunk")
+    total_chunks: int = Field(..., ge=1, description="Total number of chunks")
+    chunk_dom: str = Field(..., min_length=1, description="HTML content for this chunk")
+    batch_id: str = Field(
+        ..., max_length=100, description="Batch ID for this generation"
+    )
+    position_offset: int = Field(0, ge=0, description="Position offset for notes")
+    llm_provider_id: int = Field(1, description="LLM provider ID to use")
+    template_type: str = Field(
+        "study_guide",
+        description="Type of template: 'study_guide' or 'content_review'",
+    )
+    parent_context: Optional[Dict[str, Any]] = Field(
+        None, description="Parent document context for selectors"
+    )
+    custom_instructions: Optional[str] = Field(
+        None, description="Optional custom instructions for generation"
+    )
+
+
+class ChunkedAutoNoteResponse(BaseModel):
+    """Schema for chunked auto note generation response."""
+
+    notes: List[GeneratedNoteData] = Field(..., description="Notes for this chunk")
+    tokens_used: int = Field(..., description="Tokens consumed for this chunk")
+    cost_usd: float = Field(..., description="Cost for this chunk")
+    input_tokens: int = Field(..., description="Input tokens for this chunk")
+    output_tokens: int = Field(..., description="Output tokens for this chunk")
+    generation_time_ms: int = Field(..., description="Generation time for this chunk")
+
+
+class FullDOMAutoNoteRequest(BaseModel):
+    """Request schema for server-side chunking with full DOM."""
+
+    llm_provider_id: int = Field(1, description="LLM provider ID")
+    template_type: str = Field("study_guide", description="Template type")
+    full_dom: str = Field(..., min_length=1, description="Complete page DOM")
+    custom_instructions: Optional[str] = Field(None, description="Custom instructions")
+
+
+class FullDOMAutoNoteResponse(BaseModel):
+    """Response schema for server-side chunking."""
+
+    notes: List[GeneratedNoteData] = Field(..., description="All generated notes")
+    batch_id: str = Field(..., description="Batch ID for this generation")
+    total_chunks: int = Field(..., description="Number of chunks processed")
+    successful_chunks: int = Field(..., description="Successfully processed chunks")
+    failed_chunks: List[int] = Field(
+        default_factory=list, description="Failed chunk indices"
+    )
+    tokens_used: int = Field(..., description="Total tokens consumed")
+    cost_usd: float = Field(..., description="Total cost in USD")
+    generation_time_ms: int = Field(..., description="Total generation time")
+
 
 class ChunkedAutoNoteResponse(BaseModel):
     """Schema for single chunk response (stateless, no aggregation).

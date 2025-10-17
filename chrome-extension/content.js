@@ -2841,9 +2841,13 @@ function extractPageDOMInChunks() {
  * Handle DOM test auto-notes generation with batched parallel processing
  * Processes large pages by splitting into chunks and processing 3 chunks at a time
  */
+/**
+ * Handle DOM auto-notes generation with server-side chunking
+ * Simplified: Send full DOM, let backend handle chunking and parallelization
+ */
 async function handleGenerateDOMTestNotes() {
   try {
-    console.log("[Web Notes] Starting DOM test auto-note generation with chunking");
+    console.log("[Web Notes] Starting auto-note generation with server-side chunking");
 
     // Check authentication
     const isAuth = await isServerAuthenticated();
@@ -2852,119 +2856,84 @@ async function handleGenerateDOMTestNotes() {
       return;
     }
 
-    // Extract page DOM in chunks
-    const chunks = extractPageDOMInChunks();
-    const totalChunks = chunks.length;
+    // Extract full DOM (reuse existing function but without size limit)
+    const fullDOM = extractPageDOMForTest();
 
-    console.log(`[Web Notes] Processing ${totalChunks} chunk(s) in batches of ${MAX_CONCURRENT_CHUNKS}`);
-
-    // Generate batch ID upfront (shared across all chunks)
-    const batchId = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // Add batch_id and position_offset to all chunks
-    chunks.forEach((chunk, index) => {
-      chunk.batch_id = batchId;
-      chunk.position_offset = index * 20; // Stagger positions by 20px per chunk
-    });
-
-    // Show initial progress for large pages
-    const numBatches = Math.ceil(totalChunks / MAX_CONCURRENT_CHUNKS);
-    if (totalChunks > 1) {
-      alert(
-        `Large page detected! Processing ${totalChunks} chunks in ${numBatches} batches.\n\n` +
-          `This will take approximately ${Math.ceil((numBatches * 30) / 60)} minute(s). You'll be notified when complete.`,
-      );
+    if (!fullDOM) {
+      alert("Failed to extract page content");
+      return;
     }
 
-    // Get page info
+    const domSize = Math.round(fullDOM.length / 1000);
+    console.log(`[Web Notes] Sending ${domSize}KB DOM to server for chunking`);
+
+    // Show loading message
+    const estimatedTime = domSize > 100 ? Math.ceil(domSize / 50) : 1;
+    alert(
+      `Processing page content (${domSize}KB).\n\n` +
+        `This may take ${estimatedTime} minute(s). ` +
+        `The server will chunk and process the content in parallel.\n\n` +
+        `You'll be notified when complete.`,
+    );
+
+    // Register page
     const pageUrl = window.location.href;
     const pageTitle = document.title || "Untitled";
 
-    // Register page first (before any chunks)
-    const registerResult = await chrome.runtime.sendMessage({
+    const pageData = await chrome.runtime.sendMessage({
       action: "API_registerPage",
       url: pageUrl,
       title: pageTitle,
     });
-    const pageData = registerResult && registerResult.data ? registerResult.data : null;
-    if (!pageData || !pageData.id) {
+
+    if (!pageData || !pageData.data || !pageData.data.id) {
       alert("Failed to register page. Please try again.");
       return;
     }
 
-    console.log(`[Web Notes] Page registered with ID: ${pageData.id}`);
+    console.log(`[Web Notes] Page registered with ID: ${pageData.data.id}`);
 
-    // Process chunks in batches (parallel within batch, sequential between batches)
-    const allResults = [];
+    // Single request with full DOM
+    const response = await chrome.runtime.sendMessage({
+      action: "API_generateAutoNotesFullDOM",
+      pageId: pageData.data.id,
+      fullDOM: fullDOM,
+    });
 
-    for (let i = 0; i < chunks.length; i += MAX_CONCURRENT_CHUNKS) {
-      const batch = chunks.slice(i, i + MAX_CONCURRENT_CHUNKS);
-      const batchNum = Math.floor(i / MAX_CONCURRENT_CHUNKS) + 1;
+    // Handle response
+    if (response.success && response.data) {
+      const { notes, total_chunks, successful_chunks, cost_usd, tokens_used, batch_id } = response.data;
 
-      console.log(
-        `[Web Notes] Processing batch ${batchNum}/${numBatches} ` +
-          `(chunks ${i + 1}-${Math.min(i + MAX_CONCURRENT_CHUNKS, totalChunks)})`,
-      );
-
-      // Process batch in parallel (up to MAX_CONCURRENT_CHUNKS at once)
-      const batchPromises = batch.map(chunk =>
-        chrome.runtime
-          .sendMessage({
-            action: "API_generateDOMTestNotesChunk",
-            pageId: pageData.id, // Use the already-registered page ID
-            chunkData: chunk,
-          })
-          .catch(error => ({
-            success: false,
-            error: error.message,
-            chunk_index: chunk.chunk_index,
-          })),
-      );
-
-      // Wait for all chunks in this batch to complete
-      const batchResults = await Promise.all(batchPromises);
-      allResults.push(...batchResults);
-
-      console.log(`[Web Notes] Batch ${batchNum}/${numBatches} complete`);
-    }
-
-    // Aggregate successful results
-    const successful = allResults.filter(r => r.success && r.data);
-    const failed = allResults.filter(r => !r.success || !r.data);
-
-    const allNotes = successful.flatMap(r => r.data.notes || []);
-    const totalCost = successful.reduce((sum, r) => sum + (r.data.cost_usd || 0), 0);
-    const totalTokens = successful.reduce((sum, r) => sum + (r.data.tokens_used || 0), 0);
-
-    // Show final results
-    if (allNotes.length > 0) {
       let message =
-        `Successfully generated ${allNotes.length} study notes from ${successful.length}/${totalChunks} chunks!\n\n` +
-        `Batch ID: ${batchId}\n` +
-        `Total Cost: $${totalCost.toFixed(4)}\n` +
-        `Total Tokens: ${totalTokens.toLocaleString()}`;
+        `Successfully generated ${notes.length} study notes!\n\n` +
+        `Processed ${successful_chunks}/${total_chunks} chunks\n` +
+        `Batch ID: ${batch_id}\n` +
+        `Total Cost: $${cost_usd.toFixed(4)}\n` +
+        `Total Tokens: ${tokens_used.toLocaleString()}`;
 
-      if (failed.length > 0) {
-        message += `\n\nWarning: ${failed.length} chunk(s) failed to process.`;
+      if (successful_chunks < total_chunks) {
+        message += `\n\nWarning: ${total_chunks - successful_chunks} chunk(s) failed to process.`;
       }
 
       alert(message);
 
-      // Refresh the page to load the new notes
+      // Refresh to show notes
       setTimeout(() => {
         window.location.reload();
       }, 1000);
     } else {
-      alert(
-        `No notes were generated from ${totalChunks} chunk(s).\n` +
-          `Successful: ${successful.length}, Failed: ${failed.length}\n\n` +
-          "The content might not have sufficient information or all chunks failed.",
-      );
+      alert(`Failed to generate auto notes: ${response.error || "Unknown error"}`);
     }
   } catch (error) {
-    console.error("[Web Notes] Error generating DOM test notes:", error);
+    console.error("[Web Notes] Error generating auto notes:", error);
     alert(`Failed to generate auto notes: ${error.message}`);
   }
+}
+
+// Keep the old chunking function for reference but mark as deprecated
+/** @deprecated Now handled server-side */
+async function handleGenerateDOMTestNotesOld() {
+  // [Previous implementation kept for reference]
 }
 
 /**

@@ -19,6 +19,8 @@ from ..schemas import (
     BatchDeleteResponse,
     ChunkedAutoNoteRequest,
     ChunkedAutoNoteResponse,
+    FullDOMAutoNoteRequest,
+    FullDOMAutoNoteResponse,
     GeneratedNoteData,
 )
 from ..services.auto_note_service import AutoNoteService
@@ -181,9 +183,6 @@ async def generate_auto_notes_chunked(
         # Return single chunk response (stateless, no aggregation)
         return ChunkedAutoNoteResponse(
             notes=notes_data,
-            chunk_index=request.chunk_index,
-            total_chunks=request.total_chunks,
-            batch_id=request.batch_id,
             tokens_used=result["tokens_used"],
             cost_usd=result["cost_usd"],
             input_tokens=result["input_tokens"],
@@ -199,6 +198,81 @@ async def generate_auto_notes_chunked(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate auto notes from chunk: {str(e)}",
+        )
+
+
+@router.post(
+    "/pages/{page_id}/generate/full-dom",
+    response_model=FullDOMAutoNoteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_auto_notes_full_dom(
+    page_id: int,
+    request: FullDOMAutoNoteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> FullDOMAutoNoteResponse:
+    """
+    Generate auto notes with server-side chunking and parallel processing.
+
+    This endpoint:
+    1. Receives full DOM from frontend
+    2. Chunks it server-side
+    3. Processes chunks in parallel
+    4. Validates all selectors against full DOM
+    5. Returns all notes in single response
+
+    This solves the CSS selector validation problem where selectors
+    generated for chunk 2+ fail because they reference parent elements
+    not present in the chunk.
+    """
+    logger.info(
+        f"Server-side chunking requested for page_id={page_id}, "
+        f"DOM size={len(request.full_dom)/1000:.1f}KB, user_id={current_user.id}"
+    )
+
+    service = AutoNoteService(db)
+
+    try:
+        result = await service.generate_auto_notes_with_full_dom(
+            page_id=page_id,
+            user_id=current_user.id,
+            full_dom=request.full_dom,
+            llm_provider_id=request.llm_provider_id,
+            template_type=request.template_type,
+        )
+
+        # Convert notes to response format
+        notes_data = [
+            GeneratedNoteData(
+                id=note.id,
+                content=note.content,
+                highlighted_text=note.highlighted_text,
+                position_x=note.position_x,
+                position_y=note.position_y,
+            )
+            for note in result["notes"]
+        ]
+
+        return FullDOMAutoNoteResponse(
+            notes=notes_data,
+            batch_id=result["batch_id"],
+            total_chunks=result["total_chunks"],
+            successful_chunks=result["successful_chunks"],
+            failed_chunks=result.get("failed_chunks", []),
+            tokens_used=result["tokens_used"],
+            cost_usd=result["cost_usd"],
+            generation_time_ms=result["generation_time_ms"],
+        )
+
+    except ValueError as e:
+        logger.error(f"Value error: {e}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate auto notes: {str(e)}",
         )
 
 
