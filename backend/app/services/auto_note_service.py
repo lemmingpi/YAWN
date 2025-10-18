@@ -5,13 +5,14 @@ import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 import jinja2
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from ..config import settings
 from ..models import Note, Page
 from .gemini_provider import create_gemini_provider
 from .selector_validator import SelectorValidator
@@ -97,6 +98,171 @@ class AutoNoteService:
         self._study_guide_template = None
         self._content_review_template = None
         self._validator = SelectorValidator(fuzzy_threshold=0.80)
+        # Optional mock for testing - tests can set this to intercept LLM calls
+        self._call_llm: Optional[Callable[[str], Awaitable[Dict[str, Any]]]] = None
+
+    def _normalize_and_create_note(
+        self,
+        note_data: Dict[str, Any],
+        page_dom: Optional[str],
+        idx: int,
+        page_id: int,
+        user_id: int,
+        batch_id: str,
+        position_offset: int = 0,
+        chunk_index: Optional[int] = None,
+    ) -> Note:
+        """
+        Normalize note data from LLM and create a Note object with validation.
+
+        This centralizes all the logic for:
+        - Extracting and detecting selectors
+        - Validating selectors against DOM
+        - Repairing failed selectors
+        - Building anchor_data with validation metadata
+        - Building selectionData for text highlighting
+        - Creating the Note database object
+
+        Args:
+            note_data: Raw note data from LLM response
+            page_dom: HTML content for validation (full DOM preferred)
+            idx: Index of this note within the batch
+            page_id: ID of the page this note belongs to
+            user_id: ID of the user creating the note
+            batch_id: Batch ID linking related notes
+            position_offset: Offset for note positioning (for chunked generation)
+            chunk_index: Optional chunk index (for server-side chunking)
+
+        Returns:
+            Note object ready to be added to database session
+        """
+        # Extract selectors from LLM response
+        css_selector = note_data.get("css_selector")
+        xpath = note_data.get("xpath")
+
+        # Fallback to old format for backward compatibility
+        if not css_selector and not xpath:
+            position = note_data.get("position") or note_data.get("position_hint")
+            if position:
+                css_selector, xpath = detect_selector_type(position)
+
+        highlighted_text = note_data.get("highlighted_text", "")
+
+        # Validate and repair selectors if page_dom is available
+        validation_metadata = None
+        if page_dom and css_selector:
+            # Try to validate the CSS selector
+            is_valid, match_count, _ = self._validator.validate_selector(
+                page_dom, css_selector
+            )
+
+            if is_valid:
+                logger.debug(
+                    f"Note {idx + 1}: Selector valid - '{css_selector[:50]}...'"
+                )
+            else:
+                logger.info(
+                    f"Note {idx + 1}: Selector invalid (matched {match_count} elements), "
+                    f"attempting repair - '{css_selector[:50]}...'"
+                )
+
+                # Attempt to repair the selector
+                repair_result = self._validator.repair_selector(
+                    page_dom, highlighted_text, css_selector, xpath
+                )
+
+                if repair_result["success"]:
+                    # Replace with repaired selectors
+                    old_css = css_selector
+                    css_selector = repair_result["css_selector"]
+                    xpath = repair_result["xpath"]
+
+                    new_selector_preview = (
+                        css_selector[:30] if css_selector else xpath[:30]
+                    )
+                    logger.info(
+                        f"Note {idx + 1}: Repaired selector "
+                        f"(similarity={repair_result['text_similarity']:.2f}, "
+                        f"matches={repair_result['match_count']}) - "
+                        f"old: '{old_css[:30]}...', "
+                        f"new: '{new_selector_preview}...'"
+                    )
+
+                    # Store validation metadata for debugging
+                    validation_metadata = {
+                        "original_selector": old_css,
+                        "was_repaired": True,
+                        "match_count": repair_result["match_count"],
+                        "text_similarity": repair_result["text_similarity"],
+                        "repair_message": repair_result["message"],
+                    }
+                else:
+                    logger.warning(
+                        f"Note {idx + 1}: Failed to repair selector - "
+                        f"{repair_result['message']}"
+                    )
+                    validation_metadata = {
+                        "original_selector": css_selector,
+                        "was_repaired": False,
+                        "repair_failed": True,
+                        "repair_message": repair_result["message"],
+                    }
+
+        # Build anchor_data with selectors and validation metadata
+        anchor_data: Dict[str, Any] = {
+            "auto_generated": True,
+        }
+
+        # Add chunk index if provided (for server-side chunking)
+        if chunk_index is not None:
+            anchor_data["chunk_index"] = chunk_index
+            anchor_data["batch_id"] = batch_id
+
+        # Add validation metadata if available
+        if validation_metadata:
+            anchor_data["validation"] = validation_metadata
+
+        if css_selector:
+            anchor_data["elementSelector"] = css_selector
+        if xpath:
+            anchor_data["elementXPath"] = xpath
+
+        # Build selectionData for the extension to properly highlight text
+        # The extension needs this structure to restore text highlighting
+        if highlighted_text and (css_selector or xpath):
+            # Use the best available selector (prefer CSS)
+            selector = css_selector or xpath
+            anchor_data["selectionData"] = {
+                "selectedText": highlighted_text,
+                "startSelector": selector,
+                "endSelector": selector,
+                "startOffset": 0,  # LLM doesn't provide exact offsets
+                "endOffset": len(highlighted_text),
+                "startContainerType": 3,  # TEXT_NODE
+                "endContainerType": 3,  # TEXT_NODE
+                "commonAncestorSelector": selector,
+            }
+
+        # Create unique server_link_id
+        if chunk_index is not None:
+            server_link_id = f"{batch_id}_{chunk_index}_{idx}"
+        else:
+            server_link_id = f"{batch_id}_{idx}"
+
+        # Create and return Note object
+        return Note(
+            content=note_data.get("commentary", ""),
+            highlighted_text=highlighted_text,
+            page_section_html=None,  # We don't have section HTML from LLM
+            position_x=100 + position_offset + (idx * 20),
+            position_y=100 + position_offset + (idx * 20),
+            anchor_data=anchor_data,
+            page_id=page_id,
+            user_id=user_id,
+            generation_batch_id=batch_id,
+            server_link_id=server_link_id,
+            is_active=True,
+        )
 
     # Add imports that we'll need for new methods
     async def generate_auto_notes_with_full_dom(
@@ -146,7 +312,7 @@ class AutoNoteService:
         chunks = chunker.chunk_html(full_dom)
         total_chunks = len(chunks)
 
-        logger.info(f"Split {len(full_dom)/1000:.1f}KB into {total_chunks} chunks")
+        logger.info(f"Split {len(full_dom) / 1000:.1f}KB into {total_chunks} chunks")
 
         # 2. Process chunks in parallel batches
         all_notes = []
@@ -162,7 +328,7 @@ class AutoNoteService:
             total_batches = (total_chunks + max_concurrent - 1) // max_concurrent
 
             logger.info(
-                f"Processing batch {batch_num}/{total_batches} (chunks {batch_start}-{batch_end-1})"
+                f"Processing batch {batch_num}/{total_batches} (chunks {batch_start}-{batch_end - 1})"
             )
 
             # Create tasks for parallel processing
@@ -194,7 +360,7 @@ class AutoNoteService:
                     failed_chunks.append(chunk_idx)
                     continue
 
-                if result and "notes" in result:
+                if isinstance(result, dict) and result and "notes" in result:
                     all_notes.extend(result["notes"])
                     all_costs.append(result.get("cost_usd", 0))
                     all_tokens.append(result.get("tokens_used", 0))
@@ -259,12 +425,33 @@ class AutoNoteService:
                 page_dom=chunk_dom,  # Use chunk for generation
             )
 
+            # DEBUG: Save chunk to file if enabled
+            if settings.DEBUG_SAVE_CHUNKS:
+                logs_dir = Path("../logs")
+                logs_dir.mkdir(exist_ok=True)
+                chunk_file = logs_dir / f"chunk_{page_id}_{chunk_index}.txt"
+                with open(chunk_file, "w", encoding="utf-8") as f:
+                    f.write(chunk_dom)
+                logger.debug(f"Saved chunk to {chunk_file}")
+
             # Call LLM
             provider = await create_gemini_provider()
             generation_result = await provider.generate_content_large(prompt=prompt)
 
             # Parse response
             generated_content = generation_result["content"]
+
+            # DEBUG: Save raw LLM output to file if enabled
+            if settings.DEBUG_SAVE_CHUNKS:
+                logs_dir = Path("../logs")
+                logs_dir.mkdir(exist_ok=True)
+                llm_output_file = (
+                    logs_dir / f"raw_llm_output_{page_id}_{chunk_index}.txt"
+                )
+                with open(llm_output_file, "w", encoding="utf-8") as f:
+                    f.write(generated_content)
+                logger.debug(f"Saved raw LLM output to {llm_output_file}")
+
             generated_content = self._clean_json_response(generated_content)
 
             try:
@@ -277,47 +464,16 @@ class AutoNoteService:
             # Create notes with FULL DOM validation
             created_notes = []
             for idx, note_data in enumerate(notes_data):
-                css_selector = note_data.get("css_selector")
-                highlighted_text = note_data.get("highlighted_text", "")
-
-                # CRITICAL FIX: Validate against full DOM, not chunk!
-                if css_selector and full_dom:
-                    is_valid, match_count, _ = self._validator.validate_selector(
-                        full_dom, css_selector  # NOT chunk_dom!
-                    )
-
-                    if not is_valid:
-                        # Try to repair using full DOM
-                        repair_result = self._validator.repair_selector(
-                            full_dom,  # NOT chunk_dom!
-                            highlighted_text,
-                            css_selector,
-                            note_data.get("xpath"),
-                        )
-
-                        if repair_result["success"]:
-                            css_selector = repair_result["css_selector"]
-                            logger.info(
-                                f"Repaired selector for chunk {chunk_index}, note {idx}"
-                            )
-
-                # Create note with validated selector
-                note = Note(
-                    content=note_data.get("commentary", ""),
-                    highlighted_text=highlighted_text,
-                    position_x=100 + position_offset + (idx * 20),
-                    position_y=100 + position_offset + (idx * 20),
-                    anchor_data={
-                        "auto_generated": True,
-                        "chunk_index": chunk_index,
-                        "elementSelector": css_selector,
-                        "batch_id": batch_id,
-                    },
+                # Use centralized normalization and creation
+                note = self._normalize_and_create_note(
+                    note_data=note_data,
+                    page_dom=full_dom,  # CRITICAL: Use full DOM, not chunk!
+                    idx=idx,
                     page_id=page_id,
                     user_id=user_id,
-                    generation_batch_id=batch_id,
-                    server_link_id=f"{batch_id}_{chunk_index}_{idx}",
-                    is_active=True,
+                    batch_id=batch_id,
+                    position_offset=position_offset,
+                    chunk_index=chunk_index,
                 )
 
                 self.db.add(note)
@@ -371,9 +527,9 @@ class AutoNoteService:
             tasks = []
             for chunk in batch:
                 # For testing, we'll return mock data
-                async def process_chunk(c):
+                async def process_chunk(c: Any) -> Dict[str, Any]:
                     # In tests, this will be mocked
-                    if hasattr(self, "_call_llm"):
+                    if self._call_llm is not None:
                         result = await self._call_llm(str(c))
                         return result
                     return {"notes": [], "tokens": 0, "cost": 0}
@@ -654,140 +810,18 @@ class AutoNoteService:
             f"Creating {len(notes_data)} notes with batch_id={generation_batch_id}"
         )
 
-        # Track validation statistics
-        validation_stats = {
-            "total": len(notes_data),
-            "validated": 0,
-            "repaired": 0,
-            "failed_validation": 0,
-        }
-
-        # Create Note records
+        # Create Note records using centralized normalization
         created_notes = []
         for idx, note_data in enumerate(notes_data):
-            # Extract selectors from LLM response
-            # New format: css_selector and xpath fields directly provided
-            css_selector = note_data.get("css_selector")
-            xpath = note_data.get("xpath")
-
-            # Fallback to old format for backward compatibility
-            if not css_selector and not xpath:
-                position = note_data.get("position") or note_data.get("position_hint")
-                if position:
-                    css_selector, xpath = detect_selector_type(position)
-
-            # Validate and repair selectors if page_dom is available
-            validation_metadata = None
-            if page_dom and css_selector:
-                highlighted_text = note_data.get("highlighted_text", "")
-
-                # Try to validate the CSS selector
-                is_valid, match_count, _ = self._validator.validate_selector(
-                    page_dom, css_selector
-                )
-
-                if is_valid:
-                    validation_stats["validated"] += 1
-                    logger.debug(
-                        f"Note {idx + 1}: Selector valid - '{css_selector[:50]}...'"
-                    )
-                else:
-                    validation_stats["failed_validation"] += 1
-                    logger.info(
-                        f"Note {idx + 1}: Selector invalid (matched {match_count} elements), "
-                        f"attempting repair - '{css_selector[:50]}...'"
-                    )
-
-                    # Attempt to repair the selector
-                    repair_result = self._validator.repair_selector(
-                        page_dom, highlighted_text, css_selector, xpath
-                    )
-
-                    if repair_result["success"]:
-                        validation_stats["repaired"] += 1
-                        # Replace with repaired selectors
-                        old_css = css_selector
-                        css_selector = repair_result["css_selector"]
-                        xpath = repair_result["xpath"]
-
-                        new_selector_preview = (
-                            css_selector[:30] if css_selector else xpath[:30]
-                        )
-                        logger.info(
-                            f"Note {idx + 1}: Repaired selector "
-                            f"(similarity={repair_result['text_similarity']:.2f}, "
-                            f"matches={repair_result['match_count']}) - "
-                            f"old: '{old_css[:30]}...', "
-                            f"new: '{new_selector_preview}...'"
-                        )
-
-                        # Store validation metadata for debugging
-                        validation_metadata = {
-                            "original_selector": old_css,
-                            "was_repaired": True,
-                            "match_count": repair_result["match_count"],
-                            "text_similarity": repair_result["text_similarity"],
-                            "repair_message": repair_result["message"],
-                        }
-                    else:
-                        logger.warning(
-                            f"Note {idx + 1}: Failed to repair selector - "
-                            f"{repair_result['message']}"
-                        )
-                        validation_metadata = {
-                            "original_selector": css_selector,
-                            "was_repaired": False,
-                            "repair_failed": True,
-                            "repair_message": repair_result["message"],
-                        }
-
-            # Build anchor_data with selectors
-            anchor_data: Dict[str, Any] = {
-                "auto_generated": True,
-            }
-
-            # Add validation metadata if available
-            if validation_metadata:
-                anchor_data["validation"] = validation_metadata
-
-            if css_selector:
-                anchor_data["elementSelector"] = css_selector
-            if xpath:
-                anchor_data["elementXPath"] = xpath
-
-            # Build selectionData for the extension to properly highlight text
-            # The extension needs this structure to restore text highlighting
-            highlighted_text = note_data.get("highlighted_text", "")
-            if highlighted_text and (css_selector or xpath):
-                # Use the best available selector (prefer CSS)
-                selector = css_selector or xpath
-                anchor_data["selectionData"] = {
-                    "selectedText": highlighted_text,
-                    "startSelector": selector,
-                    "endSelector": selector,
-                    "startOffset": 0,  # LLM doesn't provide exact offsets
-                    "endOffset": len(highlighted_text),
-                    "startContainerType": 3,  # TEXT_NODE
-                    "endContainerType": 3,  # TEXT_NODE
-                    "commonAncestorSelector": selector,
-                }
-
-            # Create unique server_link_id using batch ID + index
-            # This prevents duplicates during sync while allowing extension display
-            server_link_id = f"{generation_batch_id}_{idx}"
-
-            note = Note(
-                content=note_data.get("commentary", ""),
-                highlighted_text=highlighted_text,
-                page_section_html=None,  # We don't have section HTML from LLM
-                position_x=100 + (idx * 20),  # Stagger notes slightly
-                position_y=100 + (idx * 20),
-                anchor_data=anchor_data,
+            note = self._normalize_and_create_note(
+                note_data=note_data,
+                page_dom=page_dom,
+                idx=idx,
                 page_id=page_id,
                 user_id=user_id,
-                generation_batch_id=generation_batch_id,
-                server_link_id=server_link_id,
-                is_active=True,
+                batch_id=generation_batch_id,
+                position_offset=0,
+                chunk_index=None,  # Not chunked
             )
             self.db.add(note)
             created_notes.append(note)
@@ -799,20 +833,6 @@ class AutoNoteService:
             await self.db.refresh(note)
 
         logger.info(f"Created {len(created_notes)} auto-generated notes")
-
-        # Log validation statistics if page_dom was provided
-        if page_dom and validation_stats["total"] > 0:
-            success_rate = (
-                (validation_stats["validated"] + validation_stats["repaired"])
-                / validation_stats["total"]
-                * 100
-            )
-            logger.info(
-                f"Selector validation stats: {validation_stats['validated']} valid, "
-                f"{validation_stats['repaired']} repaired, "
-                f"{validation_stats['failed_validation'] - validation_stats['repaired']} failed "
-                f"({success_rate:.1f}% success rate)"
-            )
 
         # Calculate generation time
         generation_time_ms = int((time.time() - start_time) * 1000)
@@ -939,90 +959,21 @@ class AutoNoteService:
             )
             raise ValueError(f"Failed to parse LLM response as JSON: {e}")
 
-        # Create Note records for this chunk
+        # Create Note records for this chunk using centralized normalization
+        # NOTE: This method validates against chunk_dom (deprecated behavior)
+        # Use generate_auto_notes_with_full_dom for correct full-DOM validation
         created_notes = []
         if notes_data:
             for idx, note_data in enumerate(notes_data):
-                # Extract selectors
-                css_selector = note_data.get("css_selector")
-                xpath = note_data.get("xpath")
-
-                # Fallback to old format
-                if not css_selector and not xpath:
-                    position = note_data.get("position") or note_data.get(
-                        "position_hint"
-                    )
-                    if position:
-                        css_selector, xpath = detect_selector_type(position)
-
-                # Validate and repair selectors if chunk_dom available
-                validation_metadata = None
-                if chunk_dom and css_selector:
-                    highlighted_text = note_data.get("highlighted_text", "")
-
-                    is_valid, match_count, _ = self._validator.validate_selector(
-                        chunk_dom, css_selector
-                    )
-
-                    if not is_valid:
-                        repair_result = self._validator.repair_selector(
-                            chunk_dom, highlighted_text, css_selector, xpath
-                        )
-
-                        if repair_result["success"]:
-                            css_selector = repair_result["css_selector"]
-                            xpath = repair_result["xpath"]
-                            validation_metadata = {
-                                "original_selector": note_data.get("css_selector"),
-                                "was_repaired": True,
-                                "match_count": repair_result["match_count"],
-                                "text_similarity": repair_result["text_similarity"],
-                            }
-
-                # Build anchor_data
-                anchor_data: Dict[str, Any] = {
-                    "auto_generated": True,
-                    "chunk_index": chunk_index,
-                }
-
-                if validation_metadata:
-                    anchor_data["validation"] = validation_metadata
-
-                if css_selector:
-                    anchor_data["elementSelector"] = css_selector
-                if xpath:
-                    anchor_data["elementXPath"] = xpath
-
-                # Build selectionData
-                highlighted_text = note_data.get("highlighted_text", "")
-                if highlighted_text and (css_selector or xpath):
-                    selector = css_selector or xpath
-                    anchor_data["selectionData"] = {
-                        "selectedText": highlighted_text,
-                        "startSelector": selector,
-                        "endSelector": selector,
-                        "startOffset": 0,
-                        "endOffset": len(highlighted_text),
-                        "startContainerType": 3,
-                        "endContainerType": 3,
-                        "commonAncestorSelector": selector,
-                    }
-
-                # Create unique server_link_id using batch_id + chunk_index + idx
-                server_link_id = f"{batch_id}_{chunk_index}_{idx}"
-
-                note = Note(
-                    content=note_data.get("commentary", ""),
-                    highlighted_text=highlighted_text,
-                    page_section_html=None,
-                    position_x=100 + position_offset + (idx * 20),
-                    position_y=100 + position_offset + (idx * 20),
-                    anchor_data=anchor_data,
+                note = self._normalize_and_create_note(
+                    note_data=note_data,
+                    page_dom=chunk_dom,  # DEPRECATED: Should use full DOM
+                    idx=idx,
                     page_id=page_id,
                     user_id=user_id,
-                    generation_batch_id=batch_id,  # Use frontend-provided batch_id
-                    server_link_id=server_link_id,
-                    is_active=True,
+                    batch_id=batch_id,
+                    position_offset=position_offset,
+                    chunk_index=chunk_index,
                 )
                 self.db.add(note)
                 created_notes.append(note)

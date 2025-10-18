@@ -2554,7 +2554,7 @@ function extractPageDOMForTest() {
     const bodyElement = clonedDoc.querySelector("body");
     if (!bodyElement) {
       console.warn("[Web Notes] No body element found");
-      return document.body.innerHTML.substring(0, 50000);
+      return document.body.innerHTML; // Return full content, server will chunk
     }
 
     let contentHTML = bodyElement.innerHTML;
@@ -2562,14 +2562,10 @@ function extractPageDOMForTest() {
     // Clean up excessive whitespace
     contentHTML = contentHTML.replace(/\s+/g, " ").trim();
 
-    // Check size and warn if truncating
-    const originalLength = contentHTML.length;
-    if (contentHTML.length > 50000) {
-      alert(`Page content is ${Math.round(originalLength / 1000)}KB. Truncating to 50KB to fit token limits.`);
-      contentHTML = contentHTML.substring(0, 50000);
-    }
+    // Log size but DO NOT truncate - server handles chunking
+    const contentSize = Math.round(contentHTML.length / 1000);
+    console.log(`[Web Notes] Extracted ${contentSize}KB of DOM content (server will chunk if needed)`);
 
-    console.log(`[Web Notes] Extracted ${Math.round(contentHTML.length / 1000)}KB of DOM content`);
     return contentHTML;
   } catch (error) {
     console.error("[Web Notes] Error extracting page DOM:", error);

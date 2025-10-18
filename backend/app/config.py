@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     LOG_MAX_BYTES: int = 10485760  # 10MB
     LOG_BACKUP_COUNT: int = 5
 
+    # Debug: Save chunks and LLM output to files for debugging
+    DEBUG_SAVE_CHUNKS: bool = False  # Set to True to save chunk/LLM output to logs/
+
     class Config:
         # Use ENV_FILE env var to choose which .env file to load
         env_file = os.getenv("ENV_FILE", ".env")
