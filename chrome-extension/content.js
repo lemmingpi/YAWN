@@ -1695,12 +1695,100 @@ function displayNote(noteData) {
     // Get display content (note should already be migrated)
     const displayContent = NoteDataUtils.getDisplayContent(noteData);
 
+    // Create a wrapper for note content and buttons
+    const noteWrapper = document.createElement("div");
+    noteWrapper.style.cssText = `
+      position: relative;
+      width: 100%;
+      height: 100%;
+    `;
+
+    // Create content div
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "note-content";
     // Set note content (HTML for markdown, escaped HTML for plain text)
     if (displayContent.isMarkdown) {
-      note.innerHTML = displayContent.html;
+      contentDiv.innerHTML = displayContent.html;
     } else {
-      note.innerHTML = displayContent.html; // Already escaped by getDisplayContent
+      contentDiv.innerHTML = displayContent.html; // Already escaped by getDisplayContent
     }
+
+    // Create "Open Details" button (external link icon)
+    const detailsButton = document.createElement("button");
+    detailsButton.className = "note-details-button";
+    detailsButton.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M9 3v1H13.5L6 11.5L7.5 13L15 5.5V10h1V3H9z"/>
+      <path d="M4 4v10h10v-4h1v4.5c0 .3-.2.5-.5.5h-11c-.3 0-.5-.2-.5-.5v-11c0-.3.2-.5.5-.5H8v1H4z"/>
+    </svg>`;
+    detailsButton.title = "Open note details in new tab";
+    detailsButton.style.cssText = `
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 20px;
+      height: 20px;
+      background: rgba(33, 150, 243, 0.9);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 10001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    `;
+
+    // Add hover effect to show button
+    noteWrapper.addEventListener("mouseenter", () => {
+      if (!note.classList.contains("editing")) {
+        detailsButton.style.opacity = "1";
+      }
+    });
+
+    noteWrapper.addEventListener("mouseleave", () => {
+      detailsButton.style.opacity = "0";
+    });
+
+    // Add hover effect to button itself
+    detailsButton.addEventListener("mouseenter", () => {
+      detailsButton.style.background = "rgba(25, 118, 210, 1)";
+      detailsButton.style.transform = "scale(1.1)";
+    });
+
+    detailsButton.addEventListener("mouseleave", () => {
+      detailsButton.style.background = "rgba(33, 150, 243, 0.9)";
+      detailsButton.style.transform = "scale(1)";
+    });
+
+    // Add click handler for details button
+    detailsButton.addEventListener("click", async event => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Check if note has a server ID
+      if (noteData.serverId) {
+        // Get the base server URL
+        const config = await getWNConfig();
+        if (config.syncServerUrl) {
+          const baseUrl = config.syncServerUrl.replace(/\/api$/, "");
+          const detailsUrl = `${baseUrl}/app/notes/${noteData.serverId}`;
+          window.open(detailsUrl, "_blank");
+        } else {
+          console.log("[Web Notes] No server configured for note details");
+        }
+      } else {
+        console.log("[Web Notes] Note has no server ID - not synced to server");
+        // Optionally, we could show a message to the user here
+      }
+    });
+
+    // Assemble the wrapper
+    noteWrapper.appendChild(contentDiv);
+    noteWrapper.appendChild(detailsButton);
+    note.appendChild(noteWrapper);
 
     // Store the full note data on the element for editing
     note.noteData = noteData;

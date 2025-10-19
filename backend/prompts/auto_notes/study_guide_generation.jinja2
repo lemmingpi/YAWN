@@ -120,8 +120,8 @@ GOOD XPath Examples:
 - "//p[contains(@class, 'highlight') and contains(text(), 'key phrase')]"
 - "//section[@data-id='intro']/p[1]"
 
-AVOID:
-- Never use a nth-child especially as the start: "p:nth-child(13) -> b" ❌
+BAD CSS Examples:
+- IMPORTANT NEVER use a nth-child in any position, use nth-of-type instead." ❌
 - Dont use "b" if the tag is "span
 - Vague descriptions: "first paragraph", "main section" ❌
 - Non-unique selectors that match multiple elements ❌

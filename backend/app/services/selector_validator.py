@@ -1,6 +1,7 @@
 """Service for validating and repairing CSS selectors from LLM-generated notes."""
 
 import logging
+import re
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -29,6 +30,41 @@ class SelectorValidator:
         """
         self.fuzzy_threshold = fuzzy_threshold
 
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        """
+        Normalize text for comparison by removing extra whitespace and lowercasing.
+
+        Args:
+            text: Text to normalize
+
+        Returns:
+            Normalized text
+        """
+        # Remove extra whitespace and normalize
+        text = re.sub(r"\s+", " ", text).strip()
+        return text.lower()
+
+    @staticmethod
+    def _strip_html_tags(html_text: str) -> str:
+        """
+        Strip HTML tags from text but preserve the content.
+
+        Args:
+            html_text: HTML text that might contain tags
+
+        Returns:
+            Text without HTML tags
+        """
+        # Remove HTML tags but keep the text content
+        try:
+            doc = html.fromstring(html_text)
+            return doc.text_content() if doc.text_content() else ""
+        except Exception:
+            # Fallback to regex if parsing fails
+            clean_text = re.sub(r"<[^>]+>", " ", html_text)
+            return re.sub(r"\s+", " ", clean_text).strip()
+
     def validate_selector(
         self,
         page_dom: str,
@@ -37,6 +73,10 @@ class SelectorValidator:
     ) -> Tuple[bool, int, Optional[Any]]:
         """
         Validate if CSS selector works and is unique.
+
+        This method now uses HTML-aware text matching when checking if the expected text
+        is contained in the matched element. This handles cases where the expected text
+        is plain but the DOM has embedded HTML tags.
 
         Args:
             page_dom: HTML content as string
@@ -63,7 +103,17 @@ class SelectorValidator:
             # Additionally check text containment if expected_text provided
             if is_valid and expected_text and first_element is not None:
                 element_text = self._get_element_text(first_element)
-                if expected_text not in element_text:
+
+                # First try exact substring match
+                text_found = expected_text in element_text
+
+                # If not found, try normalized matching (handles whitespace and case differences)
+                if not text_found:
+                    normalized_expected = self._normalize_text(expected_text)
+                    normalized_element = self._normalize_text(element_text)
+                    text_found = normalized_expected in normalized_element
+
+                if not text_found:
                     is_valid = False
                     logger.debug(
                         f"CSS selector '{css_selector}' matched element but does not "
@@ -88,14 +138,19 @@ class SelectorValidator:
         """
         Locate elements containing the highlighted text in the DOM.
 
+        This method is HTML-aware and handles cases where the highlighted text
+        from the LLM is plain text, but the DOM contains HTML tags within the text
+        (e.g., "Hello my name is Fred" vs "Hello my name is <a href='...'>Fred</a>").
+
         Strategy:
-        1. Try exact text match first (fast)
-        2. If no exact match and use_fuzzy=True, try fuzzy matching
-        3. Prioritize most specific (leaf-most) elements
+        1. Normalize both search text and element text for comparison
+        2. Try exact text match first (including HTML-aware matching)
+        3. If no exact match and use_fuzzy=True, try fuzzy matching
+        4. Prioritize most specific (leaf-most) elements
 
         Args:
             page_dom: HTML content as string
-            highlighted_text: Text to search for
+            highlighted_text: Text to search for (may be plain text from LLM)
             use_fuzzy: Whether to use fuzzy matching as fallback
 
         Returns:
@@ -108,19 +163,42 @@ class SelectorValidator:
             dom = html.fromstring(page_dom)
             candidates = []
 
-            # Strategy 1: Exact match (fast path)
+            # Normalize the search text for comparison
+            normalized_search = self._normalize_text(highlighted_text)
+            # Also keep the original for exact substring matching
+            original_search = highlighted_text.strip()
+
+            # Strategy 1: Exact and HTML-aware matching
             for element in dom.iter():
                 element_text = self._get_element_text(element)
                 if not element_text:
                     continue
 
-                if highlighted_text in element_text:
+                # Try exact substring match first (original case)
+                if original_search in element_text:
                     candidates.append((element, 1.0))  # Perfect match
+                    continue
+
+                # Try normalized comparison (handles whitespace differences)
+                normalized_element = self._normalize_text(element_text)
+                if normalized_search in normalized_element:
+                    candidates.append((element, 0.95))  # Very good match
+                    continue
+
+                # Try matching with HTML tags stripped (handles embedded tags)
+                # This helps when LLM gives "Hello Fred" but DOM has "Hello <a>Fred</a>"
+                if (
+                    len(original_search) > 10
+                ):  # Only for longer text to avoid false positives
+                    # Create a version of element text without tags for comparison
+                    element_text_no_tags = re.sub(r"\s+", " ", element_text).strip()
+                    if original_search in element_text_no_tags:
+                        candidates.append((element, 0.90))  # Good match
 
             # If we found exact matches, prioritize leaf elements
             if candidates:
                 logger.debug(
-                    f"Found {len(candidates)} exact matches for text: "
+                    f"Found {len(candidates)} exact/normalized matches for text: "
                     f"'{highlighted_text[:50]}...'"
                 )
                 # Sort by specificity: prefer elements with fewer descendants
@@ -134,8 +212,12 @@ class SelectorValidator:
                     if not element_text:
                         continue
 
+                    # Use normalized text for fuzzy matching
+                    normalized_element = self._normalize_text(element_text)
+
+                    # Calculate similarity on normalized text
                     similarity = SequenceMatcher(
-                        None, highlighted_text.lower(), element_text.lower()
+                        None, normalized_search, normalized_element
                     ).ratio()
 
                     if similarity >= self.fuzzy_threshold:
