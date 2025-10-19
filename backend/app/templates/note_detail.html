@@ -60,7 +60,7 @@
                     <button class="btn btn-sm btn-outline-success" onclick="generateArtifact()" id="generateBtn">
                         <i class="bi bi-magic me-1"></i>Generate Artifact
                     </button>
-                    <a href="{{ note.page_url if note.page_url else '#' }}" target="_blank" class="btn btn-sm btn-outline-info" {{ 'disabled' if not note.page_url else '' }}>
+                    <a href="/app/pages/{{ note.page_id }}" class="btn btn-sm btn-outline-info">
                         <i class="bi bi-box-arrow-up-right me-1"></i>View Page
                     </a>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteNote()">
