@@ -491,8 +491,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             result = await ServerAPI.generateAutoNotesWithDOMChunk(message.pageId, message.chunkData);
             break;
           case "API_generateAutoNotesFullDOM":
-            // New endpoint: server-side chunking
-            result = await ServerAPI.generateAutoNotesWithFullDOM(message.pageId, message.fullDOM);
+            // New endpoint: server-side chunking with template and custom instructions
+            result = await ServerAPI.generateAutoNotesWithFullDOM(
+              message.pageId,
+              message.fullDOM,
+              message.templateType,
+              message.customInstructions,
+            );
             break;
           default:
             throw new Error(`Unknown API action: ${message.action}`);

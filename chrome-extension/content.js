@@ -2927,7 +2927,7 @@ function extractPageDOMInChunks() {
  */
 /**
  * Handle DOM auto-notes generation with server-side chunking
- * Simplified: Send full DOM, let backend handle chunking and parallelization
+ * Shows configuration modal, then sends full DOM to backend
  */
 async function handleGenerateDOMTestNotes() {
   try {
@@ -2951,13 +2951,17 @@ async function handleGenerateDOMTestNotes() {
     const domSize = Math.round(fullDOM.length / 1000);
     console.log(`[Web Notes] Sending ${domSize}KB DOM to server for chunking`);
 
-    // Show loading message
-    const estimatedTime = domSize > 100 ? Math.ceil(domSize / 50) : 1;
-    alert(
-      `Processing page content (${domSize}KB).\n\n` +
-        `This may take ${estimatedTime} minute(s). ` +
-        `The server will chunk and process the content in parallel.\n\n` +
-        `You'll be notified when complete.`,
+    // Show configuration modal
+    const config = await createAutoNotesConfigDialog(domSize);
+
+    // If user cancelled, exit
+    if (!config) {
+      console.log("[Web Notes] User cancelled auto notes generation");
+      return;
+    }
+
+    console.log(
+      `[Web Notes] User selected template: ${config.templateType}, custom instructions: ${config.customInstructions || "none"}`,
     );
 
     // Register page
@@ -2977,11 +2981,13 @@ async function handleGenerateDOMTestNotes() {
 
     console.log(`[Web Notes] Page registered with ID: ${pageData.data.id}`);
 
-    // Single request with full DOM
+    // Single request with full DOM and configuration
     const response = await chrome.runtime.sendMessage({
       action: "API_generateAutoNotesFullDOM",
       pageId: pageData.data.id,
       fullDOM: fullDOM,
+      templateType: config.templateType,
+      customInstructions: config.customInstructions || null,
     });
 
     // Handle response
@@ -2989,7 +2995,7 @@ async function handleGenerateDOMTestNotes() {
       const { notes, total_chunks, successful_chunks, cost_usd, tokens_used, batch_id } = response.data;
 
       let message =
-        `Successfully generated ${notes.length} study notes!\n\n` +
+        `Successfully generated ${notes.length} notes!\n\n` +
         `Processed ${successful_chunks}/${total_chunks} chunks\n` +
         `Batch ID: ${batch_id}\n` +
         `Total Cost: $${cost_usd.toFixed(4)}\n` +

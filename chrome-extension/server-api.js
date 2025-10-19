@@ -622,9 +622,11 @@ const ServerAPI = {
    * Server handles all chunking and parallel processing
    * @param {number} pageId - Page ID
    * @param {string} fullDOM - Complete DOM content
+   * @param {string} templateType - Template type ('study_guide' or 'content_review')
+   * @param {string|null} customInstructions - Optional custom instructions for generation
    * @returns {Promise<Object>} Generation response with all notes
    */
-  async generateAutoNotesWithFullDOM(pageId, fullDOM) {
+  async generateAutoNotesWithFullDOM(pageId, fullDOM, templateType = "study_guide", customInstructions = null) {
     try {
       const isAuthenticated = await this.isAuthenticatedMode();
       if (!isAuthenticated) {
@@ -633,9 +635,9 @@ const ServerAPI = {
 
       const requestData = {
         llm_provider_id: 1, // Default to Gemini
-        template_type: "study_guide",
+        template_type: templateType,
         full_dom: fullDOM,
-        custom_instructions: "Generate comprehensive study notes from this page content.",
+        custom_instructions: customInstructions || undefined, // Let backend use default if null
       };
 
       // New endpoint that handles everything server-side
