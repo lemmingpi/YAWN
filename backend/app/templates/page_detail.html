@@ -88,37 +88,6 @@
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card stats-card text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-sticky display-4 mb-2"></i>
-                    <h3 class="card-title mb-1" id="totalNotes">0</h3>
-                    <p class="card-text">Total Notes</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card stats-card text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-magic display-4 mb-2"></i>
-                    <h3 class="card-title mb-1" id="totalArtifacts">0</h3>
-                    <p class="card-text">Total Artifacts</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card stats-card text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-calendar-event display-4 mb-2"></i>
-                    <h3 class="card-title mb-1" id="recentActivity">0</h3>
-                    <p class="card-text">Recent Notes (7d)</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Notes Section -->
     <div class="content-wrapper p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -500,46 +469,8 @@ class PageDetailManager {
     }
 
     async loadStats() {
-        try {
-            const notesResponse = await authenticatedFetch(`/api/notes?page_id=${this.pageId}&limit=1000`);
-
-            if (!notesResponse.ok) {
-                throw new Error(`HTTP ${notesResponse.status}: ${notesResponse.statusText}`);
-            }
-
-            const notes = await notesResponse.json();
-
-            // Ensure notes is an array
-            if (!Array.isArray(notes)) {
-                console.error('Expected notes to be an array, got:', typeof notes);
-                throw new Error('Invalid response format');
-            }
-
-            document.getElementById('totalNotes').textContent = notes.length;
-
-            // Calculate artifacts count and recent activity
-            let totalArtifacts = 0;
-            let recentNotes = 0;
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-            for (const note of notes) {
-                totalArtifacts += note.artifacts_count || 0;
-                if (new Date(note.created_at) > sevenDaysAgo) {
-                    recentNotes++;
-                }
-            }
-
-            document.getElementById('totalArtifacts').textContent = totalArtifacts;
-            document.getElementById('recentActivity').textContent = recentNotes;
-
-        } catch (error) {
-            console.error('Error loading stats:', error);
-            // Set default values on error
-            document.getElementById('totalNotes').textContent = '0';
-            document.getElementById('totalArtifacts').textContent = '0';
-            document.getElementById('recentActivity').textContent = '0';
-        }
+        // Stats tiles removed from UI, this method kept for backward compatibility
+        // Can be safely removed if not needed elsewhere
     }
 
     async loadNotes() {
