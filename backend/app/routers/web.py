@@ -43,22 +43,27 @@ async def dashboard(
     # Get statistics
     stats = await get_dashboard_stats(db)
 
-    # Get recent sites (last 5)
-    recent_sites_query = (
-        select(Site)
-        .where(Site.is_active.is_(True))
-        .order_by(Site.created_at.desc())
+    # Get recent pages (last 5)
+    recent_pages_query = (
+        select(Page)
+        .where(Page.is_active.is_(True))
+        .order_by(Page.updated_at.desc())
         .limit(5)
     )
-    recent_sites_result = await db.execute(recent_sites_query)
-    recent_sites = recent_sites_result.scalars().all()
+    recent_pages_result = await db.execute(recent_pages_query)
+    recent_pages = recent_pages_result.scalars().all()
 
-    # Get page counts for recent sites
-    for site in recent_sites:
-        page_count_result = await db.execute(
-            select(func.count(Page.id)).where(Page.site_id == site.id)
+    # Get site info and note counts for recent pages
+    for page in recent_pages:
+        # Get site info
+        site_result = await db.execute(select(Site).where(Site.id == page.site_id))
+        page.site = site_result.scalar_one_or_none()
+
+        # Get note count
+        note_count_result = await db.execute(
+            select(func.count(Note.id)).where(Note.page_id == page.id)
         )
-        site.pages_count = page_count_result.scalar() or 0
+        page.notes_count = note_count_result.scalar() or 0
 
     # Get recent notes (last 5)
     recent_notes_query = (
@@ -82,7 +87,7 @@ async def dashboard(
         {
             "request": request,
             "stats": stats,
-            "recent_sites": recent_sites,
+            "recent_pages": recent_pages,
             "recent_notes": recent_notes,
             "google_client_id": GOOGLE_CLIENT_ID,
         },
@@ -104,6 +109,24 @@ async def sites_page(
     """
     return templates.TemplateResponse(
         "sites.html", {"request": request, "google_client_id": GOOGLE_CLIENT_ID}
+    )
+
+
+@router.get("/pages", response_class=HTMLResponse)
+async def pages_page(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> HTMLResponse:
+    """Pages management page.
+
+    Args:
+        request: FastAPI request object
+        db: Database session
+
+    Returns:
+        Rendered pages HTML page
+    """
+    return templates.TemplateResponse(
+        "pages.html", {"request": request, "google_client_id": GOOGLE_CLIENT_ID}
     )
 
 

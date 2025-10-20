@@ -296,6 +296,7 @@ class NoteArtifactGenerationRequest(BaseModel):
     llm_provider_id: int
     artifact_type: str
     custom_prompt: Optional[str] = None
+    additional_instructions: Optional[str] = None
 
 
 @router.post("/generate/note/{note_id}", response_model=ArtifactGenerationResponse)
@@ -407,15 +408,24 @@ async def generate_note_artifact(
         # Build context and prompt
         print("\n[STEP 3] Building context and prompt...")
         context_builder = ContextBuilder()
+
+        # Combine custom_prompt and additional_instructions
+        user_instructions = request.custom_prompt
+        if request.additional_instructions:
+            if user_instructions:
+                user_instructions = f"{user_instructions}\n\nAdditional Instructions:\n{request.additional_instructions}"
+            else:
+                user_instructions = request.additional_instructions
+
         prompt = context_builder.build_prompt(
             note=note,
             artifact_type=artifact_type_enum,
-            user_instructions=request.custom_prompt,
+            user_instructions=user_instructions,
         )
         print("[DATA] Prompt built successfully")
         print(f"[DATA] Prompt length: {len(prompt)} characters")
         print(f"[DATA] Prompt preview (first 200 chars): {prompt[:200]}...")
-        print(f"[DATA] User instructions included: {bool(request.custom_prompt)}")
+        print(f"[DATA] User instructions included: {bool(user_instructions)}")
 
         # Generate using Gemini
         print("\n[STEP 4] Creating Gemini provider...")
@@ -620,10 +630,19 @@ async def preview_artifact(
 
         # Build context and prompt
         context_builder = ContextBuilder()
+
+        # Combine custom_prompt and additional_instructions
+        user_instructions = request.custom_prompt
+        if request.additional_instructions:
+            if user_instructions:
+                user_instructions = f"{user_instructions}\n\nAdditional Instructions:\n{request.additional_instructions}"
+            else:
+                user_instructions = request.additional_instructions
+
         prompt = context_builder.build_prompt(
             note=note,
             artifact_type=artifact_type_enum,
-            user_instructions=request.custom_prompt,
+            user_instructions=user_instructions,
         )
 
         # Get context summary

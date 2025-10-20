@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from app.services.auto_note_service import AutoNoteService
@@ -11,10 +11,10 @@ from app.services.auto_note_service import AutoNoteService
 class TestParallelProcessing:
 
     @pytest.mark.asyncio
-    async def test_chunks_process_in_parallel(self):
+    async def test_chunks_process_in_parallel(self) -> None:
         """Verify chunks process in parallel, not sequentially."""
 
-        async def mock_llm_call(prompt):
+        async def mock_llm_call(prompt: str) -> MagicMock:
             """Simulate LLM call with 1 second delay."""
             await asyncio.sleep(1)
             mock_response = MagicMock()
@@ -44,12 +44,12 @@ class TestParallelProcessing:
         assert len(results) == 6
 
     @pytest.mark.asyncio
-    async def test_rate_limiting_enforced(self):
+    async def test_rate_limiting_enforced(self) -> None:
         """Max 3 concurrent LLM calls at a time."""
         concurrent_count = 0
         max_concurrent_seen = 0
 
-        async def mock_llm_with_tracking(prompt):
+        async def mock_llm_with_tracking(prompt: str) -> MagicMock:
             nonlocal concurrent_count, max_concurrent_seen
             concurrent_count += 1
             max_concurrent_seen = max(max_concurrent_seen, concurrent_count)
@@ -73,10 +73,10 @@ class TestParallelProcessing:
         assert max_concurrent_seen == 3, f"Max concurrent was {max_concurrent_seen}"
 
     @pytest.mark.asyncio
-    async def test_chunk_failure_doesnt_stop_others(self):
+    async def test_chunk_failure_doesnt_stop_others(self) -> None:
         """One chunk failing doesn't prevent others from processing."""
 
-        async def mock_llm_some_fail(prompt):
+        async def mock_llm_some_fail(prompt: str) -> MagicMock:
             if "chunk_2" in str(prompt):
                 raise Exception("LLM error for chunk 2")
             mock_response = MagicMock()
@@ -102,11 +102,11 @@ class TestParallelProcessing:
         assert len(results) == 2
 
     @pytest.mark.asyncio
-    async def test_batch_processing_respects_limits(self):
+    async def test_batch_processing_respects_limits(self) -> None:
         """Batches are processed correctly respecting max_concurrent."""
-        call_times = []
+        call_times: list[float] = []
 
-        async def mock_llm_track_timing(prompt):
+        async def mock_llm_track_timing(prompt: str) -> MagicMock:
             call_times.append(time.time())
             await asyncio.sleep(0.5)
             mock_response = MagicMock()
@@ -147,7 +147,7 @@ class TestParallelProcessing:
             assert len(batch) == 3
 
     @pytest.mark.asyncio
-    async def test_empty_chunks_list(self):
+    async def test_empty_chunks_list(self) -> None:
         """Handles empty chunks list gracefully."""
         mock_db = AsyncMock()
         service = AutoNoteService(mock_db)
@@ -159,12 +159,12 @@ class TestParallelProcessing:
         assert results == []
 
     @pytest.mark.asyncio
-    async def test_single_chunk_processes(self):
+    async def test_single_chunk_processes(self) -> None:
         """Single chunk processes correctly."""
         mock_db = AsyncMock()
         service = AutoNoteService(mock_db)
 
-        async def mock_llm_call(prompt):
+        async def mock_llm_call(prompt: str) -> MagicMock:
             mock_response = MagicMock()
             mock_response.text = '{"notes": [{"content": "Test note"}]}'
             mock_response.usage_metadata.total_token_count = 1000
@@ -182,12 +182,12 @@ class TestParallelProcessing:
         # Result should be returned from mock
 
     @pytest.mark.asyncio
-    async def test_preserves_chunk_order_in_results(self):
+    async def test_preserves_chunk_order_in_results(self) -> None:
         """Results maintain chunk order despite parallel processing."""
         mock_db = AsyncMock()
         service = AutoNoteService(mock_db)
 
-        async def mock_llm_with_delay(prompt):
+        async def mock_llm_with_delay(prompt: str) -> MagicMock:
             # Different delays to test order preservation
             if "chunk_0" in str(prompt):
                 await asyncio.sleep(0.3)

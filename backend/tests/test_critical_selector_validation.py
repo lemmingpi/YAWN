@@ -3,7 +3,7 @@ Critical tests proving CSS selector validation issue with chunked DOM.
 These tests MUST pass before the implementation is complete.
 """
 
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from app.services.auto_note_service import AutoNoteService
@@ -14,7 +14,7 @@ class TestCriticalSelectorValidation:
     """Prove that selector validation must use full DOM, not chunk DOM."""
 
     @pytest.fixture
-    def full_dom(self):
+    def full_dom(self) -> str:
         """Complete DOM as it exists on the page."""
         return """
         <html>
@@ -45,7 +45,7 @@ class TestCriticalSelectorValidation:
         """
 
     @pytest.fixture
-    def chunk_2_dom(self):
+    def chunk_2_dom(self) -> str:
         """Chunk 2: Just the main section (missing all parent context)."""
         return """
         <section id="main" class="section-2">
@@ -55,7 +55,7 @@ class TestCriticalSelectorValidation:
         </section>
         """
 
-    def test_problem_selectors_fail_with_chunk_dom(self, chunk_2_dom):
+    def test_problem_selectors_fail_with_chunk_dom(self, chunk_2_dom: str) -> None:
         """
         CURRENT STATE (FAILS): Selectors fail validation with chunk DOM only.
         This test documents the problem we're fixing.
@@ -69,9 +69,9 @@ class TestCriticalSelectorValidation:
         validator = SelectorValidator()
         for selector in selectors_from_llm:
             is_valid = validator.validate_selector(chunk_2_dom, selector)[0]
-            assert is_valid == False, f"Selector '{selector}' fails with chunk DOM"
+            assert not is_valid, f"Selector '{selector}' fails with chunk DOM"
 
-    def test_solution_selectors_work_with_full_dom(self, full_dom):
+    def test_solution_selectors_work_with_full_dom(self, full_dom: str) -> None:
         """
         DESIRED STATE (MUST PASS): Same selectors work with full DOM.
         This is what we're implementing.
@@ -85,11 +85,13 @@ class TestCriticalSelectorValidation:
         validator = SelectorValidator()
         for selector in selectors_from_llm:
             is_valid, match_count, _ = validator.validate_selector(full_dom, selector)
-            assert is_valid == True, f"Selector '{selector}' must work with full DOM"
+            assert is_valid, f"Selector '{selector}' must work with full DOM"
             assert match_count > 0, f"Selector '{selector}' must find matches"
 
     @pytest.mark.asyncio
-    async def test_service_validates_with_full_dom(self, full_dom, chunk_2_dom):
+    async def test_service_validates_with_full_dom(
+        self, full_dom: str, chunk_2_dom: str
+    ) -> None:
         """
         Integration test: Service method uses full DOM for validation.
         """
@@ -117,5 +119,5 @@ class TestCriticalSelectorValidation:
                 total_chunks=3,
             )
 
-            assert result["validation_success"] == True
+            assert result["validation_success"]
             assert len(result["notes"]) > 0

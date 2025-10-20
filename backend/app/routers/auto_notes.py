@@ -183,6 +183,9 @@ async def generate_auto_notes_chunked(
         # Return single chunk response (stateless, no aggregation)
         return ChunkedAutoNoteResponse(
             notes=notes_data,
+            chunk_index=request.chunk_index,
+            total_chunks=request.total_chunks,
+            batch_id=request.batch_id,
             tokens_used=result["tokens_used"],
             cost_usd=result["cost_usd"],
             input_tokens=result["input_tokens"],
@@ -228,7 +231,7 @@ async def generate_auto_notes_full_dom(
     """
     logger.info(
         f"Server-side chunking requested for page_id={page_id}, "
-        f"DOM size={len(request.full_dom)/1000:.1f}KB, user_id={current_user.id}"
+        f"DOM size={len(request.full_dom) / 1000:.1f}KB, user_id={current_user.id}"
     )
 
     service = AutoNoteService(db)

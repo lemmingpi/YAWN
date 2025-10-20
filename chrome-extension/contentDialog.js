@@ -306,6 +306,24 @@ function createAutoNotesConfigDialog(domSizeKB) {
       The server will chunk and process content in parallel.
     `;
 
+    // Create copyright/TOS warning
+    const copyrightWarningElement = document.createElement("div");
+    copyrightWarningElement.style.cssText = `
+      margin: 0 0 20px 0;
+      padding: 12px;
+      background: #f8d7da;
+      border: 1px solid #dc3545;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #721c24;
+    `;
+    copyrightWarningElement.innerHTML = `
+      <strong>⚠️ Important:</strong><br>
+      This action will scrape the page content and send it to an AI for processing.<br>
+      Please ensure you follow all copyright laws and the Terms of Service of the target page.
+    `;
+
     // Create note type section
     const noteTypeLabel = document.createElement("label");
     noteTypeLabel.textContent = "Select Note Type:";
@@ -489,6 +507,7 @@ function createAutoNotesConfigDialog(domSizeKB) {
     // Assemble dialog
     dialog.appendChild(titleElement);
     dialog.appendChild(warningElement);
+    dialog.appendChild(copyrightWarningElement);
     dialog.appendChild(noteTypeLabel);
     dialog.appendChild(radioContainer);
     dialog.appendChild(instructionsLabel);

@@ -53,18 +53,6 @@
                     <p class="mb-0">{{ page.page_summary }}</p>
                 </div>
                 {% endif %}
-
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="text-muted mb-0">User Context:</h6>
-                        <button class="btn btn-sm btn-outline-primary" onclick="showGenerateContextModal()">
-                            <i class="bi bi-magic me-1"></i>Generate AI Context Summary
-                        </button>
-                    </div>
-                    <div id="userContextDisplay" class="p-2 border rounded bg-light" style="white-space: pre-wrap;">
-                        {{ page.user_context or 'No context set. Click "Generate AI Context Summary" to create an AI-powered summary.' }}
-                    </div>
-                </div>
             </div>
             <div class="col-md-4">
                 <div class="d-grid gap-2">
@@ -88,30 +76,63 @@
         </div>
     </div>
 
-    <!-- Notes Section -->
+    <!-- Tabbed Content Section -->
     <div class="content-wrapper p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">
-                <i class="bi bi-sticky text-primary me-2"></i>Notes on this Page
-            </h5>
-            <div class="search-box">
-                <i class="bi bi-search"></i>
-                <input type="text" class="form-control" id="notesSearch" placeholder="Search notes...">
-            </div>
-        </div>
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs mb-3" id="pageDetailTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="context-tab" data-bs-toggle="tab" data-bs-target="#context-content" type="button" role="tab" aria-controls="context-content" aria-selected="true">
+                    <i class="bi bi-file-text me-1"></i>User Context
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="notes-tab" data-bs-toggle="tab" data-bs-target="#notes-content" type="button" role="tab" aria-controls="notes-content" aria-selected="false">
+                    <i class="bi bi-sticky me-1"></i>Notes
+                </button>
+            </li>
+        </ul>
 
-        <div class="row" id="notesContainer">
-            <div class="text-center py-3">
-                <div class="spinner-border spinner-border-sm text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
+        <!-- Tab Content -->
+        <div class="tab-content" id="pageDetailTabsContent">
+            <!-- User Context Tab -->
+            <div class="tab-pane fade show active" id="context-content" role="tabpanel" aria-labelledby="context-tab">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="text-muted mb-0">User Context:</h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="showGenerateContextModal()">
+                        <i class="bi bi-magic me-1"></i>Generate AI Context Summary
+                    </button>
                 </div>
-                <span class="ms-2">Loading notes...</span>
+                <div id="userContextDisplay" class="p-3 border rounded bg-light" style="white-space: pre-wrap; min-height: 150px;">
+                    {{ page.user_context or 'No context set. Click "Generate AI Context Summary" to create an AI-powered summary.' }}
+                </div>
             </div>
-        </div>
 
-        <div id="notesEmpty" class="text-center py-4 d-none">
-            <i class="bi bi-sticky display-1 text-muted"></i>
-            <h6 class="mt-2 text-muted">No notes found for this page</h6>
+            <!-- Notes Tab -->
+            <div class="tab-pane fade" id="notes-content" role="tabpanel" aria-labelledby="notes-tab">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-sticky text-primary me-2"></i>Notes on this Page
+                    </h5>
+                    <div class="search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" class="form-control" id="notesSearch" placeholder="Search notes...">
+                    </div>
+                </div>
+
+                <div class="row" id="notesContainer">
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span class="ms-2">Loading notes...</span>
+                    </div>
+                </div>
+
+                <div id="notesEmpty" class="text-center py-4 d-none">
+                    <i class="bi bi-sticky display-1 text-muted"></i>
+                    <h6 class="mt-2 text-muted">No notes found for this page</h6>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -157,6 +178,7 @@
                                 Page is Paywalled
                                 <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" title="Mark if page content is behind a paywall. You can provide alternate source text for AI context generation."></i>
                             </label>
+                            <span class="form-text text-muted">Obey all copyright and usage restrictions of the target page.</span>
                         </div>
                     </div>
                     <div class="mb-3" id="editPageSourceContainer" style="display: {{ 'block' if page.is_paywalled else 'none' }};">
