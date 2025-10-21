@@ -492,7 +492,7 @@ wget https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 -O cloud_sql_pro
 chmod +x cloud_sql_proxy
 
 # Run proxy (in separate terminal)
-./cloud_sql_proxy -instances=yawn-notes-prod:us-central1:yawn-postgres=tcp:5432
+./cloud_sql_proxy -instances=yawn-notes-prod:us-central1:yawn-postgres=tcp:5435
 
 # Now you can connect locally
 psql "postgresql://yawn_app:PASSWORD@localhost:5432/yawn_production"

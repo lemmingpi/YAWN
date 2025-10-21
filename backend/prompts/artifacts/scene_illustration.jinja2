@@ -21,15 +21,21 @@ Scene from text:
 {{ highlighted_text }}
 {% endif %}
 
-{% if page_section_html %}
-
-Context:
-{{ page_section_html | truncate(1000) }}
+{% if page_summary %}
+**Page Context:**
+{{ page_summary }}
 {% endif %}
+
+{% if page_section_html %}
+Context:
+{{ page_section_html | truncate(500) }}
+{% endif %}
+
 
 {% if page_title %}
 Source: {{ page_title }}
 {% endif %}
+
 
 {% if user_instructions %}
 

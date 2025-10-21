@@ -19,6 +19,11 @@ You are an expert data visualization specialist. Create an interactive, self-con
 {{ highlighted_text }}
 {% endif %}
 
+{% if page_summary %}
+**Page Context:**
+{{ page_summary }}
+{% endif %}
+
 {% if page_section_html %}
 **Additional Context:**
 {{ page_section_html | truncate(1500) }}

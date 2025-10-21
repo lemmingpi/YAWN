@@ -159,17 +159,21 @@ class ContextBuilder:
         Raises:
             ValueError: If artifact_type is not supported
         """
-        # Check if this is a visualization type that uses Jinja2 templates
-        visualization_types = {
+        # Check if this artifact type uses Jinja2 templates
+        # Map artifact types to their corresponding template files
+        jinja2_templates = {
+            ArtifactType.ANALYSIS: "analysis.jinja2",
+            ArtifactType.ACTION_ITEMS: "action_items.jinja2",
+            ArtifactType.CODE_SNIPPET: "code_snippet.jinja2",
             ArtifactType.SCENE_ILLUSTRATION: "scene_illustration.jinja2",
             ArtifactType.DATA_CHART: "data_chart.jinja2",
             ArtifactType.SCIENTIFIC_VISUALIZATION: "scientific_visualization.jinja2",
         }
 
-        if artifact_type in visualization_types:
-            return self._build_visualization_prompt(
+        if artifact_type in jinja2_templates:
+            return self._build_jinja2_prompt(
                 note=note,
-                template_file=visualization_types[artifact_type],
+                template_file=jinja2_templates[artifact_type],
                 user_instructions=user_instructions,
             )
 
@@ -241,14 +245,14 @@ class ContextBuilder:
 
         return prompt
 
-    def _build_visualization_prompt(
+    def _build_jinja2_prompt(
         self,
         note: Note,
         template_file: str,
         user_instructions: Optional[str] = None,
     ) -> str:
         """
-        Build prompt using Jinja2 template for visualization artifacts.
+        Build prompt using Jinja2 template for artifacts.
 
         Args:
             note: Note object with relationships loaded
@@ -291,8 +295,8 @@ class ContextBuilder:
             prompt: str = template.render(**template_vars)
             return prompt
         except Exception as e:
-            logger.error(f"Error rendering visualization template {template_file}: {e}")
-            raise ValueError(f"Failed to render visualization prompt: {e}")
+            logger.error(f"Error rendering Jinja2 template {template_file}: {e}")
+            raise ValueError(f"Failed to render prompt from template: {e}")
 
     def _build_page_context(self, page: Page) -> str:
         """
