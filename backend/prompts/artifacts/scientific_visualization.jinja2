@@ -19,6 +19,11 @@ You are an expert scientific and technical illustrator. Create an interactive HT
 {{ highlighted_text }}
 {% endif %}
 
+{% if page_summary %}
+**Page Context:**
+{{ page_summary }}
+{% endif %}
+
 {% if page_section_html %}
 **Additional Context:**
 {{ page_section_html | truncate(1500) }}
@@ -26,11 +31,6 @@ You are an expert scientific and technical illustrator. Create an interactive HT
 
 {% if page_title %}
 **Source:** {{ page_title }}
-{% endif %}
-
-{% if page_summary %}
-**Page Context:**
-{{ page_summary | truncate(500) }}
 {% endif %}
 
 {% if user_instructions %}

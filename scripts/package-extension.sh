@@ -19,6 +19,9 @@ EXTENSION_DIR="$PROJECT_ROOT/chrome-extension"
 DIST_DIR="$PROJECT_ROOT/dist"
 BUILD_DIR="$DIST_DIR/extension-build"
 
+# Python path - use passed parameter or default to python
+PYTHON="${PYTHON:-python}"
+
 # Get version from manifest.json
 MANIFEST_FILE="$EXTENSION_DIR/manifest.json"
 if [ ! -f "$MANIFEST_FILE" ]; then
@@ -75,15 +78,15 @@ validate_manifest() {
     log_step "Validating manifest.json..."
 
     # Check JSON syntax
-    if command_exists python3.13; then
-        python3.13 -m json.tool "$MANIFEST_FILE" >/dev/null 2>&1 || {
-            log_error "Invalid JSON (1) syntax in manifest.json"
-            python3.13 -m json.tool "$MANIFEST_FILE"
+    if command_exists "$PYTHON"; then
+        "$PYTHON" -m json.tool "$MANIFEST_FILE" >/dev/null 2>&1 || {
+            log_error "Invalid JSON syntax in manifest.json (Py)"
+            "$PYTHON" -m json.tool "$MANIFEST_FILE"
             exit 1
         }
     elif command_exists node; then
         node -e "JSON.parse(require('fs').readFileSync('$MANIFEST_FILE', 'utf8'))" || {
-            log_error "Invalid JSON (2) syntax in manifest.json"
+            log_error "Invalid JSON syntax in manifest.json (node)"
             node -e "JSON.parse(require('fs').readFileSync('$MANIFEST_FILE', 'utf8'))"
             exit 1
         }
@@ -270,8 +273,8 @@ create_package() {
         zip -r "$package_path" .
     elif command_exists 7z; then
         7z a "$package_path" .
-    elif command_exists python3.13; then
-        python3.13 -c "
+    elif command_exists "$PYTHON"; then
+        "$PYTHON" -c "
 import zipfile
 import os
 import sys
@@ -288,7 +291,7 @@ create_zip('.', '$package_path')
 print('ZIP package created successfully')
 "
     else
-        log_error "No ZIP utility found (zip command or python3)"
+        log_error "No ZIP utility found (zip, 7z, or python)"
         exit 1
     fi
 
@@ -300,8 +303,6 @@ print('ZIP package created successfully')
         log_error "Failed to create package"
         exit 1
     fi
-
-    return "$package_path"
 }
 
 # Validate package

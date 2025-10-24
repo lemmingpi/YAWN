@@ -2992,6 +2992,7 @@ async function handleGenerateDOMTestNotes() {
 
     // Handle response
     if (response.success && response.data) {
+      /* eslint-disable camelcase */
       const { notes, total_chunks, successful_chunks, cost_usd, tokens_used, batch_id } = response.data;
 
       let message =
@@ -3004,6 +3005,7 @@ async function handleGenerateDOMTestNotes() {
       if (successful_chunks < total_chunks) {
         message += `\n\nWarning: ${total_chunks - successful_chunks} chunk(s) failed to process.`;
       }
+      /* eslint-enable camelcase */
 
       alert(message);
 
