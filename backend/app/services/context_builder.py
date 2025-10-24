@@ -277,6 +277,7 @@ class ContextBuilder:
                     "page_title": note.page.title,
                     "page_url": note.page.url,
                     "page_summary": note.page.page_summary,
+                    "user_context": note.page.user_context,
                 }
             )
 

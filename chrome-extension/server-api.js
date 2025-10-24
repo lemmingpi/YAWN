@@ -103,14 +103,12 @@ const ServerAPI = {
     };
 
     try {
-      console.log(`[Web Notes] API Request: ${options.method || "GET"} ${url}`);
       const response = await fetch(url, requestOptions);
 
       // Handle non-2xx status codes
       if (!response.ok) {
         // Handle 401 Unauthorized - try to refresh token
         if (response.status === 401 && typeof AuthManager !== "undefined") {
-          console.log("[Web Notes] Received 401, attempting token refresh");
           const refreshed = await AuthManager.refreshTokenIfNeeded();
 
           // Retry the request once with new token if refresh was successful
@@ -129,7 +127,6 @@ const ServerAPI = {
 
       // Retry logic for network errors (but not for 401 retries)
       if (retryCount < this.RETRY_ATTEMPTS && this.shouldRetry(error)) {
-        console.log(`[Web Notes] Retrying request in ${this.RETRY_DELAY}ms...`);
         await this.delay(this.RETRY_DELAY);
         return this.makeRequest(endpoint, options, retryCount + 1);
       }
@@ -174,7 +171,6 @@ const ServerAPI = {
       // Check if user is authenticated before making the request
       const isAuthenticated = await this.isAuthenticatedMode();
       if (!isAuthenticated) {
-        console.log("[Web Notes] User not authenticated, skipping server note fetch");
         return [];
       }
 
@@ -678,15 +674,12 @@ const ServerAPI = {
   async ensureAuthenticated(interactive = true) {
     try {
       if (typeof AuthManager === "undefined") {
-        console.log("[Web Notes] AuthManager not available, using local mode");
         return false;
       }
 
       if (AuthManager.isAuthenticated()) {
         return true;
       }
-
-      console.log("[Web Notes] Attempting authentication for server sync");
 
       // Try auto-auth first
       let success = await AuthManager.attemptAutoAuth();
@@ -833,11 +826,6 @@ const ServerAPI = {
     try {
       const response = await this.makeRequest("/my-shares");
       const shares = await response.json();
-
-      console.log(
-        `[Web Notes] Retrieved user shares: ${shares.shared_pages?.length || 0} pages, ` +
-          `${shares.shared_sites?.length || 0} sites`,
-      );
       return shares;
     } catch (error) {
       console.error("[Web Notes] Failed to get user shares:", error);
@@ -870,7 +858,6 @@ const ServerAPI = {
       });
 
       const updatedShare = await response.json();
-      console.log(`[Web Notes] Updated page share permission for user ${userId} to ${newPermission}`);
       return updatedShare;
     } catch (error) {
       console.error("[Web Notes] Failed to update page share permission:", error);
@@ -903,7 +890,6 @@ const ServerAPI = {
       });
 
       const updatedShare = await response.json();
-      console.log(`[Web Notes] Updated site share permission for user ${userId} to ${newPermission}`);
       return updatedShare;
     } catch (error) {
       console.error("[Web Notes] Failed to update site share permission:", error);

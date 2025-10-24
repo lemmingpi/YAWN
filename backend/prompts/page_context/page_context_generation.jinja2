@@ -3,7 +3,8 @@ Available Jinja2 Template Variables:
 - page_url: str - The page URL from the database (always present)
 - page_source: str | None - Optional alternate source for paywalled content (user-provided)
 - page_title: str - The page title (or "Untitled" if not set)
-- page_summary: str | None - Existing user-provided summary to incorporate (optional)
+- user_context: str | None - User-provided context to incorporate (optional)
+- page_summary: str | None - AI-generated summary to incorporate (optional)
 - notes_content: str | None - Concatenated content from all user notes on this page (optional)
 - custom_instructions: str | None - User-provided custom instructions for generation (optional)
 #}

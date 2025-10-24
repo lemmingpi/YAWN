@@ -69,8 +69,6 @@ async function createContextMenu() {
         visible: false, // Hidden by default, shown when user is authenticated
       });
     }, "Creating context menu");
-
-    console.log("[Web Notes Extension] Context menu created successfully");
   } catch (error) {
     logError("Failed to create context menu", error);
   }
@@ -98,8 +96,6 @@ async function updateAuthenticatedContextMenus(isAuthenticated) {
         visible: isAuthenticated,
       });
     }, "Updating authenticated context menus");
-
-    console.log(`[Web Notes Extension] Authenticated context menus ${isAuthenticated ? "enabled" : "disabled"}`);
   } catch (error) {
     // Silently fail if context menu doesn't exist yet
     console.debug("Context menu update failed (expected during initialization):", error);
@@ -133,7 +129,6 @@ async function initializeStats() {
 
     if (!result || !result[EXTENSION_CONSTANTS.STATS_KEY]) {
       await setStats(EXTENSION_CONSTANTS.DEFAULT_STATS);
-      console.log("[Web Notes Extension] Stats initialized");
     }
   } catch (error) {
     logError("Failed to initialize stats", error);
@@ -215,8 +210,6 @@ async function createNoteWithCoordinates(tabId, noteNumber) {
 // Event Listeners
 
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log("[Web Notes Extension] Extension installed/updated");
-
   try {
     await createContextMenu();
     await initializeStats();
@@ -304,8 +297,6 @@ async function handleAddNote(info, tab) {
  */
 async function handleSharePage(info, tab) {
   try {
-    console.log("[Web Notes Extension] Share page requested via context menu");
-
     // Send message to content script to open sharing dialog
     chrome.tabs
       .sendMessage(tab.id, {
@@ -326,8 +317,6 @@ async function handleSharePage(info, tab) {
  */
 async function handleShareSite(info, tab) {
   try {
-    console.log("[Web Notes Extension] Share site requested via context menu");
-
     // Send message to content script to open sharing dialog
     chrome.tabs
       .sendMessage(tab.id, {
@@ -347,8 +336,6 @@ async function handleShareSite(info, tab) {
  */
 async function handleRegisterPage(tab) {
   try {
-    console.log("[Web Notes Extension] Register page requested via context menu");
-
     // Register the page without creating a note - call ServerAPI directly
     const pageData = await ServerAPI.registerPage(tab.url, tab.title);
 
@@ -381,8 +368,6 @@ async function handleRegisterPage(tab) {
  */
 async function handleGenerateDOMTestNotes(tab) {
   try {
-    console.log("[Web Notes Extension] Generate DOM test notes requested via context menu");
-
     // Send message to content script to extract DOM and generate notes
     chrome.tabs
       .sendMessage(tab.id, {
@@ -401,7 +386,7 @@ async function handleGenerateDOMTestNotes(tab) {
         });
       });
   } catch (error) {
-    logError("Error handling DOM test notes generation", error);
+    logError("Error handling DOM  notes generation", error);
   }
 }
 
@@ -721,7 +706,6 @@ async function handleContextMenuUpdate(data) {
   try {
     if (data && typeof data.hasSharingCapability === "boolean") {
       await updateSharingContextMenu(data.hasSharingCapability);
-      console.log("[Web Notes Extension] Context menu updated based on sharing capability");
     }
   } catch (error) {
     logError("Error updating context menu", error);

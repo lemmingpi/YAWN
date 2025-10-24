@@ -34,14 +34,12 @@ async function attemptAutoAuthenticationForNote() {
     // Check if already authenticated via background
     const isAuth = await isServerAuthenticated();
     if (isAuth) {
-      console.log("[Web Notes] User already authenticated");
       return false;
     }
 
     // Check if server sync is configured
     const config = await getWNConfig();
     if (!config.syncServerUrl) {
-      console.log("[Web Notes] No server URL configured, skipping authentication");
       return false;
     }
 
@@ -139,7 +137,7 @@ function cleanupHighlights() {
       removeTextHighlight(noteId);
     });
 
-    console.log(`[Web Notes] Cleaned up ${excessCount} excess highlights`);
+    // Cleaned up excess highlights
   }
 }
 
@@ -158,14 +156,14 @@ function captureSelectionData(selection) {
 
     // Validate range integrity
     if (!range.startContainer || !range.endContainer) {
-      console.warn("[Web Notes] Invalid range containers");
+      console.log("[YARN] Invalid range containers");
       return null;
     }
 
     // Validate selection size
     const selectedText = selection.toString().trim();
     if (selectedText.length > MAX_SELECTION_LENGTH) {
-      console.warn(`[Web Notes] Selected text exceeds maximum length (${MAX_SELECTION_LENGTH} chars)`);
+      console.log(`[YARN] Selected text exceeds maximum length (${MAX_SELECTION_LENGTH} chars)`);
       return null;
     }
 
@@ -203,7 +201,7 @@ function captureSelectionData(selection) {
       startSelector = generateOptimalSelector(startElement);
       endSelector = generateOptimalSelector(endElement);
     } catch (error) {
-      console.error("[Web Notes] Error generating selectors:", error);
+      console.log("[Web Notes] Error generating selectors:", error);
       return null;
     }
 
@@ -223,7 +221,7 @@ function captureSelectionData(selection) {
       ).cssSelector,
     };
   } catch (error) {
-    console.error("[Web Notes] Error capturing selection data:", error);
+    console.warn("[Web Notes] Error capturing selection data:", error);
     return null;
   }
 }
@@ -255,7 +253,7 @@ function createTextHighlight(noteData, backgroundColor) {
     const endElement = findElementBySelector(selectionData.endSelector);
 
     if (!startElement || !endElement) {
-      console.warn(`[Web Notes] Could not find elements for highlighting note ${noteData.id}`);
+      console.log(`[Web Notes] Could not find elements for highlighting note ${noteData.id}`);
       return;
     }
 
@@ -268,7 +266,7 @@ function createTextHighlight(noteData, backgroundColor) {
       const endTextNode = findTextNodeInElement(endElement, selectionData.endOffset, selectionData.endContainerType);
 
       if (!startTextNode || !endTextNode) {
-        console.warn(`[Web Notes] Could not find text nodes for highlighting note ${noteData.id}`);
+        console.log(`[Web Notes] Could not find text nodes for highlighting note ${noteData.id}`);
         return;
       }
 
@@ -278,7 +276,7 @@ function createTextHighlight(noteData, backgroundColor) {
       // Validate range size before highlighting
       const rangeText = range.toString();
       if (rangeText.length > MAX_SELECTION_LENGTH) {
-        console.warn(`[Web Notes] Range text too large for highlighting: ${rangeText.length} chars`);
+        console.log(`[Web Notes] Range text too large for highlighting: ${rangeText.length} chars`);
         return;
       }
 
@@ -298,7 +296,6 @@ function createTextHighlight(noteData, backgroundColor) {
       try {
         range.surroundContents(highlightSpan);
         noteHighlights.set(noteData.id, highlightSpan);
-        console.log(`[Web Notes] Created highlight for note ${noteData.id}`);
       } catch (error) {
         // If surroundContents fails (e.g., range crosses element boundaries),
         // try extracting and inserting instead
@@ -306,7 +303,6 @@ function createTextHighlight(noteData, backgroundColor) {
         highlightSpan.appendChild(contents);
         range.insertNode(highlightSpan);
         noteHighlights.set(noteData.id, highlightSpan);
-        console.log(`[Web Notes] Created highlight for note ${noteData.id} using extraction method`);
       }
     } catch (rangeError) {
       console.error(`[Web Notes] Error creating range for highlight: ${rangeError}`);
@@ -329,7 +325,6 @@ function removeTextHighlight(noteId) {
       const textNode = document.createTextNode(textContent);
       highlight.parentNode.replaceChild(textNode, highlight);
       noteHighlights.delete(noteId);
-      console.log(`[Web Notes] Removed highlight for note ${noteId}`);
     }
 
     // Also remove any orphaned highlight elements
@@ -361,13 +356,12 @@ function findElementBySelector(selector) {
         const element = document.querySelector(selector);
         if (element) return element;
       } catch (cssError) {
-        console.warn(`[Web Notes] Invalid CSS selector: ${selector}`);
+        console.log(`[Web Notes] Invalid CSS selector: ${selector}`);
       }
     }
 
     // Validate XPath before using
     if (!validateXPath(selector)) {
-      console.warn(`[Web Notes] Invalid or potentially dangerous XPath: ${selector}`);
       return null;
     }
 
@@ -376,11 +370,11 @@ function findElementBySelector(selector) {
       const xpathResult = document.evaluate(selector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
       return xpathResult.singleNodeValue;
     } catch (xpathError) {
-      console.error(`[Web Notes] XPath evaluation failed: ${selector}`, xpathError);
+      console.log(`[Web Notes] XPath evaluation failed: ${selector}`, xpathError);
       return null;
     }
   } catch (error) {
-    console.error(`[Web Notes] Error finding element with selector ${selector}:`, error);
+    console.log(`[Web Notes] Error finding element with selector ${selector}:`, error);
     return null;
   }
 }
@@ -419,7 +413,7 @@ function findTextNodeInElement(element, offset, containerType) {
 
     return null;
   } catch (error) {
-    console.error("[Web Notes] Error finding text node:", error);
+    console.log("[Web Notes] Error finding text node:", error);
     return null;
   }
 }
@@ -446,7 +440,7 @@ async function loadExistingNotes() {
   try {
     getNotes().then(async function (result) {
       if (chrome.runtime.lastError) {
-        console.error("[Web Notes] Failed to load notes:", chrome.runtime.lastError);
+        console.log("[Web Notes] Failed to load notes:", chrome.runtime.lastError);
         return;
       }
 
@@ -454,8 +448,6 @@ async function loadExistingNotes() {
 
       // Use enhanced URL matching to find all notes that match the current URL
       const urlNotes = getNotesForUrl(window.location.href, notes);
-
-      console.log(`[Web Notes] Found ${urlNotes.length} notes for current URL (including anchor variations)`);
 
       // Migrate and display notes, saving if migration occurred
       let needsBulkSave = false;
@@ -485,16 +477,13 @@ async function loadExistingNotes() {
         const matchingUrls = findMatchingUrlsInStorage(window.location.href, notes);
         for (const oldUrl of matchingUrls) {
           if (oldUrl !== normalizedUrl && notes[oldUrl]) {
-            console.log(`[Web Notes] Cleaning up old URL variation: ${oldUrl}`);
             delete notes[oldUrl];
           }
         }
 
         setNotes(notes).then(function (result) {
           if (chrome.runtime.lastError) {
-            console.error("[Web Notes] Failed to save migrated notes:", chrome.runtime.lastError);
-          } else {
-            console.log("[Web Notes] Successfully saved migrated notes and cleaned up URL variations");
+            console.log("[Web Notes] Failed to save migrated notes:", chrome.runtime.lastError);
           }
         });
       }
@@ -593,8 +582,6 @@ function ensureNoteVisibility(noteElement, noteData) {
       noteData.fallbackPosition.x = newX;
       noteData.fallbackPosition.y = newY;
     }
-
-    console.log(`[Web Notes] Repositioned note ${noteData.id} from outside page bounds to (${newX}, ${newY})`);
   }
 
   return wasRepositioned;
@@ -605,7 +592,6 @@ function ensureNoteVisibility(noteElement, noteData) {
  */
 function repositionAllNotes() {
   const notes = document.querySelectorAll(".web-note");
-  console.log(`[Web Notes] Repositioning ${notes.length} notes after window resize`);
 
   if (notes.length === 0) {
     return;
@@ -614,7 +600,6 @@ function repositionAllNotes() {
   // Batch storage operation - fetch all notes once
   getNotes().then(function (result) {
     if (chrome.runtime.lastError) {
-      console.error("[Web Notes] Failed to get notes for repositioning:", chrome.runtime.lastError);
       return;
     }
 
@@ -627,7 +612,6 @@ function repositionAllNotes() {
       // Find the note data
       const noteData = urlNotes.find(note => note.id === noteId);
       if (!noteData) {
-        console.warn(`[Web Notes] Note data not found for repositioning: ${noteId}`);
         return;
       }
 
@@ -647,8 +631,6 @@ function repositionAllNotes() {
       // Update note position with smooth transition
       noteElement.style.left = `${newPosition.x}px`;
       noteElement.style.top = `${newPosition.y}px`;
-
-      console.log(`[Web Notes] Repositioned note ${noteId} to (${newPosition.x}, ${newPosition.y})`);
     });
 
     // Ensure all notes have minimum visibility after repositioning
@@ -662,7 +644,6 @@ function repositionAllNotes() {
  * Handle window resize events
  */
 function handleWindowResize() {
-  console.log("[Web Notes] Window resized, repositioning notes");
   repositionAllNotes();
 }
 
@@ -676,23 +657,17 @@ function ensureAllNotesVisibleBatched(allNotes, urlNotes) {
   let notesRepositioned = 0;
 
   notes.forEach((noteElement, index) => {
-    console.log(`[Web Notes] Checking note ${index + 1}/${notes.length}: ${noteElement.id}`);
-
     const noteData = urlNotes.find(note => note.id === noteElement.id);
 
     if (noteData) {
       const wasRepositioned = ensureNoteVisibility(noteElement, noteData);
       if (wasRepositioned) {
         notesRepositioned++;
-        console.log(`[Web Notes] Repositioned note ${noteElement.id} for visibility`);
       }
     } else {
       console.warn(`[Web Notes] Note data not found for ${noteElement.id}`);
     }
   });
-
-  // eslint-disable-next-line max-len
-  console.log(`[Web Notes] Completed visibility check - processed ${notes.length} notes, repositioned ${notesRepositioned}`);
 }
 
 /**
@@ -734,7 +709,6 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
   try {
     getNotes().then(function (result) {
       if (chrome.runtime.lastError) {
-        console.error("[Web Notes] Failed to get notes for offset update:", chrome.runtime.lastError);
         return;
       }
 
@@ -755,9 +729,7 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
           notes[matchingUrl] = urlNotes;
           setNotes(notes).then(function () {
             if (chrome.runtime.lastError) {
-              console.error("[Web Notes] Failed to save note offset:", chrome.runtime.lastError);
-            } else {
-              console.log(`[Web Notes] Updated note ${noteId} offset to (${newOffsetX}, ${newOffsetY})`);
+              console.log("[Web Notes] Failed to save note offset:", chrome.runtime.lastError);
             }
           });
           noteFound = true;
@@ -766,11 +738,11 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
       }
 
       if (!noteFound) {
-        console.warn(`[Web Notes] Note ${noteId} not found for offset update`);
+        console.log(`[Web Notes] Note ${noteId} not found for offset update`);
       }
     });
   } catch (error) {
-    console.error("[Web Notes] Error updating note offset:", error);
+    console.log("[Web Notes] Error updating note offset:", error);
   }
 }
 
@@ -871,8 +843,6 @@ function makeDraggable(noteElement, noteData, targetElement) {
     // Performance impact: Disables scroll optimizations during drag operations
     document.addEventListener("mousemove", handleDragMove, { passive: false });
     document.addEventListener("mouseup", handleDragEnd, { once: true });
-
-    console.log(`[Web Notes] Started dragging note ${noteData.id}`);
   }
 
   function handleDragMove(e) {
@@ -928,7 +898,6 @@ function makeDraggable(noteElement, noteData, targetElement) {
     }, TIMING.DOM_UPDATE_DELAY);
 
     const offset = `(${noteData.offsetX || 0}, ${noteData.offsetY || 0})`;
-    console.log(`[Web Notes] Finished dragging note ${noteData.id} to offset ${offset}`);
   }
 
   // Add mousedown event listener to start dragging
@@ -1154,8 +1123,6 @@ function enterEditMode(noteElement, noteData) {
   setTimeout(() => {
     document.addEventListener("click", handleClickOutside);
   }, 100);
-
-  console.log(`[Web Notes] Entered edit mode for note ${currentNoteData.id}`);
 }
 
 /**
@@ -1176,7 +1143,6 @@ function exitEditMode(noteElement, save = true) {
   // Always use current data from element (may have been updated since edit mode started)
   const noteData = noteElement.noteData;
   if (!noteData) {
-    console.error("[Web Notes] No note data found on element during exit edit mode");
     return;
   }
   const newContent = save ? textarea.value : textarea.originalContent;
@@ -1198,7 +1164,7 @@ function exitEditMode(noteElement, save = true) {
       if (success) {
         console.log(`[Web Notes] Note ${noteData.id} saved successfully`);
       } else {
-        console.error(`[Web Notes] Failed to save note ${noteData.id}`);
+        console.log(`[Web Notes] Failed to save note ${noteData.id}`);
       }
     });
   }
@@ -1216,8 +1182,6 @@ function exitEditMode(noteElement, save = true) {
 
   // Clear editing state
   EditingState.currentlyEditingNote = null;
-
-  console.log(`[Web Notes] Exited edit mode for note ${noteData.id}, saved: ${save}`);
 }
 
 /**
@@ -1456,7 +1420,7 @@ function createMarkdownToolbar(textarea) {
       const colorDropdown = createColorDropdown(textarea);
       toolbar.appendChild(colorDropdown);
     } catch (error) {
-      console.error("[Web Notes] Error adding color dropdown to toolbar:", error);
+      console.log("[Web Notes] Error adding color dropdown to toolbar:", error);
     }
   }
 
@@ -1618,7 +1582,7 @@ function autoSaveNote(noteElement, noteData, content) {
     if (success) {
       console.log(`[Web Notes] Auto-saved note ${noteData.id}`);
     } else {
-      console.error(`[Web Notes] Auto-save failed for note ${noteData.id}`);
+      console.log(`[Web Notes] Auto-save failed for note ${noteData.id}`);
     }
   });
 }
@@ -1655,7 +1619,6 @@ function displayNote(noteData) {
       targetElement = selectorResults.element;
 
       if (targetElement && selectorResults.usedSelector) {
-        console.log(`[Web Notes] Found element using ${selectorResults.usedSelector}`);
         elementCache.set(cacheKey, targetElement);
       }
     }
@@ -1776,8 +1739,6 @@ function displayNote(noteData) {
           const baseUrl = config.syncServerUrl.replace(/\/api$/, "");
           const detailsUrl = `${baseUrl}/app/notes/${noteData.serverId}`;
           window.open(detailsUrl, "_blank");
-        } else {
-          console.log("[Web Notes] No server configured for note details");
         }
       } else {
         console.log("[Web Notes] Note has no server ID - not synced to server");
@@ -1834,11 +1795,6 @@ function displayNote(noteData) {
     // Enhanced logging
     const offsetX = noteData.offsetX || 0;
     const offsetY = noteData.offsetY || 0;
-    console.log(
-      `[Web Notes] Displaying draggable note ${finalPosition.isAnchored ? "anchored to DOM element" : "at fallback position"}: ` +
-        `${noteData.elementSelector || noteData.elementXPath || "absolute coordinates"} ` +
-        `with offset (${offsetX}, ${offsetY}) at position (${finalPosition.x}, ${finalPosition.y})`,
-    );
   } catch (error) {
     console.error("[Web Notes] Error displaying note:", error);
   }
@@ -1923,7 +1879,6 @@ window.addEventListener("beforeunload", () => {
 // Also use modern navigation API if available
 if ("navigation" in window) {
   window.navigation.addEventListener("navigate", () => {
-    console.log("[Web Notes] Navigation detected, reloading notes");
     setTimeout(() => {
       // Clear element cache for new page
       elementCache.clear();
@@ -1973,7 +1928,6 @@ function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow"
         targetElement = document.elementFromPoint(coords.clientX, coords.clientY);
       }
       if (!targetElement) {
-        console.warn("[Web Notes] Could not determine target element for note");
         fallbackPosition = { x: coords.x, y: coords.y };
       } else {
         // Generate optimal selector using hybrid approach
@@ -2028,10 +1982,6 @@ function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow"
     // Attempt authentication for first note if server sync is configured
     attemptAutoAuthenticationForNote()
       .then(async authAttempted => {
-        if (authAttempted) {
-          console.log("[Web Notes] Authentication attempted for note creation");
-        }
-
         // Store in chrome storage using normalized URL
         getNotes().then(function (result) {
           const notes = result || {};
@@ -2069,8 +2019,6 @@ function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow"
           });
         });
       });
-
-    console.log(`[Web Notes] Created note #${noteNumber} at ${targetElement ? "DOM element" : "coordinates"}`);
   } catch (error) {
     console.error("[Web Notes] Error creating note:", error);
   }
@@ -2099,8 +2047,6 @@ function tryBothSelectors(noteData, _cacheKey) {
           result.element = cssElement;
           result.usedSelector = "CSS selector";
           return result;
-        } else {
-          console.warn(`[Web Notes] CSS selector matches ${allMatches.length} elements, ` + "trying XPath");
         }
       }
     } catch (error) {
@@ -2131,8 +2077,6 @@ function tryBothSelectors(noteData, _cacheKey) {
 
   // Strategy 3: Cross-validation if we had partial success
   if (noteData.elementSelector && noteData.elementXPath) {
-    console.log("[Web Notes] Attempting cross-validation of selectors");
-
     try {
       const cssMatches = document.querySelectorAll(noteData.elementSelector);
       const xpathResult = document.evaluate(
@@ -2183,7 +2127,6 @@ function generateOptimalSelector(element) {
       // CSS selector generation succeeded and is validated as unique
       result.cssSelector = cssSelector;
       result.strategy = "css-primary";
-      console.log("[Web Notes] Using CSS selector as primary:", cssSelector);
     } else {
       // CSS couldn't generate unique selector, XPath is primary
       result.strategy = "xpath-primary";
@@ -2195,12 +2138,10 @@ function generateOptimalSelector(element) {
       try {
         const cssMatches = document.querySelectorAll(result.cssSelector);
         if (cssMatches.length !== 1 || cssMatches[0] !== element) {
-          console.warn("[Web Notes] CSS selector validation failed, discarding");
           result.cssSelector = null;
           result.strategy = "xpath-only";
         }
       } catch (cssError) {
-        console.warn("[Web Notes] CSS selector invalid, discarding:", cssError);
         result.cssSelector = null;
         result.strategy = "xpath-only";
       }
@@ -2219,12 +2160,6 @@ function generateOptimalSelector(element) {
         result.xpath = null;
       }
     }
-
-    // Log final strategy
-    console.log(`[Web Notes] Selector strategy: ${result.strategy}`, {
-      css: result.cssSelector,
-      xpath: result.xpath,
-    });
 
     return result;
   } catch (error) {
@@ -2334,10 +2269,8 @@ function generateCSSSelector(element) {
     try {
       const matches = document.querySelectorAll(finalSelector);
       if (matches.length === 1 && matches[0] === element) {
-        console.log("[Web Notes] Generated unique CSS selector:", finalSelector);
         return finalSelector;
       } else {
-        console.warn(`[Web Notes] CSS selector not unique: ${finalSelector} ` + `(matches ${matches.length} elements)`);
         return null;
       }
     } catch (selectorError) {
@@ -2384,7 +2317,6 @@ function generateXPath(element) {
       child = child.parentNode;
     }
     let retval = `/${components.join("/")}`;
-    console.log("[Web Notes] Generated XPath:", retval);
     return retval;
   } catch (error) {
     console.error("[Web Notes] Error generating XPath:", error);
@@ -2408,7 +2340,6 @@ async function handleNoteDelete(noteElement, noteData) {
     );
 
     if (!confirmed) {
-      console.log(`[Web Notes] Note deletion cancelled by user: ${noteData.id}`);
       return;
     }
 
@@ -2426,7 +2357,6 @@ async function handleNoteDelete(noteElement, noteData) {
     setTimeout(() => {
       if (noteElement.parentNode) {
         noteElement.remove();
-        console.log(`[Web Notes] Note ${noteData.id} removed from DOM`);
       }
     }, 300);
 
@@ -2434,8 +2364,6 @@ async function handleNoteDelete(noteElement, noteData) {
     const success = await deleteNote(window.location.href, noteData.id);
 
     if (success) {
-      console.log(`[Web Notes] Successfully deleted note ${noteData.id}`);
-
       // Clear editing state if this was the currently editing note
       if (EditingState.currentlyEditingNote === noteElement) {
         EditingState.currentlyEditingNote = null;
@@ -2468,14 +2396,12 @@ async function handleNoteSharing(textarea) {
     // Find the note element and data
     const noteElement = textarea.closest(".web-note");
     if (!noteElement) {
-      console.error("[Web Notes] Cannot find note element for sharing");
       showTemporaryMessage("Error: Cannot identify note for sharing", "error");
       return;
     }
 
     const noteData = getNoteDataFromElement(noteElement);
     if (!noteData) {
-      console.error("[Web Notes] Cannot find note data for sharing");
       showTemporaryMessage("Error: Cannot access note data for sharing", "error");
       return;
     }
@@ -2486,8 +2412,6 @@ async function handleNoteSharing(textarea) {
       title: document.title || window.location.href,
       domain: window.location.hostname,
     };
-
-    console.log("[Web Notes] Opening sharing dialog for note:", noteData.id);
 
     // Open sharing dialog
     if (typeof SharingInterface !== "undefined") {
@@ -2509,8 +2433,6 @@ async function handlePageSharing() {
     const pageUrl = window.location.href;
     const pageTitle = document.title || pageUrl;
 
-    console.log("[Web Notes] Opening page sharing dialog for:", pageUrl);
-
     if (typeof SharingInterface !== "undefined") {
       await SharingInterface.showPageSharingDialog(pageUrl, pageTitle);
     } else {
@@ -2528,8 +2450,6 @@ async function handlePageSharing() {
 async function handleSiteSharing() {
   try {
     const domain = window.location.hostname;
-
-    console.log("[Web Notes] Opening site sharing dialog for:", domain);
 
     if (typeof SharingInterface !== "undefined") {
       await SharingInterface.showSiteSharingDialog(domain);
@@ -2616,8 +2536,6 @@ async function addSharingContextMenuOptions() {
  */
 function extractPageDOMForTest() {
   try {
-    console.log("[Web Notes] Extracting page DOM for auto-note generation");
-
     // Clone the document to work with
     const clonedDoc = document.documentElement.cloneNode(true);
 
@@ -2867,8 +2785,6 @@ function chunkDOMContent(htmlContent, maxTokensPerChunk = 10000) {
  */
 function extractPageDOMInChunks() {
   try {
-    console.log("[Web Notes] Extracting page DOM in chunks for auto-note generation");
-
     // Clone and clean document (same as extractPageDOMForTest)
     const clonedDoc = document.documentElement.cloneNode(true);
 
@@ -2892,7 +2808,6 @@ function extractPageDOMInChunks() {
     // Get the body content
     const bodyElement = clonedDoc.querySelector("body");
     if (!bodyElement) {
-      console.warn("[Web Notes] No body element found");
       return [
         {
           chunk_index: 0,
@@ -2911,9 +2826,6 @@ function extractPageDOMInChunks() {
     // Chunk the content
     const chunks = chunkDOMContent(contentHTML);
 
-    const totalSize = contentHTML.length;
-    console.log(`[Web Notes] Split ${Math.round(totalSize / 1000)}KB into ${chunks.length} chunks`);
-
     return chunks;
   } catch (error) {
     console.error("[Web Notes] Error extracting page DOM in chunks:", error);
@@ -2931,8 +2843,6 @@ function extractPageDOMInChunks() {
  */
 async function handleGenerateDOMTestNotes() {
   try {
-    console.log("[Web Notes] Starting auto-note generation with server-side chunking");
-
     // Check authentication
     const isAuth = await isServerAuthenticated();
     if (!isAuth) {
@@ -2948,9 +2858,6 @@ async function handleGenerateDOMTestNotes() {
       return;
     }
 
-    const domSize = Math.round(fullDOM.length / 1000);
-    console.log(`[Web Notes] Sending ${domSize}KB DOM to server for chunking`);
-
     // Show configuration modal
     const config = await createAutoNotesConfigDialog(domSize);
 
@@ -2959,10 +2866,6 @@ async function handleGenerateDOMTestNotes() {
       console.log("[Web Notes] User cancelled auto notes generation");
       return;
     }
-
-    console.log(
-      `[Web Notes] User selected template: ${config.templateType}, custom instructions: ${config.customInstructions || "none"}`,
-    );
 
     // Register page
     const pageUrl = window.location.href;
@@ -3126,8 +3029,6 @@ async function handleNoteContextSharing(x, y) {
       title: document.title || window.location.href,
       domain: window.location.hostname,
     };
-
-    console.log("[Web Notes] Opening sharing dialog for note from context menu:", noteData.id);
 
     if (typeof SharingInterface !== "undefined") {
       await SharingInterface.createSharingDialog(noteData, pageData);

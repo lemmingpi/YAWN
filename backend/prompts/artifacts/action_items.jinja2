@@ -5,7 +5,8 @@ Available Template Variables:
 - highlighted_text: str | None - Text containing tasks, projects, or goals
 - note_content: str - User's request for specific types of action items
 - page_title: str | None - Title of the source material
-- page_summary: str | None - Summary of the page content
+- user_context: str | None - User-provided context about the page
+- page_summary: str | None - AI-generated summary of the page content
 - page_section_html: str | None - Additional context
 - user_instructions: str | None - Custom instructions
 #}
@@ -30,7 +31,10 @@ This is the relevant context from the source material:
 **Source:** {{ page_title }}
 {% endif %}
 
-{% if page_summary %}
+{% if user_context %}
+**Page Context:**
+{{ user_context }}
+{% elif page_summary %}
 **Page Context:**
 {{ page_summary }}
 {% endif %}

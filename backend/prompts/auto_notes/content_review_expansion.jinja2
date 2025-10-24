@@ -3,7 +3,8 @@ Available Jinja2 Template Variables:
 - page_url: str - The page URL from the database (always present)
 - page_source: str | None - Optional alternate source for paywalled content (user-provided)
 - page_title: str - The page title (or "Untitled" if not set)
-- page_summary: str | None - Existing user-provided summary (optional)
+- user_context: str | None - User-provided context about the page (optional)
+- page_summary: str | None - AI-generated page summary (optional)
 - user_context: str | None - AI-generated page context from prior analysis (optional)
 - custom_instructions: str | None - User-provided custom instructions for generation (optional)
 #}
@@ -39,8 +40,10 @@ Your task is to:
 - Page URL to review: {{ page_url }}
 {% endif %}
 - Page title: {{ page_title }}
-{% if page_summary %}
-- User-provided summary: {{ page_summary }}
+{% if user_context %}
+- User-provided context: {{ user_context }}
+{% elif page_summary %}
+- AI-generated summary: {{ page_summary }}
 {% endif %}
 {% if user_context %}
 - Additional context: {{ user_context }}

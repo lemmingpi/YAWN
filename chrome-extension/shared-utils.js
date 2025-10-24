@@ -650,7 +650,6 @@ async function deleteNote(url, noteId) {
         }
 
         noteFound = true;
-        console.log(`[Web Notes] Deleted note ${noteId} from URL: ${matchingUrl}`);
         break;
       }
     }

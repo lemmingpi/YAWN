@@ -66,8 +66,6 @@ const AuthManager = {
     this._isInitialized = false;
 
     try {
-      console.log("[Auth] Initializing authentication manager");
-
       // Load cached authentication state
       await this.loadAuthState();
 
@@ -78,7 +76,6 @@ const AuthManager = {
       this.setupStorageListener();
 
       this._isInitialized = true;
-      console.log("[Auth] Authentication manager initialized");
     } catch (error) {
       this._isInitialized = false;
       console.error("[Auth] Failed to initialize authentication manager:", error);
@@ -147,14 +144,6 @@ const AuthManager = {
           await this.clearAuthState();
         }
       }
-
-      console.log("[Auth] Loaded auth state:", {
-        isAuthenticated: this._authCache.isAuthenticated,
-        hasUser: !!this._authCache.user,
-        hasToken: !!this._authCache.jwtToken,
-        userEmail: this._authCache.user?.email || "none",
-        tokenExpiry: this._authCache.jwtToken ? this.getTokenExpiry(this._authCache.jwtToken) : "none",
-      });
     } catch (error) {
       console.error("[Auth] Failed to load auth state:", error);
       await this.clearAuthState();
@@ -183,8 +172,6 @@ const AuthManager = {
           }
         });
       });
-
-      console.log("[Auth] Saved auth state to storage");
     } catch (error) {
       console.error("[Auth] Failed to save auth state:", error);
       throw error;
@@ -223,7 +210,6 @@ const AuthManager = {
       });
 
       this.notifyListeners("signOut", null);
-      console.log("[Auth] Cleared auth state");
     } catch (error) {
       console.error("[Auth] Failed to clear auth state:", error);
       throw error;
@@ -237,8 +223,6 @@ const AuthManager = {
    */
   async signIn(interactive = true) {
     try {
-      console.log("[Auth] Starting sign-in process");
-
       // Get Google ID token using Chrome Identity API
       const googleToken = await this.getGoogleToken(interactive);
       if (!googleToken) {
@@ -532,7 +516,6 @@ const AuthManager = {
    */
   isAuthenticated() {
     if (!this._isInitialized) {
-      console.warn("[Auth] Checking auth before initialization complete");
       // Trigger initialization if not already started
       if (!this._initPromise) {
         this.initialize().catch(error => {
@@ -580,7 +563,6 @@ const AuthManager = {
         const isValid = await this.validateToken(this._authCache.jwtToken);
 
         if (!isValid) {
-          console.log("[Auth] Token expired, attempting refresh");
           // Try to get a new token silently
           try {
             await this.signIn(false); // Non-interactive

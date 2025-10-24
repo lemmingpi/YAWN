@@ -5,7 +5,8 @@ Available Template Variables:
 - highlighted_text: str | None - Text describing code requirements or existing code
 - note_content: str - User's request for specific code functionality
 - page_title: str | None - Title of the source material
-- page_summary: str | None - Summary of the page content
+- user_context: str | None - User-provided context about the page
+- page_summary: str | None - AI-generated summary of the page content
 - page_section_html: str | None - Additional context (may contain code)
 - user_instructions: str | None - Custom instructions (language, framework, style)
 #}
@@ -28,7 +29,10 @@ You are an expert software developer skilled in multiple programming languages a
 **Source:** {{ page_title }}
 {% endif %}
 
-{% if page_summary %}
+{% if user_context %}
+**Page Context:**
+{{ user_context }}
+{% elif page_summary %}
 **Page Context:**
 {{ page_summary }}
 {% endif %}

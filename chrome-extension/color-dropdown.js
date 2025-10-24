@@ -247,12 +247,9 @@ function handleClickOutsideColorDropdown(event) {
  */
 function handleColorSelection(colorName, textarea) {
   try {
-    console.log(`[Web Notes] Color selected: ${colorName}`);
-
     // Get the current note element from the textarea's context
     const noteElement = textarea.closest(".web-note");
     if (!noteElement || !noteElement.noteData) {
-      console.error("[Web Notes] Could not find note element or note data for color change");
       return;
     }
 
@@ -271,21 +268,13 @@ function handleColorSelection(colorName, textarea) {
     const colorValue = NoteColorUtils.getColorValue(colorName);
     noteElement.style.background = colorValue;
 
-    console.log(`[Web Notes] Applied background color ${colorName} (${colorValue}) to note ${noteData.id}`);
-
     // Create text highlighting if selection data exists
     if (updatedNoteData.selectionData && updatedNoteData.selectionData.selectedText) {
       const highlightColor = NoteColorUtils.getColorValue(updatedNoteData.backgroundColor || "light-yellow");
       createTextHighlight(updatedNoteData, highlightColor);
     }
     // Save to storage
-    updateNote(window.location.href, noteData.id, updatedNoteData).then(success => {
-      if (success) {
-        console.log(`[Web Notes] Note ${noteData.id} color saved successfully`);
-      } else {
-        console.error(`[Web Notes] Failed to save note ${noteData.id} color`);
-      }
-    });
+    updateNote(window.location.href, noteData.id, updatedNoteData).then(success => {});
 
     // Maintain focus on textarea
     setTimeout(() => {
