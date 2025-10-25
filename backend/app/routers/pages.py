@@ -603,6 +603,7 @@ async def preview_page_context(
             page_id=page_id,
             custom_instructions=request.custom_instructions,
             page_source=request.page_source,
+            page_dom=request.page_dom,
         )
 
         return PageContextPreviewResponse(prompt=prompt)
@@ -662,6 +663,7 @@ async def generate_page_context(
             llm_provider_id=request.llm_provider_id,
             custom_instructions=request.custom_instructions,
             page_source=request.page_source,
+            page_dom=request.page_dom,
         )
 
         return PageContextGenerationResponse(

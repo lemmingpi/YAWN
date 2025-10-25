@@ -271,7 +271,7 @@ class LLMProviderBase(BaseModel):
     )
     model_name: str = Field(..., min_length=1, max_length=100, description="Model name")
     max_tokens: int = Field(
-        4096, gt=0, le=100000, description="Maximum tokens for generation"
+        4096, gt=0, le=10000000, description="Maximum tokens for generation"
     )
     temperature: float = Field(
         0.7, ge=0.0, le=2.0, description="Generation temperature"
@@ -596,6 +596,10 @@ class PageContextGenerationRequest(BaseModel):
         None,
         description="Optional alternate page source (for paywalled content)",
     )
+    page_dom: Optional[str] = Field(
+        None,
+        description="Optional page DOM for content extraction",
+    )
 
 
 class PageContextGenerationResponse(BaseModel):
@@ -624,6 +628,10 @@ class PageContextPreviewRequest(BaseModel):
     page_source: Optional[str] = Field(
         None,
         description="Optional alternate page source",
+    )
+    page_dom: Optional[str] = Field(
+        None,
+        description="Optional page DOM for content extraction",
     )
 
 

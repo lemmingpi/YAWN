@@ -24,6 +24,7 @@
         "shared-utils.js",
         "error-handling.js",
         "contentDialog.js",
+        "contextGeneratorDialog.js",
         "sharing-interface.js",
         "content.js"
       ]

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import jinja2
+from bs4 import BeautifulSoup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -77,12 +78,112 @@ class PageContextService:
 
         return self._template
 
+    def _clean_dom(self, html: str) -> BeautifulSoup:
+        """
+        Clean the DOM by removing unnecessary elements.
+
+        Args:
+            html: Raw HTML string
+
+        Returns:
+            Cleaned BeautifulSoup object
+        """
+        soup = BeautifulSoup(html, "lxml")
+
+        # Remove script, style, and other non-content elements
+        for tag in soup(
+            [
+                "script",
+                "style",
+                "meta",
+                "link",
+                "noscript",
+                "iframe",
+                "nav",
+                "header",
+                "footer",
+            ]
+        ):
+            tag.decompose()
+
+        return soup
+
+    def _find_main_content(self, soup: BeautifulSoup) -> BeautifulSoup:
+        """
+        Find the main content area of the page.
+
+        Args:
+            soup: BeautifulSoup object
+
+        Returns:
+            Main content section or full body
+        """
+        # Try to find main content area
+        main_content = soup.find(["main", "article"]) or soup.find(
+            attrs={"role": "main"}
+        )
+
+        if not main_content:
+            # If no main content found, use body
+            main_content = soup.body if soup.body else soup
+
+        return main_content
+
+    def _extract_text_from_dom(self, html: str, max_tokens: int = 30000) -> str:
+        """
+        Extract and clean text from HTML DOM.
+
+        Args:
+            html: Raw HTML string
+            max_tokens: Maximum tokens to extract (default 30000)
+
+        Returns:
+            Extracted text content
+        """
+        # Clean the DOM
+        soup = self._clean_dom(html)
+
+        # Find main content
+        main_content = self._find_main_content(soup)
+
+        # Extract text with explicit type annotation for mypy
+        text: str = main_content.get_text(separator="\n", strip=True)
+
+        # Estimate tokens (1 token ≈ 4 characters)
+        estimated_tokens = len(text) / 4
+
+        # If within limits, return as is
+        if estimated_tokens <= max_tokens:
+            return text
+
+        # Calculate target character count (reserve 20% for prompt overhead)
+        usable_tokens = max_tokens * 0.8
+        target_chars = int(usable_tokens * 4)
+
+        # Try to break at sentence boundaries
+        if len(text) > target_chars:
+            # Find last period before target
+            last_period = text.rfind(". ", 0, target_chars)
+            if (
+                last_period > target_chars * 0.5
+            ):  # Only use if we're not cutting too much
+                text = text[: last_period + 1]
+            else:
+                # Just cut at target
+                text = text[:target_chars]
+
+        logger.info(
+            f"Extracted {len(text)} characters from DOM (approx {len(text) / 4:.0f} tokens)"
+        )
+        return text
+
     async def _build_context_prompt(
         self,
         page: Page,
         notes: list[Note],
         custom_instructions: Optional[str] = None,
         page_source: Optional[str] = None,
+        page_dom: Optional[str] = None,
     ) -> str:
         """
         Build the prompt for page context generation.
@@ -92,10 +193,37 @@ class PageContextService:
             notes: List of notes on this page
             custom_instructions: Optional user-provided instructions
             page_source: Optional alternate page source (for paywalled content)
+            page_dom: Optional page DOM for content extraction
 
         Returns:
             Formatted prompt string ready for LLM
         """
+        # Extract content from DOM if provided
+        extracted_content = None
+        if page_dom:
+            logger.info(
+                f"Attempting to extract content from page_dom ({len(page_dom)} chars)"
+            )
+            try:
+                extracted_content = self._extract_text_from_dom(page_dom)
+                logger.info(
+                    f"Successfully extracted {len(extracted_content)} characters from DOM"
+                )
+            except Exception as e:
+                logger.error(f"Failed to extract content from DOM: {e}", exc_info=True)
+                # Fall back to page_source if available
+                extracted_content = None
+        else:
+            logger.info("No page_dom provided, skipping DOM extraction")
+
+        # Use extracted content or fall back to page_source
+        content_to_use = extracted_content or page_source
+
+        if content_to_use:
+            logger.info(f"Using content for prompt: {len(content_to_use)} characters")
+        else:
+            logger.info("No content available (neither extracted nor provided)")
+
         # Concatenate all note content
         notes_content = "\n\n---\n\n".join(
             [f"Note {i + 1}:\n{note.content}" for i, note in enumerate(notes)]
@@ -109,7 +237,7 @@ class PageContextService:
             page_summary=page.page_summary,
             notes_content=notes_content if notes_content else None,
             custom_instructions=custom_instructions,
-            page_source=page_source,  # Optional alternate source
+            page_source=content_to_use,  # Use extracted content or alternate source
         )
 
         return prompt
@@ -120,6 +248,7 @@ class PageContextService:
         llm_provider_id: int,
         custom_instructions: Optional[str] = None,
         page_source: Optional[str] = None,
+        page_dom: Optional[str] = None,
     ) -> Dict:
         """
         Generate AI-powered context summary for a page.
@@ -129,6 +258,7 @@ class PageContextService:
             llm_provider_id: LLM provider to use (currently unused, uses Gemini)
             custom_instructions: Optional user instructions for customization
             page_source: Optional alternate page source (for paywalled content)
+            page_dom: Optional page DOM for content extraction
 
         Returns:
             Dictionary with:
@@ -172,9 +302,9 @@ class PageContextService:
 
         logger.info(f"Found {len(notes)} active notes for this page")
 
-        # Build prompt
+        # Build prompt with DOM support
         prompt = await self._build_context_prompt(
-            page, notes, custom_instructions, page_source
+            page, notes, custom_instructions, page_source, page_dom
         )
         logger.info(f"Built prompt: {len(prompt)} characters")
 
@@ -233,6 +363,7 @@ class PageContextService:
         page_id: int,
         custom_instructions: Optional[str] = None,
         page_source: Optional[str] = None,
+        page_dom: Optional[str] = None,
     ) -> str:
         """
         Preview the prompt that would be sent to the LLM without actually calling it.
@@ -244,6 +375,7 @@ class PageContextService:
             page_id: ID of page to preview prompt for
             custom_instructions: Optional user instructions for customization
             page_source: Optional alternate page source (for paywalled content)
+            page_dom: Optional page DOM for content extraction
 
         Returns:
             The fully rendered prompt string
@@ -252,6 +384,11 @@ class PageContextService:
             ValueError: If page not found
         """
         logger.info(f"Previewing prompt for page_id={page_id}")
+        logger.info(
+            f"Input lengths - page_dom: {len(page_dom) if page_dom else 0}, "
+            f"page_source: {len(page_source) if page_source else 0}, "
+            f"custom_instructions: {len(custom_instructions) if custom_instructions else 0}"
+        )
 
         # Fetch page with site relationship
         result = await self.db.execute(
@@ -273,8 +410,9 @@ class PageContextService:
 
         # Build prompt using the SAME function as generate_page_context
         prompt = await self._build_context_prompt(
-            page, notes, custom_instructions, page_source
+            page, notes, custom_instructions, page_source, page_dom
         )
 
         logger.info(f"Preview generated: {len(prompt)} characters")
+        logger.info(prompt)
         return prompt

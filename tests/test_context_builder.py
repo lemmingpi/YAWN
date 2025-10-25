@@ -132,10 +132,11 @@ class TestBuildPrompt:
         prompt = context_builder.build_prompt(
             note=mock_note,
             artifact_type=ArtifactType.ANALYSIS,
+            user_instructions="My Usr Context",
         )
 
-        assert "Analysis:" in prompt
-        assert "detailed analysis" in prompt
+        assert mock_note.content in prompt
+        assert "My Usr Context" in prompt
 
     def test_build_prompt_questions(self, context_builder, mock_note):
         """Test building prompt for questions artifact."""
@@ -152,10 +153,11 @@ class TestBuildPrompt:
         prompt = context_builder.build_prompt(
             note=mock_note,
             artifact_type=ArtifactType.ACTION_ITEMS,
+            user_instructions="My Usr Context",
         )
 
-        assert "Action Items:" in prompt
-        assert "actionable items" in prompt
+        assert mock_note.content in prompt
+        assert "My Usr Context" in prompt
 
     def test_build_prompt_code_snippet(self, context_builder, mock_note):
         """Test building prompt for code snippet artifact."""

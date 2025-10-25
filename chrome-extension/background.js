@@ -61,6 +61,14 @@ async function createContextMenu() {
         visible: false, // Hidden by default, shown when user is authenticated
       });
 
+      // Generate AI Context menu item (hidden by default, shown when user is authenticated)
+      chrome.contextMenus.create({
+        id: "generate-ai-context",
+        title: "🤖 Generate AI Context",
+        contexts: ["page"],
+        visible: false, // Hidden by default, shown when user is authenticated
+      });
+
       // DOM test auto-notes menu item (hidden by default, shown when user is authenticated)
       chrome.contextMenus.create({
         id: "generate-dom-test-notes",
@@ -88,6 +96,11 @@ async function updateAuthenticatedContextMenus(isAuthenticated) {
 
       // Update register page menu visibility
       chrome.contextMenus.update("register-page", {
+        visible: isAuthenticated,
+      });
+
+      // Update generate AI context menu visibility
+      chrome.contextMenus.update("generate-ai-context", {
         visible: isAuthenticated,
       });
 
@@ -237,6 +250,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         await handleRegisterPage(tab);
         break;
 
+      case "generate-ai-context":
+        // Handle generate AI context action
+        await handleGenerateAIContext(tab);
+        break;
+
       case "share-current-page":
         // Handle share page action
         await handleSharePage(info, tab);
@@ -363,6 +381,26 @@ async function handleRegisterPage(tab) {
 }
 
 /**
+ * Handle generate AI context action
+ * @param {Object} tab - Tab object
+ */
+async function handleGenerateAIContext(tab) {
+  try {
+    // Send message to content script to show AI context dialog
+    chrome.tabs
+      .sendMessage(tab.id, {
+        type: "showAIContextDialog",
+      })
+      .then(response => {})
+      .catch(err => {
+        console.warn("[Web Notes Extension] Could not send message to tab:", err);
+      });
+  } catch (error) {
+    logError("Error handling generate AI context action", error);
+  }
+}
+
+/**
  * Handle DOM test auto-notes generation
  * @param {Object} tab - Tab object
  */
@@ -482,6 +520,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               message.fullDOM,
               message.templateType,
               message.customInstructions,
+            );
+            break;
+          case "API_getLLMProviders":
+            // Get list of active LLM providers
+            result = await ServerAPI.getLLMProviders();
+            break;
+          case "API_getOrCreatePageByUrl":
+            // Get or create page by URL
+            result = await ServerAPI.getOrCreatePageByUrl(message.url, message.title);
+            break;
+          case "API_generatePageContext":
+            // Generate AI context for a page
+            result = await ServerAPI.generatePageContext(
+              message.pageId,
+              message.llmProviderId,
+              message.customInstructions,
+              message.pageSource,
+              message.pageDom,
+            );
+            break;
+          case "API_previewContextPrompt":
+            // Preview context generation prompt
+            result = await ServerAPI.previewContextPrompt(
+              message.pageId,
+              message.customInstructions,
+              message.pageSource,
+              message.pageDom,
             );
             break;
           default:

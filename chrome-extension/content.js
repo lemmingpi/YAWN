@@ -2932,6 +2932,42 @@ async function handleGenerateDOMTestNotesOld() {
 }
 
 /**
+ * Handle showing AI context generation dialog
+ */
+async function handleShowAIContextDialog() {
+  try {
+    // Check authentication
+    const isAuth = await isServerAuthenticated();
+    if (!isAuth) {
+      alert("Please sign in to generate AI context");
+      return;
+    }
+
+    // Extract the page DOM
+    const pageDom = extractPageDOMForTest();
+    if (!pageDom) {
+      alert("Failed to extract page content");
+      return;
+    }
+
+    // Get page info
+    const pageUrl = window.location.href;
+    const pageTitle = document.title || "Untitled";
+
+    // Show the AI context dialog (will be implemented in contextGeneratorDialog.js)
+    if (typeof showAIContextGeneratorDialog === "function") {
+      await showAIContextGeneratorDialog(pageUrl, pageTitle, pageDom);
+    } else {
+      console.error("[Web Notes] AI context dialog not available");
+      alert("AI context generation dialog not loaded. Please try again.");
+    }
+  } catch (error) {
+    console.error("[Web Notes] Error showing AI context dialog:", error);
+    alert(`Failed to show AI context dialog: ${error.message}`);
+  }
+}
+
+/**
  * Handle messages from background script for sharing actions
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -2978,6 +3014,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "shareNoteAtPosition":
         handleNoteContextSharing(message.data.x, message.data.y);
+        sendResponse({ success: true });
+        break;
+
+      case "showAIContextDialog":
+        handleShowAIContextDialog();
         sendResponse({ success: true });
         break;
 

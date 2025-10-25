@@ -711,6 +711,122 @@ const ServerAPI = {
     this.configLastFetched = 0;
     console.log("[Web Notes] Cleared configuration cache");
   },
+  // ===== AI CONTEXT GENERATION API ENDPOINTS =====
+
+  /**
+   * Get list of active LLM providers
+   * @returns {Promise<Array>} Array of LLM provider objects
+   */
+  async getLLMProviders() {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot fetch LLM providers");
+      }
+
+      const response = await this.makeRequest("/llm/providers");
+      const providers = await response.json();
+
+      console.log(`[Web Notes] Retrieved ${providers.length} LLM providers`);
+      return providers;
+    } catch (error) {
+      console.error("[Web Notes] Failed to get LLM providers:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get or create a page by URL
+   * @param {string} url - Page URL
+   * @param {string} title - Page title
+   * @returns {Promise<Object>} Page object with ID
+   */
+  async getOrCreatePageByUrl(url, title) {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot get/create page");
+      }
+
+      // Use the existing registerPage method which creates or gets a page
+      return await this.registerPage(url, title);
+    } catch (error) {
+      console.error("[Web Notes] Failed to get/create page:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Generate AI context for a page
+   * @param {number} pageId - Page ID
+   * @param {number} llmProviderId - LLM provider ID
+   * @param {string|null} customInstructions - Optional custom instructions
+   * @param {string|null} pageSource - Optional alternate page source (for paywalled content)
+   * @param {string|null} pageDom - Optional page DOM for content extraction
+   * @returns {Promise<Object>} Generated context response
+   */
+  async generatePageContext(pageId, llmProviderId, customInstructions = null, pageSource = null, pageDom = null) {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot generate page context");
+      }
+
+      const requestData = {
+        llm_provider_id: llmProviderId,
+        custom_instructions: customInstructions,
+        page_source: pageSource,
+        page_dom: pageDom,
+      };
+
+      const response = await this.makeRequest(`/pages/${pageId}/generate-context`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+      });
+
+      const result = await response.json();
+      console.log(`[Web Notes] Generated page context: ${result.detected_content_type}`);
+      return result;
+    } catch (error) {
+      console.error("[Web Notes] Failed to generate page context:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Preview the context generation prompt
+   * @param {number} pageId - Page ID
+   * @param {string|null} customInstructions - Optional custom instructions
+   * @param {string|null} pageSource - Optional alternate page source
+   * @param {string|null} pageDom - Optional page DOM for content extraction
+   * @returns {Promise<Object>} Preview response with prompt text
+   */
+  async previewContextPrompt(pageId, customInstructions = null, pageSource = null, pageDom = null) {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot preview context prompt");
+      }
+
+      const requestData = {
+        custom_instructions: customInstructions,
+        page_source: pageSource,
+        page_dom: pageDom,
+      };
+
+      const response = await this.makeRequest(`/pages/${pageId}/preview-context`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+      });
+
+      const result = await response.json();
+      console.log(`[Web Notes] Preview prompt generated: ${result.prompt.length} characters`);
+      return result;
+    } catch (error) {
+      console.error("[Web Notes] Failed to preview context prompt:", error);
+      throw error;
+    }
+  },
 
   // ===== SHARING API ENDPOINTS =====
 
