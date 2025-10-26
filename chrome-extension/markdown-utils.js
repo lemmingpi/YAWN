@@ -59,7 +59,7 @@ class MarkdownRenderer {
 
       marked.use({ renderer });
       this.isInitialized = true;
-      console.log("[Web Notes] Markdown renderer initialized");
+      console.log("[YAWN] Markdown renderer initialized");
     }
   }
 
@@ -92,7 +92,7 @@ class MarkdownRenderer {
     try {
       // Ensure marked is available
       if (typeof marked === "undefined") {
-        console.warn("[Web Notes] Marked.js not available, returning plain text");
+        console.warn("[YAWN] Marked.js not available, returning plain text");
         return this.escapeHtml(markdown);
       }
 
@@ -135,7 +135,7 @@ class MarkdownRenderer {
           FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
         });
       } else {
-        console.warn("[Web Notes] DOMPurify not available, using basic escaping");
+        console.warn("[YAWN] DOMPurify not available, using basic escaping");
         // Fallback: escape any remaining scripts
         html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
       }
@@ -155,7 +155,7 @@ class MarkdownRenderer {
 
       return html;
     } catch (error) {
-      console.error("[Web Notes] Error rendering markdown:", error);
+      console.error("[YAWN] Error rendering markdown:", error);
       return this.escapeHtml(markdown);
     }
   }
@@ -210,7 +210,7 @@ class MarkdownRenderer {
 
       return tempDiv.innerHTML;
     } catch (error) {
-      console.error("[Web Notes] Error applying inline styles:", error);
+      console.error("[YAWN] Error applying inline styles:", error);
       return html; // Return original HTML if styling fails
     }
   }
@@ -297,7 +297,7 @@ const NoteDataUtils = {
     const content = noteData.text || `Note #${noteData.id.split("-").pop()}`;
 
     // eslint-disable-next-line max-len
-    console.log(`[Web Notes] Migrating note ${noteData.id}: "${noteData.text}" -> "${content}"`);
+    console.log(`[YAWN] Migrating note ${noteData.id}: "${noteData.text}" -> "${content}"`);
 
     // Create migrated note data
     const migratedNote = this.createNoteData(noteData, content);
@@ -311,10 +311,10 @@ const NoteDataUtils = {
         // eslint-disable-next-line max-len
         await updateNote(noteData.url || window.location.href, noteData.id, migratedNote);
         // eslint-disable-next-line max-len
-        console.log(`[Web Notes] Migrated and saved note ${noteData.id}`);
+        console.log(`[YAWN] Migrated and saved note ${noteData.id}`);
       } catch (error) {
         // eslint-disable-next-line max-len
-        console.error(`[Web Notes] Failed to save migrated note ${noteData.id}:`, error);
+        console.error(`[YAWN] Failed to save migrated note ${noteData.id}:`, error);
       }
     }
 

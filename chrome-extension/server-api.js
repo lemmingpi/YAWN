@@ -44,7 +44,7 @@ const ServerAPI = {
       this.configLastFetched = now;
       return this.cachedConfig;
     } catch (error) {
-      console.error("[Web Notes] Failed to get server config:", error);
+      console.error("[YAWN] Failed to get server config:", error);
       return {
         serverUrl: this.DEFAULT_SERVER_URL,
         enabled: false,
@@ -123,7 +123,7 @@ const ServerAPI = {
 
       return response;
     } catch (error) {
-      console.error(`[Web Notes] API Request failed (attempt ${retryCount + 1}):`, error);
+      console.error(`[YAWN] API Request failed (attempt ${retryCount + 1}):`, error);
 
       // Retry logic for network errors (but not for 401 retries)
       if (retryCount < this.RETRY_ATTEMPTS && this.shouldRetry(error)) {
@@ -178,16 +178,16 @@ const ServerAPI = {
       const response = await this.makeRequest(`/notes/by-url?url=${encodedUrl}&is_active=true`);
       const notes = await response.json();
 
-      console.log(`[Web Notes] Fetched ${notes.length} notes for URL ${url}`);
+      console.log(`[YAWN] Fetched ${notes.length} notes for URL ${url}`);
       return notes;
     } catch (error) {
       // Handle authentication errors gracefully
       if (error.message && (error.message.includes("HTTP 401") || error.message.includes("HTTP 403"))) {
-        console.log("[Web Notes] Authentication failed, skipping server note fetch:", error.message);
+        console.log("[YAWN] Authentication failed, skipping server note fetch:", error.message);
         return [];
       }
 
-      console.error("[Web Notes] Failed to fetch notes for page:", error);
+      console.error("[YAWN] Failed to fetch notes for page:", error);
       throw error;
     }
   },
@@ -214,7 +214,7 @@ const ServerAPI = {
       });
 
       const createdNote = await response.json();
-      console.log(`[Web Notes] Created note ${createdNote.id} on server`);
+      console.log(`[YAWN] Created note ${createdNote.id} on server`);
 
       return createdNote;
     } catch (error) {
@@ -225,11 +225,11 @@ const ServerAPI = {
           error.message.includes("HTTP 403") ||
           error.message.includes("not authenticated"))
       ) {
-        console.log("[Web Notes] Authentication failed during note creation:", error.message);
+        console.log("[YAWN] Authentication failed during note creation:", error.message);
         throw new Error("AUTHENTICATION_REQUIRED");
       }
 
-      console.error("[Web Notes] Failed to create note:", error);
+      console.error("[YAWN] Failed to create note:", error);
       throw error;
     }
   },
@@ -256,7 +256,7 @@ const ServerAPI = {
       });
 
       const updatedNote = await response.json();
-      console.log(`[Web Notes] Updated note ${serverId} on server`);
+      console.log(`[YAWN] Updated note ${serverId} on server`);
 
       return updatedNote;
     } catch (error) {
@@ -267,11 +267,11 @@ const ServerAPI = {
           error.message.includes("HTTP 403") ||
           error.message.includes("not authenticated"))
       ) {
-        console.log("[Web Notes] Authentication failed during note update:", error.message);
+        console.log("[YAWN] Authentication failed during note update:", error.message);
         throw new Error("AUTHENTICATION_REQUIRED");
       }
 
-      console.error("[Web Notes] Failed to update note:", error);
+      console.error("[YAWN] Failed to update note:", error);
       throw error;
     }
   },
@@ -282,6 +282,7 @@ const ServerAPI = {
    * @returns {Promise<void>}
    */
   async deleteNote(serverId) {
+    console.log("[YAWN] Delete Note " + serverId);
     try {
       // Check authentication before attempting to delete note
       const isAuthenticated = await this.isAuthenticatedMode();
@@ -293,7 +294,7 @@ const ServerAPI = {
         method: "DELETE",
       });
 
-      console.log(`[Web Notes] Deleted note ${serverId} from server`);
+      console.log(`[YAWN] Deleted note ${serverId} from server`);
     } catch (error) {
       // Handle authentication errors gracefully
       if (
@@ -302,11 +303,11 @@ const ServerAPI = {
           error.message.includes("HTTP 403") ||
           error.message.includes("not authenticated"))
       ) {
-        console.log("[Web Notes] Authentication failed during note deletion:", error.message);
+        console.log("[YAWN] Authentication failed during note deletion:", error.message);
         throw new Error("AUTHENTICATION_REQUIRED");
       }
 
-      console.error("[Web Notes] Failed to delete note:", error);
+      console.error("[YAWN] Failed to delete note:", error);
       throw error;
     }
   },
@@ -335,7 +336,7 @@ const ServerAPI = {
       });
 
       const result = await response.json();
-      console.log(`[Web Notes] Bulk synced ${result.created_notes.length} notes, ${result.errors.length} errors`);
+      console.log(`[YAWN] Bulk synced ${result.created_notes.length} notes, ${result.errors.length} errors`);
 
       return result;
     } catch (error) {
@@ -346,11 +347,11 @@ const ServerAPI = {
           error.message.includes("HTTP 403") ||
           error.message.includes("not authenticated"))
       ) {
-        console.log("[Web Notes] Authentication failed during bulk sync:", error.message);
+        console.log("[YAWN] Authentication failed during bulk sync:", error.message);
         throw new Error("AUTHENTICATION_REQUIRED");
       }
 
-      console.error("[Web Notes] Failed to bulk sync notes:", error);
+      console.error("[YAWN] Failed to bulk sync notes:", error);
       throw error;
     }
   },
@@ -493,7 +494,7 @@ const ServerAPI = {
       }
       return {};
     } catch (error) {
-      console.error("[Web Notes] Failed to get auth headers:", error);
+      console.error("[YAWN] Failed to get auth headers:", error);
       return {};
     }
   },
@@ -523,10 +524,10 @@ const ServerAPI = {
       });
 
       const createdPage = await response.json();
-      console.log("[Web Notes] Page registered successfully:", createdPage);
+      console.log("[YAWN] Page registered successfully:", createdPage);
       return createdPage;
     } catch (error) {
-      console.error("[Web Notes] Failed to register page:", error);
+      console.error("[YAWN] Failed to register page:", error);
       throw error;
     }
   },
@@ -559,10 +560,10 @@ const ServerAPI = {
       });
 
       const result = await response.json();
-      console.log(`[Web Notes] Generated ${result.notes?.length || 0} auto notes with DOM`);
+      console.log(`[YAWN] Generated ${result.notes?.length || 0} auto notes with DOM`);
       return result;
     } catch (error) {
-      console.error("[Web Notes] Failed to generate auto notes with DOM:", error);
+      console.error("[YAWN] Failed to generate auto notes with DOM:", error);
       throw error;
     }
   },
@@ -603,12 +604,12 @@ const ServerAPI = {
 
       const result = await response.json();
       console.log(
-        `[Web Notes] Generated ${result.notes?.length || 0} notes ` +
+        `[YAWN] Generated ${result.notes?.length || 0} notes ` +
           `from chunk ${chunkData.chunk_index + 1}/${chunkData.total_chunks}`,
       );
       return result;
     } catch (error) {
-      console.error("[Web Notes] Failed to generate auto notes with DOM chunk:", error);
+      console.error("[YAWN] Failed to generate auto notes with DOM chunk:", error);
       throw error;
     }
   },
@@ -645,10 +646,10 @@ const ServerAPI = {
       });
 
       const result = await response.json();
-      console.log(`[Web Notes] Generated ${result.notes?.length || 0} notes from ${result.total_chunks} chunks`);
+      console.log(`[YAWN] Generated ${result.notes?.length || 0} notes from ${result.total_chunks} chunks`);
       return result;
     } catch (error) {
-      console.error("[Web Notes] Failed to generate auto notes:", error);
+      console.error("[YAWN] Failed to generate auto notes:", error);
       throw error;
     }
   },
@@ -661,7 +662,7 @@ const ServerAPI = {
     try {
       return typeof AuthManager !== "undefined" && AuthManager.isAuthenticated();
     } catch (error) {
-      console.error("[Web Notes] Failed to check auth mode:", error);
+      console.error("[YAWN] Failed to check auth mode:", error);
       return false;
     }
   },
@@ -691,14 +692,14 @@ const ServerAPI = {
       }
 
       if (success) {
-        console.log("[Web Notes] Authentication successful, server sync enabled");
+        console.log("[YAWN] Authentication successful, server sync enabled");
       } else {
-        console.log("[Web Notes] Authentication failed, continuing in local mode");
+        console.log("[YAWN] Authentication failed, continuing in local mode");
       }
 
       return success;
     } catch (error) {
-      console.error("[Web Notes] Authentication attempt failed:", error);
+      console.error("[YAWN] Authentication attempt failed:", error);
       return false;
     }
   },
@@ -709,7 +710,7 @@ const ServerAPI = {
   clearConfigCache() {
     this.cachedConfig = null;
     this.configLastFetched = 0;
-    console.log("[Web Notes] Cleared configuration cache");
+    console.log("[YAWN] Cleared configuration cache");
   },
   // ===== AI CONTEXT GENERATION API ENDPOINTS =====
 
@@ -727,10 +728,10 @@ const ServerAPI = {
       const response = await this.makeRequest("/llm/providers");
       const providers = await response.json();
 
-      console.log(`[Web Notes] Retrieved ${providers.length} LLM providers`);
+      console.log(`[YAWN] Retrieved ${providers.length} LLM providers`);
       return providers;
     } catch (error) {
-      console.error("[Web Notes] Failed to get LLM providers:", error);
+      console.error("[YAWN] Failed to get LLM providers:", error);
       throw error;
     }
   },
@@ -751,7 +752,7 @@ const ServerAPI = {
       // Use the existing registerPage method which creates or gets a page
       return await this.registerPage(url, title);
     } catch (error) {
-      console.error("[Web Notes] Failed to get/create page:", error);
+      console.error("[YAWN] Failed to get/create page:", error);
       throw error;
     }
   },
@@ -785,10 +786,10 @@ const ServerAPI = {
       });
 
       const result = await response.json();
-      console.log(`[Web Notes] Generated page context: ${result.detected_content_type}`);
+      console.log(`[YAWN] Generated page context: ${result.detected_content_type}`);
       return result;
     } catch (error) {
-      console.error("[Web Notes] Failed to generate page context:", error);
+      console.error("[YAWN] Failed to generate page context:", error);
       throw error;
     }
   },
@@ -820,10 +821,10 @@ const ServerAPI = {
       });
 
       const result = await response.json();
-      console.log(`[Web Notes] Preview prompt generated: ${result.prompt.length} characters`);
+      console.log(`[YAWN] Preview prompt generated: ${result.prompt.length} characters`);
       return result;
     } catch (error) {
-      console.error("[Web Notes] Failed to preview context prompt:", error);
+      console.error("[YAWN] Failed to preview context prompt:", error);
       throw error;
     }
   },
@@ -852,10 +853,10 @@ const ServerAPI = {
       });
 
       const share = await response.json();
-      console.log(`[Web Notes] Shared page ${pageId} with ${userEmail} (${permissionLevel})`);
+      console.log(`[YAWN] Shared page ${pageId} with ${userEmail} (${permissionLevel})`);
       return share;
     } catch (error) {
-      console.error("[Web Notes] Failed to share page:", error);
+      console.error("[YAWN] Failed to share page:", error);
       throw error;
     }
   },
@@ -882,10 +883,10 @@ const ServerAPI = {
       });
 
       const share = await response.json();
-      console.log(`[Web Notes] Shared site ${siteId} with ${userEmail} (${permissionLevel})`);
+      console.log(`[YAWN] Shared site ${siteId} with ${userEmail} (${permissionLevel})`);
       return share;
     } catch (error) {
-      console.error("[Web Notes] Failed to share site:", error);
+      console.error("[YAWN] Failed to share site:", error);
       throw error;
     }
   },
@@ -904,10 +905,10 @@ const ServerAPI = {
       const response = await this.makeRequest(`/pages/${pageId}/shares`);
       const shares = await response.json();
 
-      console.log(`[Web Notes] Retrieved ${shares.length} shares for page ${pageId}`);
+      console.log(`[YAWN] Retrieved ${shares.length} shares for page ${pageId}`);
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to get page shares:", error);
+      console.error("[YAWN] Failed to get page shares:", error);
       throw error;
     }
   },
@@ -926,10 +927,10 @@ const ServerAPI = {
       const response = await this.makeRequest(`/sites/${siteId}/shares`);
       const shares = await response.json();
 
-      console.log(`[Web Notes] Retrieved ${shares.length} shares for site ${siteId}`);
+      console.log(`[YAWN] Retrieved ${shares.length} shares for site ${siteId}`);
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to get site shares:", error);
+      console.error("[YAWN] Failed to get site shares:", error);
       throw error;
     }
   },
@@ -944,7 +945,7 @@ const ServerAPI = {
       const shares = await response.json();
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to get user shares:", error);
+      console.error("[YAWN] Failed to get user shares:", error);
       throw error;
     }
   },
@@ -976,7 +977,7 @@ const ServerAPI = {
       const updatedShare = await response.json();
       return updatedShare;
     } catch (error) {
-      console.error("[Web Notes] Failed to update page share permission:", error);
+      console.error("[YAWN] Failed to update page share permission:", error);
       throw error;
     }
   },
@@ -1008,7 +1009,7 @@ const ServerAPI = {
       const updatedShare = await response.json();
       return updatedShare;
     } catch (error) {
-      console.error("[Web Notes] Failed to update site share permission:", error);
+      console.error("[YAWN] Failed to update site share permission:", error);
       throw error;
     }
   },
@@ -1029,9 +1030,9 @@ const ServerAPI = {
         method: "DELETE",
       });
 
-      console.log(`[Web Notes] Removed page share for user ${userId}`);
+      console.log(`[YAWN] Removed page share for user ${userId}`);
     } catch (error) {
-      console.error("[Web Notes] Failed to remove page share:", error);
+      console.error("[YAWN] Failed to remove page share:", error);
       throw error;
     }
   },
@@ -1052,9 +1053,9 @@ const ServerAPI = {
         method: "DELETE",
       });
 
-      console.log(`[Web Notes] Removed site share for user ${userId}`);
+      console.log(`[YAWN] Removed site share for user ${userId}`);
     } catch (error) {
-      console.error("[Web Notes] Failed to remove site share:", error);
+      console.error("[YAWN] Failed to remove site share:", error);
       throw error;
     }
   },
@@ -1086,10 +1087,10 @@ const ServerAPI = {
       });
 
       const invite = await response.json();
-      console.log(`[Web Notes] Invited ${userEmail} to ${resourceType} ${resourceId}`);
+      console.log(`[YAWN] Invited ${userEmail} to ${resourceType} ${resourceId}`);
       return invite;
     } catch (error) {
-      console.error("[Web Notes] Failed to invite user:", error);
+      console.error("[YAWN] Failed to invite user:", error);
       throw error;
     }
   },
@@ -1112,10 +1113,10 @@ const ServerAPI = {
       });
 
       const shares = await response.json();
-      console.log(`[Web Notes] Bulk shared page ${pageId} with ${shares.length} users`);
+      console.log(`[YAWN] Bulk shared page ${pageId} with ${shares.length} users`);
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to bulk share page:", error);
+      console.error("[YAWN] Failed to bulk share page:", error);
       throw error;
     }
   },
@@ -1138,10 +1139,10 @@ const ServerAPI = {
       });
 
       const shares = await response.json();
-      console.log(`[Web Notes] Bulk shared site ${siteId} with ${shares.length} users`);
+      console.log(`[YAWN] Bulk shared site ${siteId} with ${shares.length} users`);
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to bulk share site:", error);
+      console.error("[YAWN] Failed to bulk share site:", error);
       throw error;
     }
   },

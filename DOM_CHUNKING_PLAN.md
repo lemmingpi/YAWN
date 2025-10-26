@@ -886,7 +886,7 @@ Replace the complex `handleGenerateDOMTestNotes()` function (lines 2850-2950) wi
  */
 async function handleGenerateDOMTestNotes() {
   try {
-    console.log("[Web Notes] Starting auto-note generation with server-side chunking");
+    console.log("[YAWN] Starting auto-note generation with server-side chunking");
 
     // Check authentication
     const isAuth = await isServerAuthenticated();
@@ -904,7 +904,7 @@ async function handleGenerateDOMTestNotes() {
     }
 
     const domSize = Math.round(fullDOM.length / 1000);
-    console.log(`[Web Notes] Sending ${domSize}KB DOM to server for chunking`);
+    console.log(`[YAWN] Sending ${domSize}KB DOM to server for chunking`);
 
     // Show loading message
     const estimatedTime = domSize > 100 ? Math.ceil(domSize / 50) : 1;
@@ -930,7 +930,7 @@ async function handleGenerateDOMTestNotes() {
       return;
     }
 
-    console.log(`[Web Notes] Page registered with ID: ${pageData.id}`);
+    console.log(`[YAWN] Page registered with ID: ${pageData.id}`);
 
     // Single request with full DOM
     const response = await chrome.runtime.sendMessage({
@@ -963,7 +963,7 @@ async function handleGenerateDOMTestNotes() {
       alert(`Failed to generate auto notes: ${response.error || 'Unknown error'}`);
     }
   } catch (error) {
-    console.error("[Web Notes] Error generating auto notes:", error);
+    console.error("[YAWN] Error generating auto notes:", error);
     alert(`Failed to generate auto notes: ${error.message}`);
   }
 }
@@ -1035,11 +1035,11 @@ async generateAutoNotesWithFullDOM(pageId, fullDOM) {
 
     const result = await response.json();
     console.log(
-      `[Web Notes] Generated ${result.notes?.length || 0} notes from ${result.total_chunks} chunks`
+      `[YAWN] Generated ${result.notes?.length || 0} notes from ${result.total_chunks} chunks`
     );
     return result;
   } catch (error) {
-    console.error("[Web Notes] Failed to generate auto notes:", error);
+    console.error("[YAWN] Failed to generate auto notes:", error);
     throw error;
   }
 }

@@ -161,7 +161,7 @@ function createColorDropdown(textarea) {
 
     return dropdownContainer;
   } catch (error) {
-    console.error("[Web Notes] Error creating color dropdown:", error);
+    console.error("[YAWN] Error creating color dropdown:", error);
     return document.createElement("div"); // Return empty div as fallback
   }
 }
@@ -180,7 +180,7 @@ function toggleColorDropdown(dropdownMenu) {
       showColorDropdown(dropdownMenu);
     }
   } catch (error) {
-    console.error("[Web Notes] Error toggling color dropdown:", error);
+    console.error("[YAWN] Error toggling color dropdown:", error);
   }
 }
 
@@ -204,7 +204,7 @@ function showColorDropdown(dropdownMenu) {
       document.addEventListener("click", handleClickOutsideColorDropdown);
     }, 0);
   } catch (error) {
-    console.error("[Web Notes] Error showing color dropdown:", error);
+    console.error("[YAWN] Error showing color dropdown:", error);
   }
 }
 
@@ -217,7 +217,7 @@ function hideColorDropdown(dropdownMenu) {
     dropdownMenu.style.display = "none";
     document.removeEventListener("click", handleClickOutsideColorDropdown);
   } catch (error) {
-    console.error("[Web Notes] Error hiding color dropdown:", error);
+    console.error("[YAWN] Error hiding color dropdown:", error);
   }
 }
 
@@ -236,7 +236,7 @@ function handleClickOutsideColorDropdown(event) {
       });
     }
   } catch (error) {
-    console.error("[Web Notes] Error handling outside click:", error);
+    console.error("[YAWN] Error handling outside click:", error);
   }
 }
 
@@ -281,7 +281,7 @@ function handleColorSelection(colorName, textarea) {
       textarea.focus();
     }, 0);
   } catch (error) {
-    console.error("[Web Notes] Error handling color selection:", error);
+    console.error("[YAWN] Error handling color selection:", error);
   }
 }
 

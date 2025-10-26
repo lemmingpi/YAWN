@@ -43,20 +43,20 @@ async function attemptAutoAuthenticationForNote() {
       return false;
     }
 
-    console.log("[Web Notes] Attempting auto-authentication for note creation");
+    console.log("[YAWN] Attempting auto-authentication for note creation");
 
     // Try non-interactive authentication via background
     const response = await chrome.runtime.sendMessage({ action: "AUTHMANAGER_attemptAutoAuth" });
     const success = response.success && response.data;
     if (success) {
-      console.log("[Web Notes] Auto-authentication successful");
+      console.log("[YAWN] Auto-authentication successful");
       return true;
     } else {
-      console.log("[Web Notes] Auto-authentication failed, user can sign in manually via popup");
+      console.log("[YAWN] Auto-authentication failed, user can sign in manually via popup");
       return false;
     }
   } catch (error) {
-    console.error("[Web Notes] Authentication attempt failed:", error);
+    console.error("[YAWN] Authentication attempt failed:", error);
     return false;
   }
 }
@@ -189,7 +189,7 @@ function captureSelectionData(selection) {
     if (commonElement && commonElement.closest) {
       const criticalElement = commonElement.closest("script, style, iframe, object, embed");
       if (criticalElement) {
-        console.warn("[Web Notes] Cannot highlight within critical elements (script/style/iframe)");
+        console.warn("[YAWN] Cannot highlight within critical elements (script/style/iframe)");
         return null;
       }
     }
@@ -201,7 +201,7 @@ function captureSelectionData(selection) {
       startSelector = generateOptimalSelector(startElement);
       endSelector = generateOptimalSelector(endElement);
     } catch (error) {
-      console.log("[Web Notes] Error generating selectors:", error);
+      console.log("[YAWN] Error generating selectors:", error);
       return null;
     }
 
@@ -221,7 +221,7 @@ function captureSelectionData(selection) {
       ).cssSelector,
     };
   } catch (error) {
-    console.warn("[Web Notes] Error capturing selection data:", error);
+    console.warn("[YAWN] Error capturing selection data:", error);
     return null;
   }
 }
@@ -253,7 +253,7 @@ function createTextHighlight(noteData, backgroundColor) {
     const endElement = findElementBySelector(selectionData.endSelector);
 
     if (!startElement || !endElement) {
-      console.log(`[Web Notes] Could not find elements for highlighting note ${noteData.id}`);
+      console.log(`[YAWN] Could not find elements for highlighting note ${noteData.id}`);
       return;
     }
 
@@ -266,7 +266,7 @@ function createTextHighlight(noteData, backgroundColor) {
       const endTextNode = findTextNodeInElement(endElement, selectionData.endOffset, selectionData.endContainerType);
 
       if (!startTextNode || !endTextNode) {
-        console.log(`[Web Notes] Could not find text nodes for highlighting note ${noteData.id}`);
+        console.log(`[YAWN] Could not find text nodes for highlighting note ${noteData.id}`);
         return;
       }
 
@@ -276,7 +276,7 @@ function createTextHighlight(noteData, backgroundColor) {
       // Validate range size before highlighting
       const rangeText = range.toString();
       if (rangeText.length > MAX_SELECTION_LENGTH) {
-        console.log(`[Web Notes] Range text too large for highlighting: ${rangeText.length} chars`);
+        console.log(`[YAWN] Range text too large for highlighting: ${rangeText.length} chars`);
         return;
       }
 
@@ -305,10 +305,10 @@ function createTextHighlight(noteData, backgroundColor) {
         noteHighlights.set(noteData.id, highlightSpan);
       }
     } catch (rangeError) {
-      console.error(`[Web Notes] Error creating range for highlight: ${rangeError}`);
+      console.error(`[YAWN] Error creating range for highlight: ${rangeError}`);
     }
   } catch (error) {
-    console.error(`[Web Notes] Error creating highlight for note ${noteData.id}:`, error);
+    console.error(`[YAWN] Error creating highlight for note ${noteData.id}:`, error);
   }
 }
 
@@ -337,7 +337,7 @@ function removeTextHighlight(noteId) {
       }
     });
   } catch (error) {
-    console.error(`[Web Notes] Error removing highlight for note ${noteId}:`, error);
+    console.error(`[YAWN] Error removing highlight for note ${noteId}:`, error);
   }
 }
 
@@ -356,7 +356,7 @@ function findElementBySelector(selector) {
         const element = document.querySelector(selector);
         if (element) return element;
       } catch (cssError) {
-        console.log(`[Web Notes] Invalid CSS selector: ${selector}`);
+        console.log(`[YAWN] Invalid CSS selector: ${selector}`);
       }
     }
 
@@ -370,11 +370,11 @@ function findElementBySelector(selector) {
       const xpathResult = document.evaluate(selector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
       return xpathResult.singleNodeValue;
     } catch (xpathError) {
-      console.log(`[Web Notes] XPath evaluation failed: ${selector}`, xpathError);
+      console.log(`[YAWN] XPath evaluation failed: ${selector}`, xpathError);
       return null;
     }
   } catch (error) {
-    console.log(`[Web Notes] Error finding element with selector ${selector}:`, error);
+    console.log(`[YAWN] Error finding element with selector ${selector}:`, error);
     return null;
   }
 }
@@ -413,7 +413,7 @@ function findTextNodeInElement(element, offset, containerType) {
 
     return null;
   } catch (error) {
-    console.log("[Web Notes] Error finding text node:", error);
+    console.log("[YAWN] Error finding text node:", error);
     return null;
   }
 }
@@ -440,7 +440,7 @@ async function loadExistingNotes() {
   try {
     getNotes().then(async function (result) {
       if (chrome.runtime.lastError) {
-        console.log("[Web Notes] Failed to load notes:", chrome.runtime.lastError);
+        console.log("[YAWN] Failed to load notes:", chrome.runtime.lastError);
         return;
       }
 
@@ -483,13 +483,13 @@ async function loadExistingNotes() {
 
         setNotes(notes).then(function (result) {
           if (chrome.runtime.lastError) {
-            console.log("[Web Notes] Failed to save migrated notes:", chrome.runtime.lastError);
+            console.log("[YAWN] Failed to save migrated notes:", chrome.runtime.lastError);
           }
         });
       }
     });
   } catch (error) {
-    console.error("[Web Notes] Error loading existing notes:", error);
+    console.error("[YAWN] Error loading existing notes:", error);
   }
 }
 
@@ -665,7 +665,7 @@ function ensureAllNotesVisibleBatched(allNotes, urlNotes) {
         notesRepositioned++;
       }
     } else {
-      console.warn(`[Web Notes] Note data not found for ${noteElement.id}`);
+      console.warn(`[YAWN] Note data not found for ${noteElement.id}`);
     }
   });
 }
@@ -729,7 +729,7 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
           notes[matchingUrl] = urlNotes;
           setNotes(notes).then(function () {
             if (chrome.runtime.lastError) {
-              console.log("[Web Notes] Failed to save note offset:", chrome.runtime.lastError);
+              console.log("[YAWN] Failed to save note offset:", chrome.runtime.lastError);
             }
           });
           noteFound = true;
@@ -738,11 +738,11 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
       }
 
       if (!noteFound) {
-        console.log(`[Web Notes] Note ${noteId} not found for offset update`);
+        console.log(`[YAWN] Note ${noteId} not found for offset update`);
       }
     });
   } catch (error) {
-    console.log("[Web Notes] Error updating note offset:", error);
+    console.log("[YAWN] Error updating note offset:", error);
   }
 }
 
@@ -1162,9 +1162,9 @@ function exitEditMode(noteElement, save = true) {
     // Save to storage
     updateNote(window.location.href, noteData.id, updatedData).then(success => {
       if (success) {
-        console.log(`[Web Notes] Note ${noteData.id} saved successfully`);
+        console.log(`[YAWN] Note ${noteData.id} saved successfully`);
       } else {
-        console.log(`[Web Notes] Failed to save note ${noteData.id}`);
+        console.log(`[YAWN] Failed to save note ${noteData.id}`);
       }
     });
   }
@@ -1420,7 +1420,7 @@ function createMarkdownToolbar(textarea) {
       const colorDropdown = createColorDropdown(textarea);
       toolbar.appendChild(colorDropdown);
     } catch (error) {
-      console.log("[Web Notes] Error adding color dropdown to toolbar:", error);
+      console.log("[YAWN] Error adding color dropdown to toolbar:", error);
     }
   }
 
@@ -1580,9 +1580,9 @@ function autoSaveNote(noteElement, noteData, content) {
 
   updateNote(window.location.href, noteData.id, updatedData).then(success => {
     if (success) {
-      console.log(`[Web Notes] Auto-saved note ${noteData.id}`);
+      console.log(`[YAWN] Auto-saved note ${noteData.id}`);
     } else {
-      console.log(`[Web Notes] Auto-save failed for note ${noteData.id}`);
+      console.log(`[YAWN] Auto-save failed for note ${noteData.id}`);
     }
   });
 }
@@ -1741,7 +1741,7 @@ function displayNote(noteData) {
           window.open(detailsUrl, "_blank");
         }
       } else {
-        console.log("[Web Notes] Note has no server ID - not synced to server");
+        console.log("[YAWN] Note has no server ID - not synced to server");
         // Optionally, we could show a message to the user here
       }
     });
@@ -1796,7 +1796,7 @@ function displayNote(noteData) {
     const offsetX = noteData.offsetX || 0;
     const offsetY = noteData.offsetY || 0;
   } catch (error) {
-    console.error("[Web Notes] Error displaying note:", error);
+    console.error("[YAWN] Error displaying note:", error);
   }
 }
 
@@ -1821,7 +1821,7 @@ function startUrlMonitoring() {
   urlCheckInterval = setInterval(() => {
     if (window.location.href !== currentUrl) {
       currentUrl = window.location.href;
-      console.log("[Web Notes] URL changed, reloading notes");
+      console.log("[YAWN] URL changed, reloading notes");
 
       // Clear element cache for new page
       elementCache.clear();
@@ -1982,45 +1982,36 @@ function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow"
     // Attempt authentication for first note if server sync is configured
     attemptAutoAuthenticationForNote()
       .then(async authAttempted => {
-        // Store in chrome storage using normalized URL
-        getNotes().then(function (result) {
-          const notes = result || {};
+        // Use addNote function which handles both local storage AND server sync
+        const success = await addNote(window.location.href, noteData);
+        if (success) {
+          console.log("[YAWN] Note saved successfully");
+
+          // Update the displayed note with server ID if it was set
+          const notes = await getNotes();
           const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
           const urlNotes = notes[normalizedUrl] || [];
-          urlNotes.push(noteData);
-          notes[normalizedUrl] = urlNotes;
-
-          setNotes(notes).then(function () {
-            if (chrome.runtime.lastError) {
-              console.error("[Web Notes] Failed to save note:", chrome.runtime.lastError);
-            } else {
-              console.log("[Web Notes] Note saved successfully to normalized URL");
-            }
-          });
-        });
+          const savedNote = urlNotes.find(n => n.id === noteData.id);
+          if (savedNote && savedNote.serverId) {
+            // Update the noteData reference with the server ID
+            noteData.serverId = savedNote.serverId;
+            console.log("[YAWN] Note synced to server with ID:", savedNote.serverId);
+          }
+        } else {
+          console.error("[YAWN] Failed to save note");
+        }
       })
-      .catch(error => {
-        console.log("[Web Notes] Auth attempt failed, continuing with local save:", error);
+      .catch(async error => {
+        console.log("[YAWN] Auth attempt failed, continuing with save:", error);
 
-        // Fallback: Save locally even if auth fails
-        getNotes().then(function (result) {
-          const notes = result || {};
-          const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
-          const urlNotes = notes[normalizedUrl] || [];
-          urlNotes.push(noteData);
-          notes[normalizedUrl] = urlNotes;
-
-          setNotes(notes).then(function () {
-            if (chrome.runtime.lastError) {
-              console.error("[Web Notes] Failed to save note:", chrome.runtime.lastError);
-            } else {
-              console.log("[Web Notes] Note saved successfully to normalized URL");
-            }
-          });
-        });
+        // Try to save anyway - addNote handles server sync if possible
+        const success = await addNote(window.location.href, noteData);
+        if (!success) {
+          console.error("[YAWN] Failed to save note");
+        }
       });
   } catch (error) {
-    console.error("[Web Notes] Error creating note:", error);
+    console.error("[YAWN] Error creating note:", error);
   }
 }
 
@@ -2050,7 +2041,7 @@ function tryBothSelectors(noteData, _cacheKey) {
         }
       }
     } catch (error) {
-      console.warn("[Web Notes] CSS selector failed:", noteData.elementSelector, error);
+      console.warn("[YAWN] CSS selector failed:", noteData.elementSelector, error);
     }
   }
 
@@ -2071,7 +2062,7 @@ function tryBothSelectors(noteData, _cacheKey) {
         return result;
       }
     } catch (error) {
-      console.warn("[Web Notes] XPath failed:", noteData.elementXPath, error);
+      console.warn("[YAWN] XPath failed:", noteData.elementXPath, error);
     }
   }
 
@@ -2095,11 +2086,11 @@ function tryBothSelectors(noteData, _cacheKey) {
         return result;
       }
     } catch (error) {
-      console.warn("[Web Notes] Cross-validation failed:", error);
+      console.warn("[YAWN] Cross-validation failed:", error);
     }
   }
 
-  console.log("[Web Notes] All selector strategies failed");
+  console.log("[YAWN] All selector strategies failed");
   return result;
 }
 
@@ -2130,7 +2121,7 @@ function generateOptimalSelector(element) {
     } else {
       // CSS couldn't generate unique selector, XPath is primary
       result.strategy = "xpath-primary";
-      console.log("[Web Notes] CSS not unique, using XPath as primary:", result.xpath);
+      console.log("[YAWN] CSS not unique, using XPath as primary:", result.xpath);
     }
 
     // Additional validation: Test both selectors work
@@ -2152,18 +2143,18 @@ function generateOptimalSelector(element) {
       try {
         const xpathMatches = document.evaluate(result.xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
         if (!xpathMatches.singleNodeValue || xpathMatches.singleNodeValue !== element) {
-          console.error("[Web Notes] XPath validation failed - this shouldn't happen!");
+          console.error("[YAWN] XPath validation failed - this shouldn't happen!");
           result.xpath = null;
         }
       } catch (xpathError) {
-        console.error("[Web Notes] XPath invalid:", xpathError);
+        console.error("[YAWN] XPath invalid:", xpathError);
         result.xpath = null;
       }
     }
 
     return result;
   } catch (error) {
-    console.error("[Web Notes] Error in generateOptimalSelector:", error);
+    console.error("[YAWN] Error in generateOptimalSelector:", error);
     return {
       cssSelector: null,
       xpath: result.xpath, // Try to keep XPath if it was generated
@@ -2182,7 +2173,7 @@ function generateCSSSelector(element) {
   try {
     // Validate element input
     if (!element || typeof element.tagName !== "string") {
-      console.warn("[Web Notes] Invalid element for CSS selector generation");
+      console.warn("[YAWN] Invalid element for CSS selector generation");
       return null;
     }
 
@@ -2205,7 +2196,7 @@ function generateCSSSelector(element) {
       // Generate selector for current element
       const tagName = current.tagName.toLowerCase();
       if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(tagName)) {
-        console.warn("[Web Notes] Invalid tag name:", tagName);
+        console.warn("[YAWN] Invalid tag name:", tagName);
         return null;
       }
 
@@ -2274,11 +2265,11 @@ function generateCSSSelector(element) {
         return null;
       }
     } catch (selectorError) {
-      console.warn("[Web Notes] Invalid CSS selector generated:", finalSelector);
+      console.warn("[YAWN] Invalid CSS selector generated:", finalSelector);
       return null;
     }
   } catch (error) {
-    console.error("[Web Notes] Error generating CSS selector:", error);
+    console.error("[YAWN] Error generating CSS selector:", error);
     return null;
   }
 }
@@ -2319,7 +2310,7 @@ function generateXPath(element) {
     let retval = `/${components.join("/")}`;
     return retval;
   } catch (error) {
-    console.error("[Web Notes] Error generating XPath:", error);
+    console.error("[YAWN] Error generating XPath:", error);
     return null;
   }
 }
@@ -2375,12 +2366,12 @@ async function handleNoteDelete(noteElement, noteData) {
         EditingState.autosaveTimeouts.delete(noteData.id);
       }
     } else {
-      console.error(`[Web Notes] Failed to delete note ${noteData.id} from storage`);
+      console.error(`[YAWN] Failed to delete note ${noteData.id} from storage`);
       // Show error message to user (note is already removed from DOM, but this indicates a storage issue)
       showTemporaryMessage("Failed to delete note from storage. The note may reappear on page reload.", "error");
     }
   } catch (error) {
-    console.error("[Web Notes] Error during note deletion:", error);
+    console.error("[YAWN] Error during note deletion:", error);
     showTemporaryMessage("Error occurred while deleting note", "error");
   }
 }
@@ -2420,7 +2411,7 @@ async function handleNoteSharing(textarea) {
       showTemporaryMessage("Sharing feature not available", "error");
     }
   } catch (error) {
-    console.error("[Web Notes] Error opening note sharing dialog:", error);
+    console.error("[YAWN] Error opening note sharing dialog:", error);
     showTemporaryMessage("Failed to open sharing dialog", "error");
   }
 }
@@ -2439,7 +2430,7 @@ async function handlePageSharing() {
       showTemporaryMessage("Sharing feature not available", "error");
     }
   } catch (error) {
-    console.error("[Web Notes] Error opening page sharing dialog:", error);
+    console.error("[YAWN] Error opening page sharing dialog:", error);
     showTemporaryMessage("Failed to open page sharing dialog", "error");
   }
 }
@@ -2457,7 +2448,7 @@ async function handleSiteSharing() {
       showTemporaryMessage("Sharing feature not available", "error");
     }
   } catch (error) {
-    console.error("[Web Notes] Error opening site sharing dialog:", error);
+    console.error("[YAWN] Error opening site sharing dialog:", error);
     showTemporaryMessage("Failed to open site sharing dialog", "error");
   }
 }
@@ -2491,7 +2482,7 @@ function getNoteDataFromElement(noteElement) {
       url: window.location.href,
     };
   } catch (error) {
-    console.error("[Web Notes] Error extracting note data from element:", error);
+    console.error("[YAWN] Error extracting note data from element:", error);
     return null;
   }
 }
@@ -2522,11 +2513,11 @@ async function addSharingContextMenuOptions() {
           },
         })
         .catch(error => {
-          console.log("[Web Notes] Context menu update message failed (expected if background script not ready):", error);
+          console.log("[YAWN] Context menu update message failed (expected if background script not ready):", error);
         });
     }
   } catch (error) {
-    console.error("[Web Notes] Error setting up sharing context menu:", error);
+    console.error("[YAWN] Error setting up sharing context menu:", error);
   }
 }
 
@@ -2559,7 +2550,7 @@ function extractPageDOMForTest() {
     // Get the body content
     const bodyElement = clonedDoc.querySelector("body");
     if (!bodyElement) {
-      console.warn("[Web Notes] No body element found");
+      console.warn("[YAWN] No body element found");
       return document.body.innerHTML; // Return full content, server will chunk
     }
 
@@ -2570,11 +2561,11 @@ function extractPageDOMForTest() {
 
     // Log size but DO NOT truncate - server handles chunking
     const contentSize = Math.round(contentHTML.length / 1000);
-    console.log(`[Web Notes] Extracted ${contentSize}KB of DOM content (server will chunk if needed)`);
+    console.log(`[YAWN] Extracted ${contentSize}KB of DOM content (server will chunk if needed)`);
 
     return contentHTML;
   } catch (error) {
-    console.error("[Web Notes] Error extracting page DOM:", error);
+    console.error("[YAWN] Error extracting page DOM:", error);
     throw error;
   }
 }
@@ -2828,7 +2819,7 @@ function extractPageDOMInChunks() {
 
     return chunks;
   } catch (error) {
-    console.error("[Web Notes] Error extracting page DOM in chunks:", error);
+    console.error("[YAWN] Error extracting page DOM in chunks:", error);
     throw error;
   }
 }
@@ -2863,7 +2854,7 @@ async function handleGenerateDOMTestNotes() {
 
     // If user cancelled, exit
     if (!config) {
-      console.log("[Web Notes] User cancelled auto notes generation");
+      console.log("[YAWN] User cancelled auto notes generation");
       return;
     }
 
@@ -2882,7 +2873,7 @@ async function handleGenerateDOMTestNotes() {
       return;
     }
 
-    console.log(`[Web Notes] Page registered with ID: ${pageData.data.id}`);
+    console.log(`[YAWN] Page registered with ID: ${pageData.data.id}`);
 
     // Single request with full DOM and configuration
     const response = await chrome.runtime.sendMessage({
@@ -2920,7 +2911,7 @@ async function handleGenerateDOMTestNotes() {
       alert(`Failed to generate auto notes: ${response.error || "Unknown error"}`);
     }
   } catch (error) {
-    console.error("[Web Notes] Error generating auto notes:", error);
+    console.error("[YAWN] Error generating auto notes:", error);
     alert(`Failed to generate auto notes: ${error.message}`);
   }
 }
@@ -2958,11 +2949,11 @@ async function handleShowAIContextDialog() {
     if (typeof showAIContextGeneratorDialog === "function") {
       await showAIContextGeneratorDialog(pageUrl, pageTitle, pageDom);
     } else {
-      console.error("[Web Notes] AI context dialog not available");
+      console.error("[YAWN] AI context dialog not available");
       alert("AI context generation dialog not loaded. Please try again.");
     }
   } catch (error) {
-    console.error("[Web Notes] Error showing AI context dialog:", error);
+    console.error("[YAWN] Error showing AI context dialog:", error);
     alert(`Failed to show AI context dialog: ${error.message}`);
   }
 }
@@ -2983,7 +2974,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const canShare = typeof SharingInterface !== "undefined" && isAuth;
         sendResponse({ canShare });
       } catch (error) {
-        console.error("[Web Notes] Error checking sharing capability:", error);
+        console.error("[YAWN] Error checking sharing capability:", error);
         sendResponse({ canShare: false });
       }
     })();
@@ -3032,7 +3023,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
   } catch (error) {
-    console.error("[Web Notes] Error handling sharing message:", error);
+    console.error("[YAWN] Error handling sharing message:", error);
     sendResponse({ success: false, error: error.message });
   }
 
@@ -3077,7 +3068,7 @@ async function handleNoteContextSharing(x, y) {
       showTemporaryMessage("Sharing feature not available", "error");
     }
   } catch (error) {
-    console.error("[Web Notes] Error handling note context sharing:", error);
+    console.error("[YAWN] Error handling note context sharing:", error);
     showTemporaryMessage("Failed to share note", "error");
   }
 }
@@ -3108,11 +3099,11 @@ async function updateSharingStatusIndicators() {
         updateNoteSharingIndicator(noteElement, sharingStatus.isShared);
       } catch (error) {
         // Silently continue if sharing status check fails
-        console.debug("[Web Notes] Failed to check sharing status for note:", noteData.id, error);
+        console.debug("[YAWN] Failed to check sharing status for note:", noteData.id, error);
       }
     }
   } catch (error) {
-    console.error("[Web Notes] Error updating sharing status indicators:", error);
+    console.error("[YAWN] Error updating sharing status indicators:", error);
   }
 }
 
@@ -3154,7 +3145,7 @@ function updateNoteSharingIndicator(noteElement, isShared) {
       noteElement.appendChild(indicator);
     }
   } catch (error) {
-    console.error("[Web Notes] Error updating sharing indicator:", error);
+    console.error("[YAWN] Error updating sharing indicator:", error);
   }
 }
 
@@ -3174,7 +3165,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       setInterval(updateSharingStatusIndicators, 5 * 60 * 1000);
     }
   } catch (error) {
-    console.error("[Web Notes] Error initializing sharing functionality:", error);
+    console.error("[YAWN] Error initializing sharing functionality:", error);
   }
 });
 
@@ -3193,7 +3184,7 @@ if (document.readyState === "loading") {
         setInterval(updateSharingStatusIndicators, 5 * 60 * 1000);
       }
     } catch (error) {
-      console.error("[Web Notes] Error initializing sharing functionality on loaded document:", error);
+      console.error("[YAWN] Error initializing sharing functionality on loaded document:", error);
     }
   })();
 }
@@ -3207,7 +3198,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   const authChanged = authKeys.some(key => key in changes);
 
   if (authChanged) {
-    console.log("[Web Notes] Auth state changed, reinitializing sharing features");
+    console.log("[YAWN] Auth state changed, reinitializing sharing features");
 
     // Reinitialize sharing features
     (async () => {
@@ -3220,7 +3211,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
           setTimeout(updateSharingStatusIndicators, 2000);
         }
       } catch (error) {
-        console.error("[Web Notes] Error reinitializing after auth change:", error);
+        console.error("[YAWN] Error reinitializing after auth change:", error);
       }
     })();
   }

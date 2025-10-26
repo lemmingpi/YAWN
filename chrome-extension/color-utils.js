@@ -120,7 +120,7 @@ const NoteColorUtils = {
       return color.toLowerCase();
     }
 
-    console.warn(`[Web Notes] Invalid color value: ${color}, using fallback`);
+    console.warn(`[YAWN] Invalid color value: ${color}, using fallback`);
     return "#fff3cd"; // Fallback to default
   },
 };

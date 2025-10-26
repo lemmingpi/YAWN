@@ -229,7 +229,7 @@ function showTemporaryMessage(message, type = "info") {
       }, 300);
     }, 4000);
   } catch (error) {
-    console.error("[Web Notes] Error showing temporary message:", error);
+    console.error("[YAWN] Error showing temporary message:", error);
     // Fallback to alert if custom message fails
     alert(message);
   }

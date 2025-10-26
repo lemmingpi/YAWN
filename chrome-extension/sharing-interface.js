@@ -43,9 +43,9 @@ const SharingInterface = {
         }
       });
 
-      console.log("[Web Notes] Sharing interface initialized");
+      console.log("[YAWN] Sharing interface initialized");
     } catch (error) {
-      console.error("[Web Notes] Failed to initialize sharing interface:", error);
+      console.error("[YAWN] Failed to initialize sharing interface:", error);
       if (typeof ErrorHandler !== "undefined") {
         ErrorHandler.logError("Sharing interface initialization failed", error);
       }
@@ -101,7 +101,7 @@ const SharingInterface = {
         emailInput.focus();
       }
     } catch (error) {
-      console.error("[Web Notes] Failed to create sharing dialog:", error);
+      console.error("[YAWN] Failed to create sharing dialog:", error);
       this.showErrorMessage("Failed to open sharing dialog. Please try again.");
       if (typeof ErrorHandler !== "undefined") {
         ErrorHandler.logError("Sharing dialog creation failed", error);
@@ -158,7 +158,7 @@ const SharingInterface = {
         emailInput.focus();
       }
     } catch (error) {
-      console.error("[Web Notes] Failed to show page sharing dialog:", error);
+      console.error("[YAWN] Failed to show page sharing dialog:", error);
       this.showErrorMessage("Failed to open page sharing dialog. Please try again.");
       if (typeof ErrorHandler !== "undefined") {
         ErrorHandler.logError("Page sharing dialog failed", error);
@@ -214,7 +214,7 @@ const SharingInterface = {
         emailInput.focus();
       }
     } catch (error) {
-      console.error("[Web Notes] Failed to show site sharing dialog:", error);
+      console.error("[YAWN] Failed to show site sharing dialog:", error);
       this.showErrorMessage("Failed to open site sharing dialog. Please try again.");
       if (typeof ErrorHandler !== "undefined") {
         ErrorHandler.logError("Site sharing dialog failed", error);
@@ -519,7 +519,7 @@ const SharingInterface = {
         });
       }
     } catch (error) {
-      console.error("[Web Notes] Failed to load current shares:", error);
+      console.error("[YAWN] Failed to load current shares:", error);
       const errorMessage = document.createElement("div");
       errorMessage.className = "wn-shares-error";
       errorMessage.textContent = "Failed to load current shares.";
@@ -679,7 +679,7 @@ const SharingInterface = {
       // Show success message
       this.showSuccessMessage(`Successfully shared with ${email}`);
     } catch (error) {
-      console.error("[Web Notes] Failed to create share:", error);
+      console.error("[YAWN] Failed to create share:", error);
       this.showErrorMessage(error.message || "Failed to create share. Please try again.");
     } finally {
       // Hide loading state
@@ -934,7 +934,7 @@ const SharingInterface = {
         }
       }, 1000);
     } catch (error) {
-      console.error("[Web Notes] Failed to announce to screen reader:", error);
+      console.error("[YAWN] Failed to announce to screen reader:", error);
     }
   },
 
@@ -993,7 +993,7 @@ const SharingInterface = {
         shareItem.style.outlineOffset = "";
       });
     } catch (error) {
-      console.error("[Web Notes] Error enhancing share item accessibility:", error);
+      console.error("[YAWN] Error enhancing share item accessibility:", error);
     }
   },
 
@@ -1083,7 +1083,7 @@ const SharingInterface = {
 
       return true;
     } catch (error) {
-      console.error("[Web Notes] Authentication check failed:", error);
+      console.error("[YAWN] Authentication check failed:", error);
       this.showErrorMessage("Authentication check failed. Please try again.");
       return false;
     }
@@ -1133,7 +1133,7 @@ const SharingInterface = {
 
       return result;
     } catch (error) {
-      console.error("[Web Notes] Create share API call failed:", error);
+      console.error("[YAWN] Create share API call failed:", error);
       throw new Error(error.message || "Failed to create share");
     }
   },
@@ -1180,7 +1180,7 @@ const SharingInterface = {
 
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Get shares API call failed:", error);
+      console.error("[YAWN] Get shares API call failed:", error);
       throw error;
     }
   },
@@ -1250,7 +1250,7 @@ const SharingInterface = {
 
       this.showSuccessMessage("Permission updated successfully");
     } catch (error) {
-      console.error("[Web Notes] Update permission failed:", error);
+      console.error("[YAWN] Update permission failed:", error);
       this.showErrorMessage(error.message || "Failed to update permission. Please try again.");
     }
   },
@@ -1318,7 +1318,7 @@ const SharingInterface = {
 
       this.showSuccessMessage("Access removed successfully");
     } catch (error) {
-      console.error("[Web Notes] Remove share failed:", error);
+      console.error("[YAWN] Remove share failed:", error);
       this.showErrorMessage(error.message || "Failed to remove access. Please try again.");
     }
   },
@@ -1355,7 +1355,7 @@ const SharingInterface = {
         });
       }
     } catch (error) {
-      console.error("[Web Notes] Failed to refresh shares:", error);
+      console.error("[YAWN] Failed to refresh shares:", error);
       const sharesList = document.getElementById("wn-current-shares");
       if (sharesList) {
         sharesList.innerHTML = '<div class="wn-shares-error">Failed to load shares.</div>';
@@ -1378,7 +1378,7 @@ const SharingInterface = {
         hasAdminAccess: shares.some(share => share.is_owner || share.permission_level === "ADMIN"),
       };
     } catch (error) {
-      console.error("[Web Notes] Failed to get sharing status:", error);
+      console.error("[YAWN] Failed to get sharing status:", error);
       return {
         isShared: false,
         shareCount: 0,
@@ -1398,7 +1398,7 @@ const SharingInterface = {
       // TODO: Implement share link generation on backend
       throw new Error("Share link generation not yet implemented");
     } catch (error) {
-      console.error("[Web Notes] Failed to copy share link:", error);
+      console.error("[YAWN] Failed to copy share link:", error);
       this.showErrorMessage("Share link generation not yet implemented");
     }
   },
@@ -1422,11 +1422,11 @@ const SharingInterface = {
         case "url":
           return this.validateUrlSecurity(input, options);
         default:
-          console.warn("[Web Notes] Unknown validation type:", type);
+          console.warn("[YAWN] Unknown validation type:", type);
           return false;
       }
     } catch (error) {
-      console.error("[Web Notes] Validation error:", error);
+      console.error("[YAWN] Validation error:", error);
       return false;
     }
   },
@@ -1467,7 +1467,7 @@ const SharingInterface = {
 
     for (const pattern of securityPatterns) {
       if (pattern.test(trimmedEmail)) {
-        console.warn("[Web Notes] Email contains potentially dangerous content");
+        console.warn("[YAWN] Email contains potentially dangerous content");
         return false;
       }
     }
@@ -1512,7 +1512,7 @@ const SharingInterface = {
 
     for (const pattern of dangerousPatterns) {
       if (pattern.test(trimmed)) {
-        console.warn("[Web Notes] Resource ID contains potentially dangerous content");
+        console.warn("[YAWN] Resource ID contains potentially dangerous content");
         return false;
       }
     }
@@ -1551,7 +1551,7 @@ const SharingInterface = {
       // Protocol validation
       const allowedProtocols = options.allowedProtocols || ["http:", "https:"];
       if (!allowedProtocols.includes(parsedUrl.protocol)) {
-        console.warn("[Web Notes] URL protocol not allowed:", parsedUrl.protocol);
+        console.warn("[YAWN] URL protocol not allowed:", parsedUrl.protocol);
         return false;
       }
 
@@ -1565,14 +1565,14 @@ const SharingInterface = {
 
       for (const pattern of dangerousPatterns) {
         if (pattern.test(url)) {
-          console.warn("[Web Notes] URL contains potentially dangerous content");
+          console.warn("[YAWN] URL contains potentially dangerous content");
           return false;
         }
       }
 
       return true;
     } catch (error) {
-      console.warn("[Web Notes] Invalid URL format:", error);
+      console.warn("[YAWN] Invalid URL format:", error);
       return false;
     }
   },
@@ -1594,7 +1594,7 @@ const SharingInterface = {
       const limit = this.limits[operation];
 
       if (!limit) {
-        console.warn("[Web Notes] Unknown rate limit operation:", operation);
+        console.warn("[YAWN] Unknown rate limit operation:", operation);
         return false;
       }
 
@@ -1612,7 +1612,7 @@ const SharingInterface = {
 
       // Check if we're under the limit
       if (operations.length >= limit.max) {
-        console.warn(`[Web Notes] Rate limit exceeded for ${operation}`);
+        console.warn(`[YAWN] Rate limit exceeded for ${operation}`);
         return false;
       }
 
@@ -1640,7 +1640,7 @@ const SharingInterface = {
       // Additional checks could be added here based on resource ownership
       return true;
     } catch (error) {
-      console.error("[Web Notes] Error checking share permission:", error);
+      console.error("[YAWN] Error checking share permission:", error);
       return false;
     }
   },
