@@ -18,6 +18,7 @@
       "js": [
         "libs/marked.min.js",
         "libs/dompurify.min.js",
+        "note-state.js",
         "color-utils.js",
         "color-dropdown.js",
         "markdown-utils.js",
@@ -26,6 +27,11 @@
         "contentDialog.js",
         "contextGeneratorDialog.js",
         "sharing-interface.js",
+        "sharing.js",
+        "selector-utils.js",
+        "ai-generation.js",
+        "note-positioning.js",
+        "note-interaction-editing.js",
         "content.js"
       ]
     }
