@@ -8,7 +8,6 @@ const TIMING = {
   DOM_UPDATE_DELAY: 100, // Time to allow DOM updates to complete
   FADE_ANIMATION_DELAY: 250, // Time for fade-in animation to complete
   RESIZE_DEBOUNCE: 300, // Debounce delay for resize events
-  SCROLL_DEBOUNCE: 200, // Debounce delay for scroll events (if needed)
   URL_MONITOR_INTERVAL: 2000, // Interval for URL change monitoring (2 seconds)
   AUTOSAVE_DELAY: 1000, // Auto-save delay during editing (1 second)
   DOUBLE_CLICK_DELAY: 300, // Max time between clicks for double-click (300ms)

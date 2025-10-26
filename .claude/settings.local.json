@@ -46,7 +46,10 @@
       "mcp__serena__onboarding",
       "mcp__serena__list_dir",
       "Bash(.venv/Scripts/python.exe:*)",
-      "Bash(.venv/Scripts/pre-commit run:*)"
+      "Bash(.venv/Scripts/pre-commit run:*)",
+      "Bash(for file in content.js sharing-interface.js markdown-utils.js)",
+      "Bash(do echo \"=== $file ===\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": [],

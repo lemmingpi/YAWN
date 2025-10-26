@@ -6,8 +6,8 @@
 /* global TIMING, EditingState, noteHighlights, MAX_HIGHLIGHTS, MAX_SELECTION_LENGTH, lastRightClickCoords, elementCache */
 /* global handleNoteSharing, handlePageSharing, handleSiteSharing, getNoteDataFromElement, addSharingContextMenuOptions */
 /* global handleNoteContextSharing, updateSharingStatusIndicators, updateNoteSharingIndicator */
-/* global MAX_CONCURRENT_CHUNKS, extractPageDOMForTest, estimateTokenCount, findSemanticBoundaries, extractParentContext */
-/* global chunkDOMContent, extractPageDOMInChunks, handleGenerateDOMTestNotes, handleGenerateDOMTestNotesOld, handleShowAIContextDialog */
+/* global extractPageDOM, estimateTokenCount, findSemanticBoundaries, extractParentContext */
+/* global handleGenerateDOMTestNotes, handleShowAIContextDialog */
 
 console.log("Web Notes - Content script loaded!");
 
@@ -789,7 +789,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
 
       case "generateDOMTestNotes":
-        handleGenerateDOMTestNotes();
+        handleGenerateDOMNotes();
         sendResponse({ success: true });
         break;
 
