@@ -7,11 +7,13 @@ Sites represent domains and their associated user context.
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth import get_current_active_user
+from ..auth_helpers import check_site_permission, get_user_sites_query
 from ..database import get_db
-from ..models import Note, Page, Site
+from ..models import Note, Page, PermissionLevel, Site, User
 from ..schemas import SiteCreate, SiteResponse, SiteUpdate
 
 router = APIRouter(prefix="/api/sites", tags=["sites"])
@@ -19,32 +21,39 @@ router = APIRouter(prefix="/api/sites", tags=["sites"])
 
 @router.post("/", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)
 async def create_site(
-    site_data: SiteCreate, db: AsyncSession = Depends(get_db)
+    site_data: SiteCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> SiteResponse:
     """Create a new site.
 
     Args:
         site_data: Site creation data
         db: Database session
+        current_user: Currently authenticated user
 
     Returns:
         Created site data
 
     Raises:
-        HTTPException: If site with domain already exists
+        HTTPException: If site with domain already exists for this user
     """
-    # Check if site with this domain already exists
+    # Check if site with this domain already exists for this user
     existing_site = await db.execute(
-        select(Site).where(Site.domain == site_data.domain)
+        select(Site).where(
+            and_(Site.domain == site_data.domain, Site.user_id == current_user.id)
+        )
     )
     if existing_site.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Site with domain '{site_data.domain}' already exists",
+            detail=f"Site with domain '{site_data.domain}' already exists for this user",
         )
 
-    # Create new site
-    site = Site(**site_data.model_dump())
+    # Create new site with user_id
+    site_dict = site_data.model_dump()
+    site_dict["user_id"] = current_user.id
+    site = Site(**site_dict)
     db.add(site)
     await db.commit()
     await db.refresh(site)
@@ -65,8 +74,9 @@ async def get_sites(
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     search: Optional[str] = Query(None, description="Search in domain or user_context"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[SiteResponse]:
-    """Get all sites with optional filtering.
+    """Get all sites accessible to the user with optional filtering.
 
     Args:
         skip: Number of sites to skip for pagination
@@ -74,12 +84,13 @@ async def get_sites(
         is_active: Filter by active status
         search: Search term for domain or user_context
         db: Database session
+        current_user: Currently authenticated user
 
     Returns:
         List of sites with page counts
     """
-    # Build query
-    query = select(Site)
+    # Build query for user's sites (owned + shared)
+    query = get_user_sites_query(current_user)
 
     # Apply filters
     if is_active is not None:
@@ -125,19 +136,33 @@ async def get_sites(
 
 
 @router.get("/{site_id}", response_model=SiteResponse)
-async def get_site(site_id: int, db: AsyncSession = Depends(get_db)) -> SiteResponse:
-    """Get a specific site by ID.
+async def get_site(
+    site_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> SiteResponse:
+    """Get a specific site by ID if user has access.
 
     Args:
         site_id: Site ID
         db: Database session
+        current_user: Currently authenticated user
 
     Returns:
         Site data with page count
 
     Raises:
-        HTTPException: If site not found
+        HTTPException: If site not found or user lacks permission
     """
+    # Check if user has access to this site
+    has_access, _ = await check_site_permission(db, current_user, site_id)
+
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Site with ID {site_id} not found",
+        )
+
     # Get site
     result = await db.execute(select(Site).where(Site.id == site_id))
     site = result.scalar_one_or_none()
@@ -170,21 +195,36 @@ async def get_site(site_id: int, db: AsyncSession = Depends(get_db)) -> SiteResp
 
 @router.put("/{site_id}", response_model=SiteResponse)
 async def update_site(
-    site_id: int, site_data: SiteUpdate, db: AsyncSession = Depends(get_db)
+    site_id: int,
+    site_data: SiteUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> SiteResponse:
-    """Update a specific site.
+    """Update a specific site if user has edit permission.
 
     Args:
         site_id: Site ID
         site_data: Site update data
         db: Database session
+        current_user: Currently authenticated user
 
     Returns:
         Updated site data
 
     Raises:
-        HTTPException: If site not found or domain conflict
+        HTTPException: If site not found, user lacks permission, or domain conflict
     """
+    # Check if user has edit permission on this site
+    has_access, permission_level = await check_site_permission(
+        db, current_user, site_id, PermissionLevel.EDIT
+    )
+
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to edit this site",
+        )
+
     # Get existing site
     result = await db.execute(select(Site).where(Site.id == site_id))
     site = result.scalar_one_or_none()
@@ -197,13 +237,16 @@ async def update_site(
 
     # Check for domain conflicts if domain is being updated
     if site_data.domain and site_data.domain != site.domain:
+        # Check if this user already has a site with the new domain
         existing_site = await db.execute(
-            select(Site).where(Site.domain == site_data.domain)
+            select(Site).where(
+                and_(Site.domain == site_data.domain, Site.user_id == current_user.id)
+            )
         )
         if existing_site.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Site with domain '{site_data.domain}' already exists",
+                detail=f"Site with domain '{site_data.domain}' already exists for this user",
             )
 
     # Update site
@@ -235,17 +278,23 @@ async def update_site(
 
 
 @router.delete("/{site_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_site(site_id: int, db: AsyncSession = Depends(get_db)) -> None:
-    """Delete a specific site.
+async def delete_site(
+    site_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    """Delete a specific site if user owns it.
 
     This will cascade delete all associated pages, notes, and artifacts.
+    Only the owner can delete a site.
 
     Args:
         site_id: Site ID
         db: Database session
+        current_user: Currently authenticated user
 
     Raises:
-        HTTPException: If site not found
+        HTTPException: If site not found or user is not owner
     """
     # Get site
     result = await db.execute(select(Site).where(Site.id == site_id))
@@ -255,6 +304,13 @@ async def delete_site(site_id: int, db: AsyncSession = Depends(get_db)) -> None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Site with ID {site_id} not found",
+        )
+
+    # Only owner can delete a site
+    if site.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can delete a site",
         )
 
     # Delete site (cascades to pages, notes, artifacts)
@@ -270,30 +326,33 @@ async def get_site_pages(
         100, ge=1, le=1000, description="Maximum number of pages to return"
     ),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[dict]:
-    """Get all pages for a specific site.
+    """Get all pages for a specific site if user has access.
 
     Args:
         site_id: Site ID
         skip: Number of pages to skip for pagination
         limit: Maximum number of pages to return
         db: Database session
+        current_user: Currently authenticated user
 
     Returns:
         List of pages for the site
 
     Raises:
-        HTTPException: If site not found
+        HTTPException: If site not found or user lacks permission
     """
-    # Verify site exists
-    site_result = await db.execute(select(Site).where(Site.id == site_id))
-    if not site_result.scalar_one_or_none():
+    # Check if user has access to this site
+    has_access, _ = await check_site_permission(db, current_user, site_id)
+
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Site with ID {site_id} not found",
         )
 
-    # Get pages for the site
+    # Get pages for the site (user already has access to the site)
     query = (
         select(Page)
         .where(Page.site_id == site_id)

@@ -4,6 +4,7 @@ This module provides JWT token handling, Chrome Identity token validation,
 and authentication middleware for the FastAPI application.
 """
 
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -21,6 +22,8 @@ from .database import get_db
 from .models import User
 from .schemas import TokenData
 
+logger = logging.getLogger(__name__)
+
 # JWT Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
@@ -33,7 +36,7 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 # Security scheme for FastAPI
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 class AuthenticationError(Exception):
@@ -237,6 +240,11 @@ async def get_current_user(
         HTTPException: If authentication fails
     """
     try:
+        if not credentials:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Not authenticated"
+            )
+
         token_data = await verify_token(credentials.credentials)
 
         # Get user from database
@@ -258,6 +266,46 @@ async def get_current_user(
             detail=e.message,
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+async def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    session: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """Get current authenticated user if provided, otherwise return None.
+
+    This allows endpoints to work for both authenticated and unauthenticated users.
+
+    Args:
+        credentials: Optional HTTP Authorization credentials
+        db: Database session
+
+    Returns:
+        User object if authenticated, None otherwise
+    """
+    logger.info("user optional start=====================================")
+    logger.info(credentials)
+    if not credentials:
+        return None
+
+    try:
+        # Verify the token
+
+        token_data = await verify_token(credentials.credentials)
+
+        # Get user from database
+        stmt = select(User).where(User.id == token_data.user_id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        logger.info("user optional =", user)
+        if user and user.is_active:
+            return user  # type: ignore[no-any-return]
+
+    except Exception:
+        # If token verification fails, treat as unauthenticated
+        pass
+
+    return None
 
 
 async def get_current_active_user(

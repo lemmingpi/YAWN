@@ -29,9 +29,15 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
-    request: Request, db: AsyncSession = Depends(get_db)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """Main dashboard page showing overview statistics and recent activity.
+    """Main dashboard page - returns HTML that will check auth client-side.
+
+    The page loads without authentication and uses JavaScript to:
+    1. Check if user is authenticated (via localStorage token)
+    2. Fetch dashboard data from API if authenticated
+    3. Show login prompt if not authenticated
 
     Args:
         request: FastAPI request object
@@ -40,55 +46,12 @@ async def dashboard(
     Returns:
         Rendered dashboard HTML page
     """
-    # Get statistics
-    stats = await get_dashboard_stats(db)
-
-    # Get recent pages (last 5)
-    recent_pages_query = (
-        select(Page)
-        .where(Page.is_active.is_(True))
-        .order_by(Page.updated_at.desc())
-        .limit(5)
-    )
-    recent_pages_result = await db.execute(recent_pages_query)
-    recent_pages = recent_pages_result.scalars().all()
-
-    # Get site info and note counts for recent pages
-    for page in recent_pages:
-        # Get site info
-        site_result = await db.execute(select(Site).where(Site.id == page.site_id))
-        page.site = site_result.scalar_one_or_none()
-
-        # Get note count
-        note_count_result = await db.execute(
-            select(func.count(Note.id)).where(Note.page_id == page.id)
-        )
-        page.notes_count = note_count_result.scalar() or 0
-
-    # Get recent notes (last 5)
-    recent_notes_query = (
-        select(Note)
-        .where(Note.is_active.is_(True))
-        .order_by(Note.created_at.desc())
-        .limit(5)
-    )
-    recent_notes_result = await db.execute(recent_notes_query)
-    recent_notes = recent_notes_result.scalars().all()
-
-    # Get artifact counts for recent notes
-    for note in recent_notes:
-        artifact_count_result = await db.execute(
-            select(func.count(NoteArtifact.id)).where(NoteArtifact.note_id == note.id)
-        )
-        note.artifacts_count = artifact_count_result.scalar() or 0
-
+    # Always return the dashboard template
+    # JavaScript will handle checking auth and fetching data
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
-            "stats": stats,
-            "recent_pages": recent_pages,
-            "recent_notes": recent_notes,
             "google_client_id": GOOGLE_CLIENT_ID,
         },
     )

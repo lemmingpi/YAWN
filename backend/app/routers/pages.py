@@ -11,8 +11,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_active_user
+from ..auth_helpers import (
+    check_page_permission,
+    check_site_permission,
+    get_user_pages_query,
+)
 from ..database import get_db
-from ..models import Note, Page, PageSection, Site, User
+from ..models import Note, Page, PageSection, PermissionLevel, Site, User
 from ..schemas import (
     PageContextGenerationRequest,
     PageContextGenerationResponse,
@@ -31,30 +36,38 @@ router = APIRouter(prefix="/api/pages", tags=["pages"])
 
 @router.post("/", response_model=PageResponse, status_code=status.HTTP_201_CREATED)
 async def create_page(
-    page_data: PageCreate, db: AsyncSession = Depends(get_db)
+    page_data: PageCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> PageResponse:
     """Create a new page.
 
     Args:
         page_data: Page creation data
         db: Database session
+        current_user: Currently authenticated user
 
     Returns:
         Created page data
 
     Raises:
-        HTTPException: If associated site not found
+        HTTPException: If associated site not found or user lacks permission
     """
-    # Verify site exists
-    site_result = await db.execute(select(Site).where(Site.id == page_data.site_id))
-    if not site_result.scalar_one_or_none():
+    # Verify user has access to the site
+    has_access, _ = await check_site_permission(
+        db, current_user, page_data.site_id, PermissionLevel.EDIT
+    )
+
+    if not has_access:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Site with ID {page_data.site_id} not found",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to add pages to this site",
         )
 
-    # Create new page
-    page = Page(**page_data.model_dump())
+    # Create new page with user_id
+    page_dict = page_data.model_dump()
+    page_dict["user_id"] = current_user.id
+    page = Page(**page_dict)
     db.add(page)
     await db.commit()
     await db.refresh(page)
@@ -176,8 +189,9 @@ async def get_pages(
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     search: Optional[str] = Query(None, description="Search in URL, title, or summary"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[PageResponse]:
-    """Get all pages with optional filtering.
+    """Get all pages accessible to the user with optional filtering.
 
     Args:
         skip: Number of pages to skip for pagination
@@ -186,19 +200,17 @@ async def get_pages(
         is_active: Filter by active status
         search: Search term for URL, title, or summary
         db: Database session
+        current_user: Currently authenticated user
 
     Returns:
         List of pages with note and section counts
     """
-    # Build query
+    # Build query for user's pages (owned + shared)
     skip = skip or 0
     limit = limit or 100
-    query = select(Page)
+    query = get_user_pages_query(current_user, site_id=site_id)
 
-    # Apply filters
-    if site_id is not None:
-        query = query.where(Page.site_id == site_id)
-
+    # Apply filters (site_id already filtered in get_user_pages_query)
     if is_active is not None:
         query = query.where(Page.is_active == is_active)
 
@@ -241,19 +253,33 @@ async def get_pages(
 
 
 @router.get("/{page_id}", response_model=PageResponse)
-async def get_page(page_id: int, db: AsyncSession = Depends(get_db)) -> PageResponse:
-    """Get a specific page by ID.
+async def get_page(
+    page_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> PageResponse:
+    """Get a specific page by ID if user has access.
 
     Args:
         page_id: Page ID
         db: Database session
+        current_user: Currently authenticated user
 
     Returns:
         Page data with note and section counts
 
     Raises:
-        HTTPException: If page not found
+        HTTPException: If page not found or user lacks permission
     """
+    # Check if user has access to this page
+    has_access, _ = await check_page_permission(db, current_user, page_id)
+
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Page with ID {page_id} not found",
+        )
+
     # Get page
     result = await db.execute(select(Page).where(Page.id == page_id))
     page = result.scalar_one_or_none()
@@ -284,7 +310,10 @@ async def get_page(page_id: int, db: AsyncSession = Depends(get_db)) -> PageResp
 
 @router.put("/{page_id}", response_model=PageResponse)
 async def update_page(
-    page_id: int, page_data: PageUpdate, db: AsyncSession = Depends(get_db)
+    page_id: int,
+    page_data: PageUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> PageResponse:
     """Update a specific page.
 
@@ -292,13 +321,24 @@ async def update_page(
         page_id: Page ID
         page_data: Page update data
         db: Database session
+        current_user: Current authenticated user
 
     Returns:
         Updated page data
 
     Raises:
-        HTTPException: If page not found or site not found
+        HTTPException: If page not found or site not found or no edit permission
     """
+    # Check if user has edit permission for the page
+    has_access, _ = await check_page_permission(
+        db, current_user, page_id, PermissionLevel.EDIT
+    )
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to edit this page",
+        )
+
     # Get existing page
     result = await db.execute(select(Page).where(Page.id == page_id))
     page = result.scalar_one_or_none()
@@ -344,7 +384,11 @@ async def update_page(
 
 
 @router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_page(page_id: int, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_page(
+    page_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
     """Delete a specific page.
 
     This will cascade delete all associated notes and artifacts.
@@ -352,10 +396,21 @@ async def delete_page(page_id: int, db: AsyncSession = Depends(get_db)) -> None:
     Args:
         page_id: Page ID
         db: Database session
+        current_user: Current authenticated user
 
     Raises:
-        HTTPException: If page not found
+        HTTPException: If page not found or no admin permission
     """
+    # Check if user has admin permission for the page
+    has_access, _ = await check_page_permission(
+        db, current_user, page_id, PermissionLevel.ADMIN
+    )
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to delete this page",
+        )
+
     # Get page
     result = await db.execute(select(Page).where(Page.id == page_id))
     page = result.scalar_one_or_none()
@@ -380,6 +435,7 @@ async def get_page_notes(
     ),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[dict]:
     """Get all notes for a specific page.
 
@@ -389,16 +445,17 @@ async def get_page_notes(
         limit: Maximum number of notes to return
         is_active: Filter by active status
         db: Database session
+        current_user: Current authenticated user
 
     Returns:
         List of notes for the page
 
     Raises:
-        HTTPException: If page not found
+        HTTPException: If page not found or no access permission
     """
-    # Verify page exists
-    page_result = await db.execute(select(Page).where(Page.id == page_id))
-    if not page_result.scalar_one_or_none():
+    # Check if user has access to this page
+    has_access, _ = await check_page_permission(db, current_user, page_id)
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Page with ID {page_id} not found",
@@ -442,6 +499,7 @@ async def get_page_sections(
         100, ge=1, le=1000, description="Maximum number of sections to return"
     ),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> List[dict]:
     """Get all sections for a specific page.
 
@@ -450,16 +508,17 @@ async def get_page_sections(
         skip: Number of sections to skip for pagination
         limit: Maximum number of sections to return
         db: Database session
+        current_user: Current authenticated user
 
     Returns:
         List of sections for the page
 
     Raises:
-        HTTPException: If page not found
+        HTTPException: If page not found or no access permission
     """
-    # Verify page exists
-    page_result = await db.execute(select(Page).where(Page.id == page_id))
-    if not page_result.scalar_one_or_none():
+    # Check if user has access to this page
+    has_access, _ = await check_page_permission(db, current_user, page_id)
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Page with ID {page_id} not found",
@@ -500,6 +559,7 @@ async def summarize_page(
     page_id: int,
     summarization_data: PageSummarizationRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> PageSummarizationResponse:
     """Generate a summary for a page using an LLM provider.
 
@@ -507,22 +567,22 @@ async def summarize_page(
         page_id: Page ID
         summarization_data: Summarization request data
         db: Database session
+        current_user: Current authenticated user
 
     Returns:
         Generated summary and metadata
 
     Raises:
-        HTTPException: If page not found or LLM provider not found or generation fails
+        HTTPException: If page not found or LLM provider not found or generation fails or no access permission
     """
     import time
 
     from ..llm.base import LLMProviderError
     from ..services.artifact_service import ArtifactGenerationService
 
-    # Verify page exists
-    page_result = await db.execute(select(Page).where(Page.id == page_id))
-    page = page_result.scalar_one_or_none()
-    if not page:
+    # Check if user has access to this page
+    has_access, _ = await check_page_permission(db, current_user, page_id)
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Page with ID {page_id} not found",
@@ -568,6 +628,7 @@ async def preview_page_context(
     page_id: int,
     request: PageContextPreviewRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> PageContextPreviewResponse:
     """Preview the prompt that would be sent to the LLM for context generation.
 
@@ -578,19 +639,19 @@ async def preview_page_context(
         page_id: Page ID
         request: Preview request with optional custom instructions and page source
         db: Database session
+        current_user: Current authenticated user
 
     Returns:
         Rendered prompt preview
 
     Raises:
-        HTTPException: If page not found
+        HTTPException: If page not found or no access permission
     """
     from ..services.page_context_service import PageContextService
 
-    # Verify page exists
-    page_result = await db.execute(select(Page).where(Page.id == page_id))
-    page = page_result.scalar_one_or_none()
-    if not page:
+    # Check if user has access to this page
+    has_access, _ = await check_page_permission(db, current_user, page_id)
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Page with ID {page_id} not found",
@@ -624,6 +685,7 @@ async def generate_page_context(
     page_id: int,
     request: PageContextGenerationRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ) -> PageContextGenerationResponse:
     """Generate AI-powered custom context for a page.
 
@@ -636,20 +698,20 @@ async def generate_page_context(
         page_id: Page ID
         request: Context generation request with optional custom instructions
         db: Database session
+        current_user: Current authenticated user
 
     Returns:
         Generated context, detected content type, and generation metadata
 
     Raises:
-        HTTPException: If page not found or generation fails
+        HTTPException: If page not found or generation fails or no access permission
     """
     from ..services.gemini_provider import GeminiProviderError
     from ..services.page_context_service import PageContextService
 
-    # Verify page exists
-    page_result = await db.execute(select(Page).where(Page.id == page_id))
-    page = page_result.scalar_one_or_none()
-    if not page:
+    # Check if user has access to this page
+    has_access, _ = await check_page_permission(db, current_user, page_id)
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Page with ID {page_id} not found",

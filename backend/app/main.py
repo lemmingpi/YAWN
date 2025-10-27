@@ -30,6 +30,7 @@ from .middleware import (  # noqa: E402
 from .routers import (  # noqa: E402
     artifacts,
     auto_notes,
+    dashboard,
     llm_providers,
     notes,
     pages,
@@ -133,6 +134,7 @@ app.include_router(artifacts.router)
 app.include_router(auto_notes.router)
 app.include_router(llm_providers.router)
 app.include_router(sharing.router)
+app.include_router(dashboard.router)
 
 # Include web dashboard router
 app.include_router(web.router)
