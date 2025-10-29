@@ -23,7 +23,6 @@ from ..models import (
     UserSiteShare,
 )
 from ..schemas import (
-    BulkNoteCreate,
     BulkNoteCreateWithURL,
     BulkNoteResponse,
     NoteCreate,
@@ -176,13 +175,17 @@ async def get_or_create_page_by_url(
     # Normalize the URL for consistent storage
     from urllib.parse import urlparse, urlunparse
 
+    from ..auth_helpers import get_user_pages_query, get_user_sites_query
+
     parsed = urlparse(url)
     normalized_url = urlunparse(parsed._replace(fragment=""))
     if normalized_url.endswith("/") and len(normalized_url) > 1:
         normalized_url = normalized_url[:-1]
 
-    # Try to find existing page
-    page_result = await db.execute(select(Page).where(Page.url == normalized_url))
+    # Try to find existing page that the user has access to (owned or shared)
+    user_pages_query = get_user_pages_query(user)
+    page_query = user_pages_query.where(Page.url == normalized_url)
+    page_result = await db.execute(page_query)
     existing_page = page_result.scalar_one_or_none()
 
     if existing_page:
@@ -193,8 +196,11 @@ async def get_or_create_page_by_url(
     if not domain:
         raise ValueError("Invalid URL: cannot extract domain")
 
-    # Try to find existing site
-    site_result = await db.execute(select(Site).where(Site.domain == domain))
+    # Try to find existing site that the user has access to (owned or shared)
+
+    user_sites_query = get_user_sites_query(user)
+    site_query = user_sites_query.where(Site.domain == domain)
+    site_result = await db.execute(site_query)
     existing_site = site_result.scalar_one_or_none()
 
     if not existing_site:
@@ -242,6 +248,11 @@ async def create_note_with_url(
     """
     try:
         print("Creating note with URL for User:", current_user.id)
+
+        # Validate URL is provided
+        if not note_data.url:
+            raise HTTPException(status_code=400, detail="URL is required")
+
         # Get or create page (and site if needed)
         page = await get_or_create_page_by_url(
             db, note_data.url, current_user, note_data.page_title
@@ -766,6 +777,10 @@ async def create_notes_bulk_with_url(
         print(f"Note data: {note_data.model_dump()}")
 
         try:
+            # Validate URL is provided
+            if not note_data.url:
+                raise ValueError("URL is required")
+
             # Get or create page (use cache to avoid duplicates)
             cache_key = note_data.url
             if cache_key in page_cache:
@@ -880,120 +895,5 @@ async def create_notes_bulk_with_url(
     if errors:
         print(f"Error details: {errors}")
     print("=== END ===\n")
-
-    return BulkNoteResponse(created_notes=created_notes, errors=errors)
-
-
-@router.post("/bulk", response_model=BulkNoteResponse)
-async def create_notes_bulk(
-    bulk_data: BulkNoteCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-) -> BulkNoteResponse:
-    """Create or update multiple notes in a single request (upsert operation).
-
-    Uses server_link_id as the unique identifier for upsert operations.
-    If a note with the same server_link_id exists, it will be updated.
-    Otherwise, a new note will be created.
-
-    Args:
-        bulk_data: Bulk note creation data
-        db: Database session
-
-    Returns:
-        Results of bulk upsert operation with any errors
-
-    Raises:
-        HTTPException: If any pages not found
-    """
-    created_notes = []
-    errors = []
-
-    # Verify all pages exist
-    page_ids = list(set(note.page_id for note in bulk_data.notes))
-    page_results = await db.execute(select(Page.id).where(Page.id.in_(page_ids)))
-    existing_page_ids = set(page_results.scalars().all())
-
-    # Get all server_link_ids to check for existing notes
-    server_link_ids = [
-        note.server_link_id for note in bulk_data.notes if note.server_link_id
-    ]
-    existing_notes_query = select(Note).where(Note.server_link_id.in_(server_link_ids))
-    existing_notes_result = await db.execute(existing_notes_query)
-    existing_notes = {
-        note.server_link_id: note for note in existing_notes_result.scalars().all()
-    }
-
-    for i, note_data in enumerate(bulk_data.notes):
-        try:
-            if note_data.page_id not in existing_page_ids:
-                errors.append(
-                    {
-                        "index": i,
-                        "error": f"Page with ID {note_data.page_id} not found",
-                        "note_data": note_data.model_dump(),
-                    }
-                )
-                continue
-
-            # Check if note exists by server_link_id
-            existing_note = None
-            if note_data.server_link_id:
-                existing_note = existing_notes.get(note_data.server_link_id)
-
-            if existing_note:
-                # Check access to update existing note
-                if not await check_note_access(
-                    db, existing_note, current_user, PermissionLevel.EDIT
-                ):
-                    errors.append(
-                        {
-                            "index": i,
-                            "error": "Insufficient permissions to update this note",
-                            "note_data": note_data.model_dump(),
-                        }
-                    )
-                    continue
-
-                # Update existing note
-                update_data = note_data.model_dump(exclude_unset=True)
-                for field, value in update_data.items():
-                    setattr(existing_note, field, value)
-
-                await db.flush()  # Flush to ensure updates are applied
-
-                # Get artifact count for the updated note
-                artifact_count_result = await db.execute(
-                    select(func.count(NoteArtifact.id)).where(
-                        NoteArtifact.note_id == existing_note.id
-                    )
-                )
-                artifact_count = artifact_count_result.scalar() or 0
-
-                note_response = NoteResponse.model_validate(existing_note)
-                note_response.artifacts_count = artifact_count
-                created_notes.append(note_response)
-            else:
-                # Create new note associated with current user
-                note_dict = note_data.model_dump()
-                note_dict["user_id"] = current_user.id
-                note = Note(**note_dict)
-                db.add(note)
-                await db.flush()  # Flush to get ID without committing
-
-                note_response = NoteResponse.model_validate(note)
-                note_response.artifacts_count = 0
-                created_notes.append(note_response)
-
-        except Exception as e:
-            errors.append(
-                {"index": i, "error": str(e), "note_data": note_data.model_dump()}
-            )
-
-    # Commit all successful operations
-    if created_notes:
-        await db.commit()
-    else:
-        await db.rollback()
 
     return BulkNoteResponse(created_notes=created_notes, errors=errors)

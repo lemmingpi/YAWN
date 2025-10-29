@@ -104,8 +104,8 @@ class Site(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     domain: Mapped[str] = mapped_column(
-        String(255), unique=True, index=True, nullable=False
-    )
+        String(255), index=True, nullable=False
+    )  # Unique per user, not globally
     user_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
@@ -123,10 +123,11 @@ class Site(Base, TimestampMixin):
         "UserSiteShare", back_populates="site", cascade="all, delete-orphan"
     )
 
-    # Add index for user_id for performance
+    # Add index for user_id for performance and composite unique constraint
     __table_args__ = (
         Index("idx_site_user_id", "user_id"),
         Index("idx_site_domain_user", "domain", "user_id"),
+        Index("ix_sites_domain_user_unique", "domain", "user_id", unique=True),
     )
 
 

@@ -214,6 +214,7 @@ class NoteBase(BaseModel):
     server_link_id: Optional[str] = Field(
         None, max_length=100, description="External reference ID"
     )
+    url: Optional[str] = Field(None, description="URL of the page this note belongs to")
 
 
 class NoteCreate(NoteBase):
@@ -225,7 +226,6 @@ class NoteCreate(NoteBase):
 class NoteCreateWithURL(NoteBase):
     """Schema for creating a new note with URL (auto-creates page/site)."""
 
-    url: str = Field(..., description="URL of the page for this note")
     page_title: Optional[str] = Field(None, description="Title of the page (optional)")
 
 
@@ -250,7 +250,6 @@ class NoteResponse(NoteBase, TimestampSchema):
     artifacts_count: Optional[int] = Field(
         None, description="Number of artifacts generated for this note"
     )
-    url: Optional[str] = Field(None, description="URL of the page this note belongs to")
 
     class Config:
         from_attributes = True
@@ -645,14 +644,6 @@ class PageContextPreviewResponse(BaseModel):
 
 
 # Bulk operation schemas
-class BulkNoteCreate(BaseModel):
-    """Schema for bulk note creation."""
-
-    notes: List[NoteCreate] = Field(
-        ..., min_length=1, max_length=100, description="List of notes to create"
-    )
-
-
 class BulkNoteCreateWithURL(BaseModel):
     """Schema for bulk note creation with URLs."""
 
