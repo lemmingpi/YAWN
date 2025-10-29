@@ -849,6 +849,7 @@ async function initializeSyncSection() {
     const syncSectionElement = document.getElementById("sync-section");
     const copyServerToLocalBtn = document.getElementById("copy-server-to-local-btn");
     const copyLocalToServerBtn = document.getElementById("copy-local-to-server-btn");
+    const deleteAllServerDataBtn = document.getElementById("delete-all-server-data-btn");
 
     if (!syncSectionElement) {
       console.log("[Popup] Sync section not found in DOM");
@@ -870,6 +871,13 @@ async function initializeSyncSection() {
       if (copyLocalToServerBtn) {
         copyLocalToServerBtn.removeEventListener("click", handleCopyLocalToServer);
         copyLocalToServerBtn.addEventListener("click", handleCopyLocalToServer);
+      }
+      if (deleteAllServerDataBtn) {
+        // Enable the delete button
+        deleteAllServerDataBtn.classList.remove("disabled");
+        deleteAllServerDataBtn.removeAttribute("title");
+        deleteAllServerDataBtn.removeEventListener("click", handleDeleteAllServerData);
+        deleteAllServerDataBtn.addEventListener("click", handleDeleteAllServerData);
       }
 
       console.log("[Popup] Sync section initialized");
@@ -983,6 +991,77 @@ async function handleCopyLocalToServer() {
     const btn = document.getElementById("copy-local-to-server-btn");
     if (btn) {
       btn.textContent = "Copy Local Notes to Server";
+      btn.disabled = false;
+    }
+  }
+}
+
+/**
+ * Handles delete all server data button click with double confirmation
+ * @returns {Promise<void>}
+ */
+async function handleDeleteAllServerData() {
+  try {
+    console.log("[Popup] Delete all server data button clicked");
+
+    const btn = document.getElementById("delete-all-server-data-btn");
+    if (!btn) return;
+
+    // First confirmation dialog
+    const firstConfirm = confirm(
+      "WARNING: This will permanently delete ALL your data from the server:\n\n" +
+        "• All sites\n" +
+        "• All pages\n" +
+        "• All notes\n" +
+        "• All shares\n" +
+        "• All artifacts\n\n" +
+        "This action is IRREVERSIBLE and UNRECOVERABLE.\n\n" +
+        "Are you sure you want to continue?",
+    );
+
+    if (!firstConfirm) {
+      console.log("[Popup] Delete cancelled by user (first confirmation)");
+      return;
+    }
+
+    // Second confirmation dialog - require typing confirmation
+    const confirmation = prompt(
+      "FINAL WARNING: This is your last chance to cancel.\n\n" +
+        "All your server data will be permanently deleted.\n\n" +
+        'To confirm, type "DELETE ALL MY DATA" (without quotes):',
+    );
+
+    if (confirmation !== "DELETE ALL MY DATA") {
+      console.log("[Popup] Delete cancelled by user (second confirmation failed)");
+      showPopupMessage("Delete cancelled - confirmation text did not match", "info");
+      return;
+    }
+
+    // Disable button during operation
+    const originalText = btn.textContent;
+    btn.textContent = "Deleting...";
+    btn.disabled = true;
+
+    // Call server API to delete all user data
+    const result = await ServerAPI.deleteAllUserData();
+
+    if (result.success) {
+      showPopupMessage("All server data has been permanently deleted. You have been signed out.", "success");
+      console.log("[Popup] Delete all server data completed successfully");
+
+      // Update UI to reflect signed-out state
+      await updateUserStatus();
+      await updateStatsDisplay();
+    } else {
+      showPopupMessage("Failed to delete server data: " + (result.error || "Unknown error"), "error");
+    }
+  } catch (error) {
+    logError("Error deleting all server data", error);
+    showPopupMessage("Failed to delete server data: " + error.message, "error");
+  } finally {
+    const btn = document.getElementById("delete-all-server-data-btn");
+    if (btn) {
+      btn.textContent = "Delete All Server Data";
       btn.disabled = false;
     }
   }

@@ -717,6 +717,27 @@ const ServerAPI = {
     this.configLastFetched = 0;
     console.log("[YAWN] Cleared configuration cache");
   },
+
+  /**
+   * Get current user information
+   * @returns {Promise<Object>} User information
+   */
+  async getCurrentUser() {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated");
+      }
+
+      const response = await this.makeRequest("/users/me");
+      const user = await response.json();
+
+      return user;
+    } catch (error) {
+      console.error("[YAWN] Failed to get current user:", error);
+      throw error;
+    }
+  },
   // ===== AI CONTEXT GENERATION API ENDPOINTS =====
 
   /**
@@ -1320,6 +1341,54 @@ const ServerAPI = {
         success: false,
         error: error.message,
         notes_count: 0,
+      };
+    }
+  },
+
+  /**
+   * Delete all user data from server (hard delete)
+   * This will delete all sites, pages, notes, shares, and artifacts for the current user
+   * @returns {Promise<Object>} Result object with success status
+   */
+  async deleteAllUserData() {
+    try {
+      // Verify user is authenticated
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot delete user data");
+      }
+
+      // Get current user info to get user ID
+      const userInfo = await this.getCurrentUser();
+      if (!userInfo || !userInfo.id) {
+        throw new Error("Failed to get current user information");
+      }
+
+      // Call DELETE /api/users/{user_id} endpoint
+      const response = await this.makeRequest(`/users/${userInfo.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to delete user data: ${response.status}`);
+      }
+
+      console.log("[YAWN] Successfully deleted all user data");
+
+      // Clear local authentication state after successful deletion
+      if (typeof AuthManager !== "undefined") {
+        await AuthManager.signOut();
+      }
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error("[YAWN] Failed to delete user data:", error);
+      return {
+        success: false,
+        error: error.message,
       };
     }
   },
