@@ -997,7 +997,7 @@ async function handleCopyLocalToServer() {
 }
 
 /**
- * Handles delete all server data button click with double confirmation
+ * Handles delete all server data button click with typed confirmation
  * @returns {Promise<void>}
  */
 async function handleDeleteAllServerData() {
@@ -1007,8 +1007,8 @@ async function handleDeleteAllServerData() {
     const btn = document.getElementById("delete-all-server-data-btn");
     if (!btn) return;
 
-    // First confirmation dialog
-    const firstConfirm = confirm(
+    // Single confirmation dialog requiring typed confirmation
+    const confirmation = prompt(
       "WARNING: This will permanently delete ALL your data from the server:\n\n" +
         "• All sites\n" +
         "• All pages\n" +
@@ -1016,24 +1016,15 @@ async function handleDeleteAllServerData() {
         "• All shares\n" +
         "• All artifacts\n\n" +
         "This action is IRREVERSIBLE and UNRECOVERABLE.\n\n" +
-        "Are you sure you want to continue?",
-    );
-
-    if (!firstConfirm) {
-      console.log("[Popup] Delete cancelled by user (first confirmation)");
-      return;
-    }
-
-    // Second confirmation dialog - require typing confirmation
-    const confirmation = prompt(
-      "FINAL WARNING: This is your last chance to cancel.\n\n" +
-        "All your server data will be permanently deleted.\n\n" +
         'To confirm, type "DELETE ALL MY DATA" (without quotes):',
     );
 
     if (confirmation !== "DELETE ALL MY DATA") {
-      console.log("[Popup] Delete cancelled by user (second confirmation failed)");
-      showPopupMessage("Delete cancelled - confirmation text did not match", "info");
+      console.log("[Popup] Delete cancelled by user - confirmation text did not match");
+      if (confirmation !== null) {
+        // User entered something but it didn't match (null means they clicked Cancel)
+        showPopupMessage("Delete cancelled - confirmation text did not match", "info");
+      }
       return;
     }
 
