@@ -11,7 +11,7 @@
  */
 const ServerAPI = {
   // Default configuration
-  DEFAULT_SERVER_URL: "http://localhost:8000/api",
+  DEFAULT_SERVER_URL: "https://yawn-api-1040678620671.us-central1.run.app/api",
   REQUEST_TIMEOUT: 30000, // 30 seconds
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000, // 1 second
@@ -25,7 +25,8 @@ const ServerAPI = {
 
   /**
    * Get server configuration from storage with caching
-   * @returns {Promise<Object>} Server configuration
+   * Uses base-utils.js for config access
+   * @returns {Promise<Object>} Server configuration with serverUrl, enabled, and useChromeSync
    */
   async getConfig() {
     const now = Date.now();
@@ -36,10 +37,13 @@ const ServerAPI = {
     }
 
     try {
+      // Get config from base-utils
       const config = await getWNConfig();
+
       this.cachedConfig = {
         serverUrl: config.syncServerUrl || this.DEFAULT_SERVER_URL,
         enabled: !!config.syncServerUrl, // Enable server sync if URL is configured
+        useChromeSync: config.useChromeSync || false, // Which chrome storage to use
       };
       this.configLastFetched = now;
       return this.cachedConfig;
@@ -48,6 +52,7 @@ const ServerAPI = {
       return {
         serverUrl: this.DEFAULT_SERVER_URL,
         enabled: false,
+        useChromeSync: false,
       };
     }
   },
@@ -1144,6 +1149,178 @@ const ServerAPI = {
     } catch (error) {
       console.error("[YAWN] Failed to bulk share site:", error);
       throw error;
+    }
+  },
+
+  // ===== DATA SYNC HELPERS =====
+
+  /**
+   * Copy all server notes to local storage
+   * Uses existing GET /api/notes/ endpoint
+   * Directly accesses chrome.storage without using shared-utils
+   * @returns {Promise<Object>} Result with success status and notes count
+   */
+  async copyServerNotesToLocal() {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot copy server notes");
+      }
+
+      // Fetch all notes from server using existing endpoint
+      // Use high limit to get all notes (API supports up to 1000 per request)
+      const response = await this.makeRequest("/notes?limit=1000&is_active=true");
+      const serverNotes = await response.json();
+
+      if (!serverNotes || !Array.isArray(serverNotes)) {
+        throw new Error("Invalid response from server");
+      }
+
+      // Get config to determine which storage to use
+      const config = await this.getConfig();
+      const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+
+      // Get current local notes directly from chrome storage
+      const localNotes = await new Promise(resolve => {
+        storage.get([STORAGE_KEYS.NOTES_KEY], result => {
+          if (chrome.runtime.lastError) {
+            console.error("[YAWN] Failed to get local notes:", chrome.runtime.lastError);
+            resolve({});
+          } else {
+            resolve(result[STORAGE_KEYS.NOTES_KEY] || {});
+          }
+        });
+      });
+
+      // Convert server notes to extension format and group by URL
+      const notesByUrl = {};
+      for (const serverNote of serverNotes) {
+        const extensionNote = this.convertFromServerFormat(serverNote);
+
+        // Get the URL from the page relationship (server notes have page info)
+        const url = serverNote.url || "";
+        extensionNote.url = url;
+
+        // Normalize URL for consistent storage keys
+        const normalizedUrl = normalizeUrlForNoteStorage(url);
+
+        if (!notesByUrl[normalizedUrl]) {
+          notesByUrl[normalizedUrl] = [];
+        }
+        notesByUrl[normalizedUrl].push(extensionNote);
+      }
+
+      // Merge with local notes, replacing with server notes
+      Object.keys(notesByUrl).forEach(normalizedUrl => {
+        localNotes[normalizedUrl] = notesByUrl[normalizedUrl];
+      });
+
+      // Save back to local storage directly (no server sync)
+      const saveSuccess = await new Promise(resolve => {
+        storage.set({ [STORAGE_KEYS.NOTES_KEY]: localNotes }, () => {
+          if (chrome.runtime.lastError) {
+            console.error("[YAWN] Failed to set notes locally:", chrome.runtime.lastError);
+            resolve(false);
+          } else {
+            resolve(true);
+          }
+        });
+      });
+
+      if (!saveSuccess) {
+        throw new Error("Failed to save notes to local storage");
+      }
+
+      console.log(`[YAWN] Copied ${serverNotes.length} notes from server to local`);
+      return {
+        success: true,
+        notes_count: serverNotes.length,
+      };
+    } catch (error) {
+      console.error("[YAWN] Failed to copy server notes to local:", error);
+      return {
+        success: false,
+        error: error.message,
+        notes_count: 0,
+      };
+    }
+  },
+
+  /**
+   * Copy all local notes to server storage
+   * Uses existing POST /api/notes/bulk-with-url endpoint
+   * Directly accesses chrome.storage without using shared-utils
+   * @returns {Promise<Object>} Result with success status and notes count
+   */
+  async copyLocalNotesToServer() {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot copy local notes to server");
+      }
+
+      // Get config to determine which storage to use
+      const config = await this.getConfig();
+      const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+
+      // Get all local notes directly from chrome storage
+      const localNotes = await new Promise(resolve => {
+        storage.get([STORAGE_KEYS.NOTES_KEY], result => {
+          if (chrome.runtime.lastError) {
+            console.error("[YAWN] Failed to get local notes:", chrome.runtime.lastError);
+            resolve({});
+          } else {
+            resolve(result[STORAGE_KEYS.NOTES_KEY] || {});
+          }
+        });
+      });
+
+      // Flatten notes structure and convert to server format
+      const allNotes = [];
+      Object.keys(localNotes).forEach(url => {
+        const urlNotes = localNotes[url] || [];
+        urlNotes.forEach(note => {
+          // Convert to server format with URL
+          const serverNote = this.convertToServerFormatWithURL(note, url);
+          allNotes.push(serverNote);
+        });
+      });
+
+      if (allNotes.length === 0) {
+        console.log("[YAWN] No local notes to copy");
+        return {
+          success: true,
+          notes_count: 0,
+        };
+      }
+
+      // Use existing bulk create endpoint
+      const response = await this.makeRequest("/notes/bulk-with-url", {
+        method: "POST",
+        body: JSON.stringify({ notes: allNotes }),
+      });
+
+      const result = await response.json();
+
+      const successCount = result.created_notes ? result.created_notes.length : 0;
+      console.log(`[YAWN] Copied ${successCount} notes from local to server`);
+
+      if (result.errors && result.errors.length > 0) {
+        console.warn(`[YAWN] ${result.errors.length} errors occurred:`, result.errors);
+      }
+
+      return {
+        success: true,
+        notes_count: successCount,
+        errors: result.errors || [],
+      };
+    } catch (error) {
+      console.error("[YAWN] Failed to copy local notes to server:", error);
+      return {
+        success: false,
+        error: error.message,
+        notes_count: 0,
+      };
     }
   },
 };

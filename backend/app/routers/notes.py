@@ -486,7 +486,10 @@ async def get_notes(
     # Add pagination and ordering
     query = query.offset(skip).limit(limit).order_by(Note.created_at.desc())
 
-    # Execute query
+    # Execute query with joinedload for pages
+    from sqlalchemy.orm import selectinload
+
+    query = query.options(selectinload(Note.page))
     result = await db.execute(query)
     notes = result.scalars().all()
 
@@ -500,6 +503,8 @@ async def get_notes(
 
         note_response = NoteResponse.model_validate(note)
         note_response.artifacts_count = artifact_count
+        # Add URL from page relationship
+        note_response.url = note.page.url if note.page else None
         note_responses.append(note_response)
 
     return note_responses

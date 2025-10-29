@@ -4,6 +4,7 @@
  */
 
 // Import shared utilities
+importScripts("./base-utils.js");
 importScripts("./shared-utils.js");
 importScripts("./auth-manager.js");
 importScripts("./server-api.js");

@@ -18,6 +18,7 @@
       "js": [
         "libs/marked.min.js",
         "libs/dompurify.min.js",
+        "base-utils.js",
         "note-state.js",
         "color-utils.js",
         "color-dropdown.js",

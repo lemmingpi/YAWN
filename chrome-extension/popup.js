@@ -448,6 +448,9 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // Initialize sharing functionality
     await initializeSharingSection();
+
+    // Initialize sync functionality
+    await initializeSyncSection();
   } catch (error) {
     logError("Error during popup initialization", error);
   }
@@ -835,3 +838,152 @@ async function updateSharingOnAuthChange() {
 // Storage listener already handles auth changes and updates sharing section
 
 // Banner functions removed - functionality no longer needed
+
+// ===== SYNC FUNCTIONALITY =====
+
+/**
+ * Initialize sync section in popup
+ */
+async function initializeSyncSection() {
+  try {
+    const syncSectionElement = document.getElementById("sync-section");
+    const copyServerToLocalBtn = document.getElementById("copy-server-to-local-btn");
+    const copyLocalToServerBtn = document.getElementById("copy-local-to-server-btn");
+
+    if (!syncSectionElement) {
+      console.log("[Popup] Sync section not found in DOM");
+      return;
+    }
+
+    // Check if sync is available (user authenticated and server configured)
+    const canSync = await checkSyncCapability();
+
+    if (canSync) {
+      // Show sync section
+      syncSectionElement.style.display = "block";
+
+      // Set up event listeners (remove existing listeners first to avoid duplicates)
+      if (copyServerToLocalBtn) {
+        copyServerToLocalBtn.removeEventListener("click", handleCopyServerToLocal);
+        copyServerToLocalBtn.addEventListener("click", handleCopyServerToLocal);
+      }
+      if (copyLocalToServerBtn) {
+        copyLocalToServerBtn.removeEventListener("click", handleCopyLocalToServer);
+        copyLocalToServerBtn.addEventListener("click", handleCopyLocalToServer);
+      }
+
+      console.log("[Popup] Sync section initialized");
+    } else {
+      // Hide sync section if user not authenticated
+      syncSectionElement.style.display = "none";
+      console.log("[Popup] Sync section hidden - authentication required");
+    }
+  } catch (error) {
+    logError("Error initializing sync section", error);
+  }
+}
+
+/**
+ * Check if sync capabilities are available
+ * @returns {Promise<boolean>} True if sync is available
+ */
+async function checkSyncCapability() {
+  try {
+    // Check if user is authenticated via background script
+    const authResponse = await chrome.runtime.sendMessage({
+      action: "AUTHMANAGER_isAuthenticated",
+    });
+
+    if (!authResponse.success || !authResponse.data) {
+      return false;
+    }
+
+    // Check if server sync is configured
+    const config = await getWNConfig();
+    if (!config.syncServerUrl) {
+      return false;
+    }
+
+    // Check if ServerAPI is available
+    if (typeof ServerAPI === "undefined") {
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[Popup] Error checking sync capability:", error);
+    return false;
+  }
+}
+
+/**
+ * Handle copy server notes to local button click
+ */
+async function handleCopyServerToLocal() {
+  try {
+    console.log("[Popup] Copy server to local button clicked");
+
+    const btn = document.getElementById("copy-server-to-local-btn");
+    if (!btn) return;
+
+    // Disable button during operation
+    const originalText = btn.textContent;
+    btn.textContent = "Copying...";
+    btn.disabled = true;
+
+    // Call server API to get all notes
+    const result = await ServerAPI.copyServerNotesToLocal();
+
+    if (result.success) {
+      showPopupMessage(`Successfully copied ${result.notes_count} notes from server to local storage`, "success");
+      console.log("[Popup] Server to local copy completed:", result);
+    } else {
+      showPopupMessage("Failed to copy notes: " + (result.error || "Unknown error"), "error");
+    }
+  } catch (error) {
+    logError("Error copying server notes to local", error);
+    showPopupMessage("Failed to copy notes: " + error.message, "error");
+  } finally {
+    const btn = document.getElementById("copy-server-to-local-btn");
+    if (btn) {
+      btn.textContent = "Copy Server Notes to Local";
+      btn.disabled = false;
+    }
+  }
+}
+
+/**
+ * Handle copy local notes to server button click
+ */
+async function handleCopyLocalToServer() {
+  try {
+    console.log("[Popup] Copy local to server button clicked");
+
+    const btn = document.getElementById("copy-local-to-server-btn");
+    if (!btn) return;
+
+    // Disable button during operation
+    const originalText = btn.textContent;
+    btn.textContent = "Copying...";
+    btn.disabled = true;
+
+    // Call server API to copy all local notes to server
+    const result = await ServerAPI.copyLocalNotesToServer();
+
+    if (result.success) {
+      showPopupMessage(`Successfully copied ${result.notes_count} notes from local to server storage`, "success");
+      console.log("[Popup] Local to server copy completed:", result);
+    } else {
+      showPopupMessage("Failed to copy notes: " + (result.error || "Unknown error"), "error");
+    }
+  } catch (error) {
+    logError("Error copying local notes to server", error);
+    showPopupMessage("Failed to copy notes: " + error.message, "error");
+  } finally {
+    const btn = document.getElementById("copy-local-to-server-btn");
+    if (btn) {
+      btn.textContent = "Copy Local Notes to Server";
+      btn.disabled = false;
+    }
+  }
+}

@@ -8,7 +8,6 @@
 // Constants
 const EXTENSION_CONSTANTS = {
   STATS_KEY: "extensionStats",
-  NOTES_KEY: "webNotes",
   SCRIPT_INJECTION_TIMEOUT: 5000,
   DEFAULT_STATS: {
     installDate: Date.now(),
@@ -76,54 +75,6 @@ async function setStats(stats) {
 }
 
 /**
- * Gets configuration from chrome.storage.sync
- * @returns {Promise<Object>} Promise resolving to config object
- */
-async function getWNConfig() {
-  try {
-    return new Promise(resolve => {
-      chrome.storage.sync.get(["syncServerUrl", "useChromeSync"], result => {
-        if (chrome.runtime.lastError) {
-          logError("Failed to get config", chrome.runtime.lastError);
-          resolve({ syncServerUrl: "", useChromeSync: false });
-        } else {
-          resolve({
-            syncServerUrl: result.syncServerUrl || "",
-            useChromeSync: result.useChromeSync || false,
-          });
-        }
-      });
-    });
-  } catch (error) {
-    logError("Error in getConfig", error);
-    return { syncServerUrl: "", useChromeSync: false };
-  }
-}
-
-/**
- * Saves configuration to chrome.storage.sync
- * @param {Object} config - Configuration object
- * @returns {Promise<boolean>} Promise resolving to success status
- */
-async function setWNConfig(config) {
-  try {
-    return new Promise(resolve => {
-      chrome.storage.sync.set(config, () => {
-        if (chrome.runtime.lastError) {
-          logError("Failed to set config", chrome.runtime.lastError);
-          resolve(false);
-        } else {
-          resolve(true);
-        }
-      });
-    });
-  } catch (error) {
-    logError("Error in setConfig", error);
-    return false;
-  }
-}
-
-/**
  * Check if server sync is enabled
  * @returns {Promise<boolean>} True if server sync is enabled
  */
@@ -166,39 +117,6 @@ async function isServerAuthenticated() {
 }
 
 /**
- * Convert server note format to extension format
- * @param {Object} serverNote - Note in server format
- * @returns {Object} Note in extension format
- */
-function convertNoteFromServerFormat(serverNote) {
-  const anchorData = serverNote.anchor_data || {};
-
-  return {
-    id: serverNote.id, // Use database ID directly
-    serverId: serverNote.id, // Keep for backwards compatibility
-    content: serverNote.content || "",
-    url: "", // Will be set by calling code
-    elementSelector: anchorData.elementSelector || null,
-    elementXPath: anchorData.elementXPath || null,
-    fallbackPosition: {
-      x: serverNote.position_x || 0,
-      y: serverNote.position_y || 0,
-    },
-    offsetX: anchorData.offsetX || 0,
-    offsetY: anchorData.offsetY || 0,
-    timestamp: new Date(serverNote.created_at).getTime(),
-    lastEdited: new Date(serverNote.updated_at).getTime(),
-    isVisible: serverNote.is_active !== false,
-    backgroundColor: anchorData.backgroundColor || "light-yellow",
-    selectionData: anchorData.selectionData || null,
-    isMarkdown: anchorData.isMarkdown || false,
-    contentHash: anchorData.contentHash || null,
-    // Mark as synced with server
-    isSynced: true,
-  };
-}
-
-/**
  * Gets notes from appropriate storage based on configuration
  * @returns {Promise<Object>} Promise resolving to notes object organized by URL
  */
@@ -235,15 +153,15 @@ async function getNotes(urlOverride = null) {
     const isAuthenticated = await isServerAuthenticated();
 
     console.log(`[YAWN] Server sync enabled: ${isServerEnabled}, authenticated: ${isAuthenticated}`);
+    const currentUrl = urlOverride || (typeof window !== "undefined" ? window.location?.href : null);
+    const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
 
     // If authenticated with server, fetch from server only
     if (isServerEnabled && isAuthenticated) {
       try {
-        const currentUrl = urlOverride || (typeof window !== "undefined" ? window.location?.href : null);
         if (currentUrl) {
           const response = await chrome.runtime.sendMessage({ action: "API_fetchNotesForPage", url: currentUrl });
           const serverNotes = response.success ? response.data : [];
-          const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
 
           // Convert server notes to extension format
           const convertedNotes = serverNotes.map(serverNote => convertNoteFromServerFormat(serverNote));
@@ -270,19 +188,19 @@ async function getNotes(urlOverride = null) {
     const config = await getWNConfig();
     const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
 
-    const localNotes = await new Promise(resolve => {
-      storage.get([EXTENSION_CONSTANTS.NOTES_KEY], result => {
+    const localNotesMap = await new Promise(resolve => {
+      storage.get([STORAGE_KEYS.NOTES_KEY], result => {
         if (chrome.runtime.lastError) {
           console.error("[YAWN] Failed to get local notes", chrome.runtime.lastError);
           resolve({});
         } else {
-          resolve(result[EXTENSION_CONSTANTS.NOTES_KEY] || {});
+          resolve(result[STORAGE_KEYS.NOTES_KEY] || {});
         }
       });
     });
-
+    const localNotes = localNotesMap[normalizedUrl] || [];
     console.log(`[YAWN] Loaded ${localNotes.length} notes from local storage`);
-    return localNotes;
+    return localNotesMap;
   } catch (error) {
     logError("Error in getNotes", error);
     return {};
@@ -329,7 +247,7 @@ async function setNotes(notes) {
     const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
 
     const localSuccess = await new Promise(resolve => {
-      storage.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, () => {
+      storage.set({ [STORAGE_KEYS.NOTES_KEY]: notes }, () => {
         if (chrome.runtime.lastError) {
           console.error("[YAWN] Failed to set notes locally:", chrome.runtime.lastError);
           resolve(false);
@@ -417,37 +335,6 @@ async function updateNote(url, noteId, noteData) {
 }
 
 /**
- * Normalize URL for note storage by removing anchor fragments while preserving query parameters
- * This allows notes to be visible across anchor navigation within the same page
- * @param {string} url - The URL to normalize
- * @returns {string} Normalized URL without anchor fragment
- */
-function normalizeUrlForNoteStorage(url) {
-  try {
-    if (!url || typeof url !== "string") {
-      logError("Invalid URL for normalization", url);
-      return url || "";
-    }
-
-    const urlObj = new URL(url);
-    // Remove the hash/fragment (everything after #)
-    urlObj.hash = "";
-
-    // Keep query parameters as they're important for dynamic page content
-    return urlObj.toString();
-  } catch (error) {
-    // If URL parsing fails, try simple string manipulation as fallback
-    logError("URL parsing failed, using string fallback", error);
-
-    const hashIndex = url.indexOf("#");
-    if (hashIndex !== -1) {
-      return url.substring(0, hashIndex);
-    }
-    return url;
-  }
-}
-
-/**
  * Find all URLs in storage that match the given URL (ignoring anchors)
  * This handles migration from exact URL matching to normalized URL matching
  * @param {string} targetUrl - The URL to find matches for
@@ -459,10 +346,10 @@ function findMatchingUrlsInStorage(targetUrl, notes) {
     const normalizedTarget = normalizeUrlForNoteStorage(targetUrl);
     const matchingUrls = [];
 
-    for (const storedUrl of Object.keys(notes)) {
-      const normalizedStored = normalizeUrlForNoteStorage(storedUrl);
+    for (const url of Object.keys(notes)) {
+      const normalizedStored = normalizeUrlForNoteStorage(url);
       if (normalizedStored === normalizedTarget) {
-        matchingUrls.push(storedUrl);
+        matchingUrls.push(url);
       }
     }
 
@@ -682,13 +569,11 @@ if (typeof module !== "undefined" && module.exports) {
     updateNote,
     addNote,
     deleteNote,
-    normalizeUrlForNoteStorage,
     findMatchingUrlsInStorage,
     getNotesForUrl,
     isTabValid,
     safeApiCall,
     isServerSyncEnabled,
     isServerAuthenticated,
-    convertNoteFromServerFormat,
   };
 }

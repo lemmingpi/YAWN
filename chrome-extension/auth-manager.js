@@ -10,14 +10,6 @@
  * Authentication Manager - Handles all authentication operations
  */
 const AuthManager = {
-  // Storage keys for authentication data
-  STORAGE_KEYS: {
-    JWT_TOKEN: "webNotesJWT",
-    USER_INFO: "webNotesUser",
-    AUTH_STATE: "webNotesAuthState",
-    LAST_AUTH_CHECK: "webNotesLastAuthCheck",
-  },
-
   // Authentication configuration
   CONFIG: {
     SCOPES: ["openid", "email", "profile"],
@@ -93,7 +85,7 @@ const AuthManager = {
       if (areaName !== "sync") return;
 
       // Check if any auth-related keys changed
-      const authKeys = Object.values(this.STORAGE_KEYS);
+      const authKeys = Object.values(STORAGE_KEYS);
       const authChanged = authKeys.some(key => key in changes);
 
       if (authChanged) {
@@ -120,21 +112,16 @@ const AuthManager = {
     try {
       const result = await new Promise(resolve => {
         chrome.storage.sync.get(
-          [
-            this.STORAGE_KEYS.JWT_TOKEN,
-            this.STORAGE_KEYS.USER_INFO,
-            this.STORAGE_KEYS.AUTH_STATE,
-            this.STORAGE_KEYS.LAST_AUTH_CHECK,
-          ],
+          [STORAGE_KEYS.JWT_TOKEN, STORAGE_KEYS.USER_INFO, STORAGE_KEYS.AUTH_STATE, STORAGE_KEYS.LAST_AUTH_CHECK],
           resolve,
         );
       });
 
       this._authCache = {
-        isAuthenticated: result[this.STORAGE_KEYS.AUTH_STATE] || false,
-        user: result[this.STORAGE_KEYS.USER_INFO] || null,
-        jwtToken: result[this.STORAGE_KEYS.JWT_TOKEN] || null,
-        lastCheck: result[this.STORAGE_KEYS.LAST_AUTH_CHECK] || 0,
+        isAuthenticated: result[STORAGE_KEYS.AUTH_STATE] || false,
+        user: result[STORAGE_KEYS.USER_INFO] || null,
+        jwtToken: result[STORAGE_KEYS.JWT_TOKEN] || null,
+        lastCheck: result[STORAGE_KEYS.LAST_AUTH_CHECK] || 0,
       };
 
       // Validate token if present
@@ -157,10 +144,10 @@ const AuthManager = {
   async saveAuthState() {
     try {
       const data = {
-        [this.STORAGE_KEYS.JWT_TOKEN]: this._authCache.jwtToken,
-        [this.STORAGE_KEYS.USER_INFO]: this._authCache.user,
-        [this.STORAGE_KEYS.AUTH_STATE]: this._authCache.isAuthenticated,
-        [this.STORAGE_KEYS.LAST_AUTH_CHECK]: Date.now(),
+        [STORAGE_KEYS.JWT_TOKEN]: this._authCache.jwtToken,
+        [STORAGE_KEYS.USER_INFO]: this._authCache.user,
+        [STORAGE_KEYS.AUTH_STATE]: this._authCache.isAuthenticated,
+        [STORAGE_KEYS.LAST_AUTH_CHECK]: Date.now(),
       };
 
       await new Promise((resolve, reject) => {
@@ -193,12 +180,7 @@ const AuthManager = {
 
       await new Promise((resolve, reject) => {
         chrome.storage.sync.remove(
-          [
-            this.STORAGE_KEYS.JWT_TOKEN,
-            this.STORAGE_KEYS.USER_INFO,
-            this.STORAGE_KEYS.AUTH_STATE,
-            this.STORAGE_KEYS.LAST_AUTH_CHECK,
-          ],
+          [STORAGE_KEYS.JWT_TOKEN, STORAGE_KEYS.USER_INFO, STORAGE_KEYS.AUTH_STATE, STORAGE_KEYS.LAST_AUTH_CHECK],
           () => {
             if (chrome.runtime.lastError) {
               reject(new Error(chrome.runtime.lastError.message));

@@ -250,6 +250,7 @@ class NoteResponse(NoteBase, TimestampSchema):
     artifacts_count: Optional[int] = Field(
         None, description="Number of artifacts generated for this note"
     )
+    url: Optional[str] = Field(None, description="URL of the page this note belongs to")
 
     class Config:
         from_attributes = True
