@@ -257,7 +257,7 @@ async function setNotes(notes) {
       });
     });
 
-    console.log(`[YAWN] Saved notes to local storage`);
+    console.log("[YAWN] Saved notes to local storage");
     return localSuccess;
   } catch (error) {
     logError("Error in setNotes", error);
@@ -320,7 +320,7 @@ async function updateNote(url, noteId, noteData) {
         notes[matchingUrl] = urlNotes;
 
         const success = await setNotes(notes);
-        console.log(`[YAWN] Updated note in local storage`);
+        console.log("[YAWN] Updated note in local storage");
         return success;
       }
     }
@@ -506,7 +506,7 @@ async function deleteNote(url, noteId) {
     }
 
     const success = await setNotes(notes);
-    console.log(`[YAWN] Deleted note from local storage`);
+    console.log("[YAWN] Deleted note from local storage");
     return success;
   } catch (error) {
     logError("Error deleting note", error);

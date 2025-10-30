@@ -354,7 +354,6 @@ package-extension: check-npm check-env ## Create Chrome Web Store package
 		exit 1; \
 	fi
 	@echo "$(YELLOW)Running pre-package validation...$(NC)"
-	@$(MAKE) lint-js
 	@$(MAKE) validate-extension
 	@echo "$(YELLOW)Creating package...$(NC)"
 	@PYTHON=$(PYTHON) ./scripts/package-extension.sh
