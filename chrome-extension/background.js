@@ -8,6 +8,7 @@ importScripts("./base-utils.js");
 importScripts("./shared-utils.js");
 importScripts("./auth-manager.js");
 importScripts("./server-api.js");
+importScripts("./permission-manager.js");
 
 // Constants
 const EXTENSION_ID = "add-web-note";
@@ -164,6 +165,53 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 /**
+ * Check if page has notes and handle permission-based auto-injection
+ * Badge colors: Orange = pending permission, Green = has permission, Blue = no permission
+ * @param {number} tabId - Tab ID
+ * @param {string} url - Page URL
+ */
+async function checkAndOnboardPage(tabId, url) {
+  // Check if this page has notes
+  const notes = await getNotes(url);
+  const urlNotes = getNotesForUrl(url, notes);
+
+  if (urlNotes && urlNotes.length > 0) {
+    console.log(`[YAWN] Found ${urlNotes.length} notes for ${url}`);
+
+    // Check if we have permission to auto-inject
+    const hasPermission = await PermissionManager.hasPermission(url);
+
+    // Check if domain was granted on another device
+    const isPending = await PermissionManager.hasPendingPermission(url);
+
+    if (hasPermission) {
+      // Auto-inject scripts and display notes
+      console.log(`[YAWN] Have permission, auto-injecting scripts`);
+      await injectContentScripts(tabId);
+    } else if (isPending) {
+      // Show indicator that permission can be restored
+      console.log(`[YAWN] Permission pending from sync for ${url}`);
+    }
+
+    // Update badge (Orange = pending, Green = has permission, Blue = no permission)
+    chrome.action.setBadgeText({
+      tabId: tabId,
+      text: urlNotes.length.toString(),
+    });
+    chrome.action.setBadgeBackgroundColor({
+      tabId: tabId,
+      color: isPending ? "#FFA500" : hasPermission ? "#4CAF50" : "#2196F3",
+    });
+  } else {
+    // Clear badge if no notes
+    chrome.action.setBadgeText({
+      tabId: tabId,
+      text: "",
+    });
+  }
+}
+
+/**
  * Check for existing notes when tab becomes active
  */
 chrome.tabs.onActivated.addListener(async activeInfo => {
@@ -181,29 +229,7 @@ chrome.tabs.onActivated.addListener(async activeInfo => {
       return;
     }
 
-    // Check if this page has notes
-    const notes = await getNotes(tab.url);
-    const urlNotes = getNotesForUrl(tab.url, notes);
-
-    if (urlNotes && urlNotes.length > 0) {
-      // Page has notes, update badge only (don't inject automatically)
-      console.log(`[YAWN] Found ${urlNotes.length} notes for ${tab.url}`);
-
-      // Update badge to show note count
-      chrome.action.setBadgeText({
-        tabId: tab.id,
-        text: urlNotes.length.toString(),
-      });
-      chrome.action.setBadgeBackgroundColor({
-        color: "#4CAF50",
-      });
-    } else {
-      // Clear badge if no notes
-      chrome.action.setBadgeText({
-        tabId: tab.id,
-        text: "",
-      });
-    }
+    await checkAndOnboardPage(tab.id, tab.url);
   } catch (error) {
     console.debug("[YAWN] Error checking for notes on tab activation:", error);
   }
@@ -226,29 +252,7 @@ chrome.webNavigation.onCompleted.addListener(async details => {
 
     console.log(`[YAWN] Page loaded: ${details.url}`);
 
-    // Check if this page has notes
-    const notes = await getNotes(details.url);
-    const urlNotes = getNotesForUrl(details.url, notes);
-
-    if (urlNotes && urlNotes.length > 0) {
-      // Page has notes, update badge only (don't inject automatically)
-      console.log(`[YAWN] Found ${urlNotes.length} notes for ${details.url}`);
-
-      // Update badge to show note count
-      chrome.action.setBadgeText({
-        tabId: details.tabId,
-        text: urlNotes.length.toString(),
-      });
-      chrome.action.setBadgeBackgroundColor({
-        color: "#4CAF50",
-      });
-    } else {
-      // Clear badge if no notes
-      chrome.action.setBadgeText({
-        tabId: details.tabId,
-        text: "",
-      });
-    }
+    await checkAndOnboardPage(details.tabId, details.url);
   } catch (error) {
     console.debug("[YAWN] Error checking for notes on page load:", error);
   }
@@ -462,8 +466,19 @@ chrome.runtime.onInstalled.addListener(async () => {
   try {
     await createContextMenu();
     await initializeStats();
+    await PermissionManager.initialize();
   } catch (error) {
     logError("Error during extension initialization", error);
+  }
+});
+
+// Also initialize on startup
+chrome.runtime.onStartup.addListener(async () => {
+  console.log("[YAWN] Extension startup");
+  try {
+    await PermissionManager.initialize();
+  } catch (error) {
+    logError("Error during startup initialization", error);
   }
 });
 
@@ -521,17 +536,41 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
  */
 async function handleAddNote(info, tab) {
   try {
-    // Inject content scripts if needed
+    // Get existing notes for this URL
+    const notes = await getNotes(tab.url);
+    const urlNotes = getNotesForUrl(tab.url, notes);
+    const noteNumber = urlNotes.length + 1;
+
+    // Check if this is the first note on this domain
+    const isFirstNoteOnDomain = urlNotes.length === 0;
+
+    // Check if we have permission for this domain
+    const hasPermission = await PermissionManager.hasPermission(tab.url);
+    const isPending = await PermissionManager.hasPendingPermission(tab.url);
+
+    // Request permission if this is first note OR if pending from sync
+    if (isFirstNoteOnDomain || (isPending && !hasPermission)) {
+      const domain = new URL(tab.url).hostname;
+      console.log(`[YAWN] Requesting permission for ${domain}`);
+
+      const granted = await PermissionManager.requestPermission(tab.url);
+
+      if (granted && isPending) {
+        // Clear pending status
+        await PermissionManager.clearPendingPermission(tab.url);
+      }
+
+      if (!granted) {
+        console.log(`[YAWN] Permission denied, note will still be created but won't auto-display`);
+      }
+    }
+
+    // Inject content scripts if needed (will work due to activeTab or optional permission)
     const injected = await injectContentScripts(tab.id);
     if (!injected) {
       console.error("[YAWN] Could not inject content scripts");
       return;
     }
-
-    // Get next note number using enhanced URL matching
-    const notes = await getNotes(tab.url);
-    const urlNotes = getNotesForUrl(tab.url, notes);
-    const noteNumber = urlNotes.length + 1;
 
     // Get click coordinates from content script and create note
     const success = await createNoteWithCoordinates(tab.id, noteNumber);
@@ -1048,8 +1087,3 @@ async function handleContextMenuUpdate(data) {
     logError("Error updating context menu", error);
   }
 }
-
-// Handle extension errors
-chrome.runtime.onStartup.addListener(() => {
-  console.log("[YAWN] Extension startup");
-});
