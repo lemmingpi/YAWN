@@ -236,7 +236,7 @@ function updateNoteOffset(noteId, newOffsetX, newOffsetY) {
 
           // Save back to storage
           notes[matchingUrl] = urlNotes;
-          setNotes(notes).then(function () {
+          setNotes(notes, matchingUrl).then(function () {
             if (chrome.runtime.lastError) {
               console.log("[YAWN] Failed to save note offset:", chrome.runtime.lastError);
             }

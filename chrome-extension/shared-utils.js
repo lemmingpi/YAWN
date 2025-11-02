@@ -20,6 +20,26 @@ const EXTENSION_CONSTANTS = {
 };
 
 /**
+ * Detect if we're running in a service worker/background script context
+ * @returns {boolean} True if in service worker context
+ */
+function isServiceWorkerContext() {
+  return (
+    typeof self !== "undefined" &&
+    typeof ServiceWorkerGlobalScope !== "undefined" &&
+    self instanceof ServiceWorkerGlobalScope
+  );
+}
+
+/**
+ * Detect if we're running in a content script context
+ * @returns {boolean} True if in content script context
+ */
+function isContentScriptContext() {
+  return typeof window !== "undefined" && typeof document !== "undefined" && !isServiceWorkerContext();
+}
+
+/**
  * Centralized error logging with context
  * @param {string} context - Where the error occurred
  * @param {Error|any} error - The error object or message
@@ -160,8 +180,21 @@ async function getNotes(urlOverride = null) {
     if (isServerEnabled && isAuthenticated) {
       try {
         if (currentUrl) {
-          const response = await chrome.runtime.sendMessage({ action: "API_fetchNotesForPage", url: currentUrl });
-          const serverNotes = response.success ? response.data : [];
+          let serverNotes = [];
+
+          // Use direct API call in service worker context, message passing in content script
+          if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+            // Direct API call in background/service worker
+            serverNotes = await ServerAPI.fetchNotesForPage(currentUrl);
+          } else if (isContentScriptContext()) {
+            // Message passing in content script
+            const response = await chrome.runtime.sendMessage({ action: "API_fetchNotesForPage", url: currentUrl });
+            serverNotes = response.success ? response.data : [];
+          } else {
+            // Popup context - use message passing
+            const response = await chrome.runtime.sendMessage({ action: "API_fetchNotesForPage", url: currentUrl });
+            serverNotes = response.success ? response.data : [];
+          }
 
           // Convert server notes to extension format
           const convertedNotes = serverNotes.map(serverNote => convertNoteFromServerFormat(serverNote));
@@ -212,27 +245,38 @@ async function getNotes(urlOverride = null) {
  * If authenticated with server: saves to server
  * Otherwise: saves to local storage
  * @param {Object} notes - Notes object organized by URL
+ * @param {string} url - URL for server sync (required)
  * @returns {Promise<boolean>} Promise resolving to success status
  */
-async function setNotes(notes) {
+async function setNotes(notes, url) {
   try {
     // Check if user is authenticated with server
     const isServerEnabled = await isServerSyncEnabled();
     const isAuthenticated = await isServerAuthenticated();
+    const normalizedUrl = normalizeUrlForNoteStorage(url);
 
     // If authenticated with server, save to server only
     if (isServerEnabled && isAuthenticated) {
       try {
         // Sync notes for current page to server
-        const currentUrl = window.location?.href;
-        if (currentUrl) {
-          const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
-          const pageNotes = notes[normalizedUrl] || [];
+        if (url) {
+          const pageNotes = notes[normalizedUrl] || notes[url] || [];
 
           if (pageNotes.length > 0) {
-            await chrome.runtime.sendMessage({ action: "API_bulkSyncNotes", url: currentUrl, notes: pageNotes });
-            console.log(`[YAWN] Synced ${pageNotes.length} notes to server`);
+            // Use direct API call in service worker context, message passing otherwise
+            if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+              await ServerAPI.bulkSyncNotes(normalizedUrl, pageNotes);
+            } else {
+              await chrome.runtime.sendMessage({ action: "API_bulkSyncNotes", url: normalizedUrl, notes: pageNotes });
+            }
+            console.log(`[YAWN] Synced ${pageNotes.length} notes to server for %{url}`);
             return true;
+          }
+        } else {
+          for (const key in notes) {
+            if (key) {
+              setNotes(notes, key);
+            }
           }
         }
         return true;
@@ -246,8 +290,34 @@ async function setNotes(notes) {
     const config = await getWNConfig();
     const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
 
+    const localNotes = await new Promise(resolve => {
+      storage.get([STORAGE_KEYS.NOTES_KEY], result => {
+        if (chrome.runtime.lastError) {
+          console.error("[YAWN] Failed to get local notes:", chrome.runtime.lastError);
+          resolve({});
+        } else {
+          resolve(result[STORAGE_KEYS.NOTES_KEY] || {});
+        }
+      });
+    });
+
+    // if url is set, just overlay the one else overlay all urls in the incomming notes.
+    if (url) {
+      // if inbound notes were applied to the unnormalized use the new url.
+      // TODO need to test real world situations where we may need to merge instead.
+      if (notes[url]) {
+        localNotes[normalizedUrl] = notes[url];
+      } else {
+        localNotes[normalizedUrl] = notes[normalizedUrl];
+      }
+    } else {
+      for (const key in notes) {
+        localNotes[key] = notes[key];
+      }
+    }
+
     const localSuccess = await new Promise(resolve => {
-      storage.set({ [STORAGE_KEYS.NOTES_KEY]: notes }, () => {
+      storage.set({ [STORAGE_KEYS.NOTES_KEY]: localNotes }, () => {
         if (chrome.runtime.lastError) {
           console.error("[YAWN] Failed to set notes locally:", chrome.runtime.lastError);
           resolve(false);
@@ -287,11 +357,16 @@ async function updateNote(url, noteId, noteData) {
           lastEdited: Date.now(),
         };
 
-        await chrome.runtime.sendMessage({
-          action: "API_updateNote",
-          serverId: noteId, // For server notes, noteId IS the serverId
-          noteData: updatedData,
-        });
+        // Use direct API call in service worker context, message passing otherwise
+        if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+          await ServerAPI.updateNote(noteId, updatedData);
+        } else {
+          await chrome.runtime.sendMessage({
+            action: "API_updateNote",
+            serverId: noteId, // For server notes, noteId IS the serverId
+            noteData: updatedData,
+          });
+        }
         console.log(`[YAWN] Updated note ${noteId} on server`);
         return true;
       } catch (serverError) {
@@ -319,7 +394,7 @@ async function updateNote(url, noteId, noteData) {
         urlNotes[noteIndex] = updatedNote;
         notes[matchingUrl] = urlNotes;
 
-        const success = await setNotes(notes);
+        const success = await setNotes(notes, matchingUrl);
         console.log("[YAWN] Updated note in local storage");
         return success;
       }
@@ -410,12 +485,20 @@ async function addNote(url, noteData) {
     // If authenticated with server, create on server
     if (isServerEnabled && isAuthenticated) {
       try {
-        const createResponse = await chrome.runtime.sendMessage({
-          action: "API_createNote",
-          url: url,
-          noteData: noteData,
-        });
-        const serverNote = createResponse.success ? createResponse.data : null;
+        let serverNote = null;
+
+        // Use direct API call in service worker context, message passing otherwise
+        if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+          serverNote = await ServerAPI.createNote(url, noteData);
+        } else {
+          const createResponse = await chrome.runtime.sendMessage({
+            action: "API_createNote",
+            url: url,
+            noteData: noteData,
+          });
+          serverNote = createResponse.success ? createResponse.data : null;
+        }
+
         if (serverNote) {
           noteData.serverId = serverNote.id;
           console.log(`[YAWN] Created note ${serverNote.id} on server`);
@@ -435,7 +518,7 @@ async function addNote(url, noteData) {
 
     urlNotes.push(noteData);
     notes[normalizedUrl] = urlNotes;
-    const success = await setNotes(notes);
+    const success = await setNotes(notes, normalizedUrl);
 
     console.log(`[YAWN] Added note to local storage`);
     return success;
@@ -461,10 +544,15 @@ async function deleteNote(url, noteId) {
     // If authenticated with server, delete from server
     if (isServerEnabled && isAuthenticated) {
       try {
-        await chrome.runtime.sendMessage({
-          action: "API_deleteNote",
-          serverId: noteId, // For server notes, noteId IS the serverId
-        });
+        // Use direct API call in service worker context, message passing otherwise
+        if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+          await ServerAPI.deleteNote(noteId);
+        } else {
+          await chrome.runtime.sendMessage({
+            action: "API_deleteNote",
+            serverId: noteId, // For server notes, noteId IS the serverId
+          });
+        }
         console.log(`[YAWN] Deleted note ${noteId} from server`);
         return true;
       } catch (serverError) {

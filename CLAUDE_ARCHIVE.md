@@ -179,3 +179,46 @@ This file contains detailed session summaries for reference and historical conte
 - ✅ Prettier configured with project-specific overrides
 - ✅ Console statements preserved (no linting warnings)
 - ✅ Automated formatting on commit via pre-commit hooks
+
+
+● Here are the official Chrome documentation URLs that back up my statements about content script best
+  practices:
+
+  1. ActiveTab as Alternative to <all_urls>
+
+  URL: https://developer.chrome.com/docs/extensions/develop/concepts/activeTab
+
+  Quote from the documentation:
+  "It serves as an alternative for many uses of <all_urls>"
+
+  2. Review Process Concerns with Broad Permissions
+
+  URL: https://developer.chrome.com/docs/webstore/review-process
+
+  Key quote:
+  "Reviews may take longer for extensions that request broad host permissions"
+  "Additionally, because <all_urls> affects all hosts, Chrome Web Store reviews for extensions that use it
+  may take longer"
+
+  3. Security Concerns with Broad Patterns
+
+  URL: https://developer.chrome.com/docs/webstore/troubleshooting
+
+  Quote:
+  "Host permission patterns like *://*/*, https://*/*, and <all_urls> give extensions extensive access to
+  the user's web activity... Extensions with this kind of access can collect a user's browsing history,
+  hijack web search behavior, scrape data from banking websites, harvest credentials"
+
+  4. Permission Best Practices
+
+  URL: https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions
+
+  Key guidance:
+  "Extensions using host permissions to inject scripts can often substitute activeTab instead"
+
+  5. Tutorial on ActiveTab Pattern
+
+  URL: https://developer.chrome.com/docs/extensions/get-started/tutorial/scripts-activetab
+
+  This tutorial specifically teaches the activeTab + programmatic injection pattern as the recommended
+  approach.

@@ -1,10 +1,22 @@
 {
   "manifest_version": 3,
-  "name": "YAWN - Yet Another Web Note",
-  "version": "1.0.0",
-  "description": "Yet Another Web Note - Sticky notes for web pages",
-  "permissions": ["activeTab", "storage", "scripting", "contextMenus", "identity"],
-  "host_permissions": ["http://localhost:8000/*", "https://*/*"],
+  "name": "YAWN - Yet Another Web Notes App",
+  "version": "1.0.1",
+  "description": "Add sticky notes to any webpage. Rich text editing, markdown support, cloud sync, and sharing. Your notes follow you everywhere.",
+  "homepage_url": "https://yawn-api-1040678620671.us-central1.run.app/privacy",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "storage",
+    "scripting",
+    "contextMenus",
+    "identity",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "https://yawn-api-1040678620671.us-central1.run.app/*",
+    "https://localhost/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Web Notes"
@@ -12,31 +24,6 @@
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": [
-        "libs/marked.min.js",
-        "libs/dompurify.min.js",
-        "base-utils.js",
-        "note-state.js",
-        "color-utils.js",
-        "color-dropdown.js",
-        "markdown-utils.js",
-        "shared-utils.js",
-        "error-handling.js",
-        "contentDialog.js",
-        "contextGeneratorDialog.js",
-        "sharing-interface.js",
-        "sharing.js",
-        "selector-utils.js",
-        "ai-generation.js",
-        "note-positioning.js",
-        "note-interaction-editing.js",
-        "content.js"
-      ]
-    }
-  ],
   "icons": {
     "16": "icon16.svg",
     "48": "icon48.svg",

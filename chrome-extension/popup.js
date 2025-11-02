@@ -654,6 +654,18 @@ async function handleSharePageClick() {
 
     const currentTab = tabs[0];
 
+    // First inject content scripts if needed
+    const response = await chrome.runtime.sendMessage({
+      action: "injectContentScripts",
+      tabId: currentTab.id,
+    });
+
+    if (!response || !response.success) {
+      console.error("[Popup] Failed to inject content scripts");
+      showPopupMessage("Failed to initialize page", "error");
+      return;
+    }
+
     // Send message to content script to open sharing dialog
     chrome.tabs
       .sendMessage(currentTab.id, {
@@ -693,6 +705,18 @@ async function handleShareSiteClick() {
     }
 
     const currentTab = tabs[0];
+
+    // First inject content scripts if needed
+    const response = await chrome.runtime.sendMessage({
+      action: "injectContentScripts",
+      tabId: currentTab.id,
+    });
+
+    if (!response || !response.success) {
+      console.error("[Popup] Failed to inject content scripts");
+      showPopupMessage("Failed to initialize page", "error");
+      return;
+    }
 
     // Send message to content script to open sharing dialog
     chrome.tabs
@@ -735,6 +759,18 @@ async function handleManageSharesClick() {
     const currentTab = tabs[0];
     const pageUrl = currentTab.url;
     const pageTitle = currentTab.title || pageUrl;
+
+    // First inject content scripts if needed
+    const response = await chrome.runtime.sendMessage({
+      action: "injectContentScripts",
+      tabId: currentTab.id,
+    });
+
+    if (!response || !response.success) {
+      console.error("[Popup] Failed to inject content scripts");
+      showPopupMessage("Failed to initialize page", "error");
+      return;
+    }
 
     // Send message to content script to open page sharing dialog (which includes management)
     chrome.tabs

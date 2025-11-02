@@ -12,37 +12,25 @@
 console.log("Web Notes - Content script loaded!");
 
 /**
- * Attempt automatic authentication for note creation
- * @returns {Promise<boolean>} True if authentication was attempted
+ * Check authentication on page load (token validation/refresh happens during AuthManager initialization)
+ * @returns {Promise<boolean>} True if authenticated
  */
-async function attemptAutoAuthenticationForNote() {
+async function checkAuthenticationOnLoad() {
   try {
-    // Check if already authenticated via background
-    const isAuth = await isServerAuthenticated();
-    if (isAuth) {
-      return false;
-    }
-
     // Check if server sync is configured
     const config = await getWNConfig();
     if (!config.syncServerUrl) {
       return false;
     }
 
-    console.log("[YAWN] Attempting auto-authentication for note creation");
-
-    // Try non-interactive authentication via background
-    const response = await chrome.runtime.sendMessage({ action: "AUTHMANAGER_attemptAutoAuth" });
-    const success = response.success && response.data;
-    if (success) {
-      console.log("[YAWN] Auto-authentication successful");
-      return true;
-    } else {
-      console.log("[YAWN] Auto-authentication failed, user can sign in manually via popup");
-      return false;
+    // Check authentication status (AuthManager initialization handles token validation/refresh)
+    const isAuth = await isServerAuthenticated();
+    if (isAuth) {
+      console.log("[YAWN] Authenticated with server on page load");
     }
+    return isAuth;
   } catch (error) {
-    console.error("[YAWN] Authentication attempt failed:", error);
+    console.error("[YAWN] Error checking authentication on load:", error);
     return false;
   }
 }
@@ -151,6 +139,12 @@ function captureSelectionData(selection) {
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Add ping response for injection detection
+  if (message.action === "ping") {
+    sendResponse({ success: true });
+    return true;
+  }
+
   if (message.action === "getLastClickCoords") {
     // Return the last right-click coordinates
     sendResponse({
@@ -169,7 +163,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  */
 async function loadExistingNotes() {
   try {
-    getNotes().then(async function (result) {
+    // Check authentication on page load (validates/refreshes token if needed)
+    await checkAuthenticationOnLoad();
+    const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
+
+    getNotes(normalizedUrl).then(async function (result) {
       if (chrome.runtime.lastError) {
         console.log("[YAWN] Failed to load notes:", chrome.runtime.lastError);
         return;
@@ -178,7 +176,7 @@ async function loadExistingNotes() {
       const notes = result || {};
 
       // Use enhanced URL matching to find all notes that match the current URL
-      const urlNotes = getNotesForUrl(window.location.href, notes);
+      const urlNotes = getNotesForUrl(normalizedUrl, notes);
 
       // Migrate and display notes, saving if migration occurred
       let needsBulkSave = false;
@@ -201,7 +199,6 @@ async function loadExistingNotes() {
       // Note: This will move all notes from URL variations (with different anchors)
       // under a single normalized URL and clean up the old entries to avoid duplicates.
       if (needsBulkSave) {
-        const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
         notes[normalizedUrl] = migratedNotes;
 
         // Clean up old URL variations to avoid duplicates after migration
@@ -212,7 +209,7 @@ async function loadExistingNotes() {
           }
         }
 
-        setNotes(notes).then(function (result) {
+        setNotes(notes, normalizedUrl).then(function (result) {
           if (chrome.runtime.lastError) {
             console.log("[YAWN] Failed to save migrated notes:", chrome.runtime.lastError);
           }
@@ -248,12 +245,15 @@ function autoSaveNote(noteElement, noteData, content) {
  * Display a note on the page with optimized DOM queries
  * @param {Object} noteData - The note data object
  */
-function displayNote(noteData) {
+async function displayNote(noteData) {
   try {
     // Check if note already exists on page
     if (document.getElementById(noteData.id)) {
       return;
     }
+
+    // Check authentication status for server features
+    const isAuthenticated = await isServerAuthenticated();
 
     let targetElement = null;
     const cacheKey = `${noteData.elementSelector || ""}-${noteData.elementXPath || ""}`;
@@ -361,9 +361,9 @@ function displayNote(noteData) {
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     `;
 
-    // Add hover effect to show button
+    // Add hover effect to show button (only if authenticated and note has server ID)
     noteWrapper.addEventListener("mouseenter", () => {
-      if (!note.classList.contains("editing")) {
+      if (!note.classList.contains("editing") && isAuthenticated && noteData.serverId) {
         detailsButton.style.opacity = "1";
       }
     });
@@ -561,7 +561,7 @@ if ("navigation" in window) {
  * @param {Object} coords - Click coordinates with target element
  * @param {string} [backgroundColor="light-yellow"] - Optional background color for the note
  */
-function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow") {
+async function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow") {
   try {
     // Generate unique note ID
     const noteId = `web-note-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -636,37 +636,24 @@ function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow"
     const noteData = NoteDataUtils.createNoteData(baseData, noteText);
     displayNote(noteData);
 
-    // Attempt authentication for first note if server sync is configured
-    attemptAutoAuthenticationForNote()
-      .then(async authAttempted => {
-        // Use addNote function which handles both local storage AND server sync
-        const success = await addNote(window.location.href, noteData);
-        if (success) {
-          console.log("[YAWN] Note saved successfully");
+    // Save note (will sync to server if authenticated)
+    const success = await addNote(window.location.href, noteData);
+    if (success) {
+      console.log("[YAWN] Note saved successfully");
 
-          // Update the displayed note with server ID if it was set
-          const notes = await getNotes();
-          const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
-          const urlNotes = notes[normalizedUrl] || [];
-          const savedNote = urlNotes.find(n => n.id === noteData.id);
-          if (savedNote && savedNote.serverId) {
-            // Update the noteData reference with the server ID
-            noteData.serverId = savedNote.serverId;
-            console.log("[YAWN] Note synced to server with ID:", savedNote.serverId);
-          }
-        } else {
-          console.error("[YAWN] Failed to save note");
-        }
-      })
-      .catch(async error => {
-        console.log("[YAWN] Auth attempt failed, continuing with save:", error);
-
-        // Try to save anyway - addNote handles server sync if possible
-        const success = await addNote(window.location.href, noteData);
-        if (!success) {
-          console.error("[YAWN] Failed to save note");
-        }
-      });
+      // Update the displayed note with server ID if it was set
+      const notes = await getNotes();
+      const normalizedUrl = normalizeUrlForNoteStorage(window.location.href);
+      const urlNotes = notes[normalizedUrl] || [];
+      const savedNote = urlNotes.find(n => n.id === noteData.id);
+      if (savedNote && savedNote.serverId) {
+        // Update the noteData reference with the server ID
+        noteData.serverId = savedNote.serverId;
+        console.log("[YAWN] Note synced to server with ID:", savedNote.serverId);
+      }
+    } else {
+      console.error("[YAWN] Failed to save note");
+    }
   } catch (error) {
     console.error("[YAWN] Error creating note:", error);
   }

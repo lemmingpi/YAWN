@@ -19,6 +19,241 @@ const MENU_TITLE = "🗒️ Add Web Note";
 // Track ongoing injections to prevent race conditions
 const ongoingInjections = new Set();
 
+// ===== CONTENT SCRIPT INJECTION MANAGEMENT =====
+
+/**
+ * Track which tabs have content scripts injected
+ * Map of tabId -> injection status
+ */
+const injectedTabs = new Map();
+
+/**
+ * List of content scripts to inject in order
+ */
+const CONTENT_SCRIPTS = [
+  "libs/marked.min.js",
+  "libs/dompurify.min.js",
+  "base-utils.js",
+  "note-state.js",
+  "color-utils.js",
+  "color-dropdown.js",
+  "markdown-utils.js",
+  "shared-utils.js",
+  "error-handling.js",
+  "contentDialog.js",
+  "contextGeneratorDialog.js",
+  "sharing-interface.js",
+  "sharing.js",
+  "selector-utils.js",
+  "ai-generation.js",
+  "note-positioning.js",
+  "note-interaction-editing.js",
+  "content.js", // MUST be last
+];
+
+/**
+ * Check if content scripts are already injected in a tab
+ * @param {number} tabId - The tab ID to check
+ * @returns {Promise<boolean>} True if scripts are injected
+ */
+async function isContentScriptInjected(tabId) {
+  // Check cache first
+  if (injectedTabs.get(tabId) === true) {
+    // Verify scripts are still active
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { action: "ping" });
+      return response && response.success === true;
+    } catch (error) {
+      // Scripts not responding, clear cache
+      injectedTabs.delete(tabId);
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Inject all content scripts into a tab
+ * @param {number} tabId - The tab ID to inject into
+ * @returns {Promise<boolean>} True if injection succeeded
+ */
+async function injectContentScripts(tabId) {
+  try {
+    // Check if already injected
+    if (await isContentScriptInjected(tabId)) {
+      console.log(`[YAWN] Scripts already injected in tab ${tabId}`);
+      return true;
+    }
+
+    // Check if injection is already in progress
+    if (ongoingInjections.has(tabId)) {
+      console.log(`[YAWN] Injection already in progress for tab ${tabId}`);
+      // Wait for ongoing injection
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return isContentScriptInjected(tabId);
+    }
+
+    // Mark injection as in progress
+    ongoingInjections.add(tabId);
+
+    console.log(`[YAWN] Injecting content scripts into tab ${tabId}`);
+
+    // Inject all scripts in order
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      files: CONTENT_SCRIPTS,
+      injectImmediately: false,
+    });
+
+    // Mark as injected
+    injectedTabs.set(tabId, true);
+    console.log(`[YAWN] Successfully injected scripts into tab ${tabId}`);
+
+    return true;
+  } catch (error) {
+    console.error(`[YAWN] Failed to inject scripts into tab ${tabId}:`, error);
+    injectedTabs.delete(tabId);
+    return false;
+  } finally {
+    ongoingInjections.delete(tabId);
+  }
+}
+
+/**
+ * Inject content scripts and retry a message
+ * @param {number} tabId - The tab ID
+ * @param {Object} message - The message to send after injection
+ * @returns {Promise<any>} The response from the message
+ */
+async function injectContentScriptAndRetry(tabId, message) {
+  try {
+    // First try to inject scripts
+    const injected = await injectContentScripts(tabId);
+    if (!injected) {
+      throw new Error("Failed to inject content scripts");
+    }
+
+    // Wait a bit for scripts to initialize
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Now send the message
+    const response = await chrome.tabs.sendMessage(tabId, message);
+    return response;
+  } catch (error) {
+    logError(`Failed to inject and retry message in tab ${tabId}`, error);
+    throw error;
+  }
+}
+
+/**
+ * Handle tab removal - clean up injection tracking
+ */
+chrome.tabs.onRemoved.addListener(tabId => {
+  injectedTabs.delete(tabId);
+  ongoingInjections.delete(tabId);
+});
+
+/**
+ * Handle tab navigation - mark as needing re-injection
+ */
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === "loading") {
+    // Page is navigating, clear injection status
+    injectedTabs.delete(tabId);
+  }
+});
+
+/**
+ * Check for existing notes when tab becomes active
+ */
+chrome.tabs.onActivated.addListener(async activeInfo => {
+  try {
+    console.log(`[YAWN] onActivated called`);
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+
+    // Skip chrome:// and other restricted URLs
+    if (!isTabValid(tab) || !tab.url) {
+      return;
+    }
+
+    // Skip if page is still loading (onCompleted will handle it)
+    if (tab.status === "loading") {
+      return;
+    }
+
+    // Check if this page has notes
+    const notes = await getNotes(tab.url);
+    const urlNotes = getNotesForUrl(tab.url, notes);
+
+    if (urlNotes && urlNotes.length > 0) {
+      // Page has notes, update badge only (don't inject automatically)
+      console.log(`[YAWN] Found ${urlNotes.length} notes for ${tab.url}`);
+
+      // Update badge to show note count
+      chrome.action.setBadgeText({
+        tabId: tab.id,
+        text: urlNotes.length.toString(),
+      });
+      chrome.action.setBadgeBackgroundColor({
+        color: "#4CAF50",
+      });
+    } else {
+      // Clear badge if no notes
+      chrome.action.setBadgeText({
+        tabId: tab.id,
+        text: "",
+      });
+    }
+  } catch (error) {
+    console.debug("[YAWN] Error checking for notes on tab activation:", error);
+  }
+});
+
+/**
+ * Check for existing notes when page completes loading
+ */
+chrome.webNavigation.onCompleted.addListener(async details => {
+  // Only process main frame
+  if (details.frameId !== 0) return;
+
+  try {
+    const tab = await chrome.tabs.get(details.tabId);
+
+    // Skip chrome:// and other restricted URLs
+    if (!isTabValid(tab)) {
+      return;
+    }
+
+    console.log(`[YAWN] Page loaded: ${details.url}`);
+
+    // Check if this page has notes
+    const notes = await getNotes(details.url);
+    const urlNotes = getNotesForUrl(details.url, notes);
+
+    if (urlNotes && urlNotes.length > 0) {
+      // Page has notes, update badge only (don't inject automatically)
+      console.log(`[YAWN] Found ${urlNotes.length} notes for ${details.url}`);
+
+      // Update badge to show note count
+      chrome.action.setBadgeText({
+        tabId: details.tabId,
+        text: urlNotes.length.toString(),
+      });
+      chrome.action.setBadgeBackgroundColor({
+        color: "#4CAF50",
+      });
+    } else {
+      // Clear badge if no notes
+      chrome.action.setBadgeText({
+        tabId: details.tabId,
+        text: "",
+      });
+    }
+  } catch (error) {
+    console.debug("[YAWN] Error checking for notes on page load:", error);
+  }
+});
+
 /**
  * Creates context menu with error handling
  */
@@ -272,7 +507,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         break;
 
       default:
-        console.log(`[Web Notes Extension] Unknown context menu item: ${info.menuItemId}`);
+        console.log(`[YAWN] Unknown context menu item: ${info.menuItemId}`);
     }
   } catch (error) {
     logError("Error handling context menu click", error);
@@ -286,6 +521,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
  */
 async function handleAddNote(info, tab) {
   try {
+    // Inject content scripts if needed
+    const injected = await injectContentScripts(tab.id);
+    if (!injected) {
+      console.error("[YAWN] Could not inject content scripts");
+      return;
+    }
+
     // Get next note number using enhanced URL matching
     const notes = await getNotes(tab.url);
     const urlNotes = getNotesForUrl(tab.url, notes);
@@ -316,13 +558,16 @@ async function handleAddNote(info, tab) {
  */
 async function handleSharePage(info, tab) {
   try {
+    // Inject content scripts if needed
+    await injectContentScripts(tab.id);
+
     // Send message to content script to open sharing dialog
     chrome.tabs
       .sendMessage(tab.id, {
         type: "shareCurrentPage",
       })
       .catch(error => {
-        console.error("[Web Notes Extension] Failed to send share page message:", error);
+        console.error("[YAWN] Failed to send share page message:", error);
       });
   } catch (error) {
     logError("Error handling share page action", error);
@@ -336,13 +581,16 @@ async function handleSharePage(info, tab) {
  */
 async function handleShareSite(info, tab) {
   try {
+    // Inject content scripts if needed
+    await injectContentScripts(tab.id);
+
     // Send message to content script to open sharing dialog
     chrome.tabs
       .sendMessage(tab.id, {
         type: "shareCurrentSite",
       })
       .catch(error => {
-        console.error("[Web Notes Extension] Failed to send share site message:", error);
+        console.error("[YAWN] Failed to send share site message:", error);
       });
   } catch (error) {
     logError("Error handling share site action", error);
@@ -358,14 +606,17 @@ async function handleRegisterPage(tab) {
     // Register the page without creating a note - call ServerAPI directly
     const pageData = await ServerAPI.registerPage(tab.url, tab.title);
 
-    console.log("[Web Notes Extension] Page registered successfully:", pageData);
+    console.log("[YAWN] Page registered successfully:", pageData);
 
     // Open the server page in a new tab
     const baseUrl = await ServerAPI.getBaseUrl();
     const serverPageUrl = `${baseUrl}/app/pages/${pageData.id}`;
     chrome.tabs.create({ url: serverPageUrl });
   } catch (error) {
-    console.error("[Web Notes Extension] Failed to register page:", error);
+    console.error("[YAWN] Failed to register page:", error);
+
+    // Try to inject scripts first to show error
+    await injectContentScripts(tab.id);
 
     // Send error message to content script to show alert
     chrome.tabs
@@ -374,7 +625,7 @@ async function handleRegisterPage(tab) {
         error: error.message || "Unknown error",
       })
       .catch(err => {
-        console.warn("[Web Notes Extension] Could not send error message to tab:", err);
+        console.warn("[YAWN] Could not send error message to tab:", err);
       });
 
     logError("Error handling register page action", error);
@@ -387,6 +638,9 @@ async function handleRegisterPage(tab) {
  */
 async function handleGenerateAIContext(tab) {
   try {
+    // Inject content scripts if needed
+    await injectContentScripts(tab.id);
+
     // Send message to content script to show AI context dialog
     chrome.tabs
       .sendMessage(tab.id, {
@@ -394,7 +648,7 @@ async function handleGenerateAIContext(tab) {
       })
       .then(response => {})
       .catch(err => {
-        console.warn("[Web Notes Extension] Could not send message to tab:", err);
+        console.warn("[YAWN] Could not send message to tab:", err);
       });
   } catch (error) {
     logError("Error handling generate AI context action", error);
@@ -407,6 +661,13 @@ async function handleGenerateAIContext(tab) {
  */
 async function handleGenerateDOMTestNotes(tab) {
   try {
+    // Inject content scripts if needed
+    const injected = await injectContentScripts(tab.id);
+    if (!injected) {
+      console.error("[YAWN] Could not inject content scripts");
+      return;
+    }
+
     // Send message to content script to extract DOM and generate notes
     chrome.tabs
       .sendMessage(tab.id, {
@@ -414,18 +675,14 @@ async function handleGenerateDOMTestNotes(tab) {
       })
       .then(response => {
         if (response && response.success) {
-          console.log("[Web Notes Extension] DOM test notes generation initiated");
+          console.log("[YAWN] DOM test notes generation initiated");
         }
       })
       .catch(err => {
-        console.warn("[Web Notes Extension] Could not send message to tab:", err);
-        // Try to inject content script first if it's not loaded
-        injectContentScriptAndRetry(tab.id, {
-          type: "generateDOMTestNotes",
-        });
+        console.warn("[YAWN] Could not send message to tab:", err);
       });
   } catch (error) {
-    logError("Error handling DOM  notes generation", error);
+    logError("Error handling DOM notes generation", error);
   }
 }
 
@@ -735,6 +992,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // Keep message channel open for async response
   }
 
+  // Handle script injection requests
+  if (message.action === "injectContentScripts") {
+    (async () => {
+      try {
+        const injected = await injectContentScripts(message.tabId);
+        sendResponse({ success: injected });
+      } catch (error) {
+        logError(`Script injection failed for tab ${message.tabId}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
   // Handle regular message types
   if (!message.type) {
     return;
@@ -780,5 +1051,5 @@ async function handleContextMenuUpdate(data) {
 
 // Handle extension errors
 chrome.runtime.onStartup.addListener(() => {
-  console.log("[Web Notes Extension] Extension startup");
+  console.log("[YAWN] Extension startup");
 });
