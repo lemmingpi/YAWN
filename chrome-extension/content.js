@@ -153,7 +153,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
   } else if (message.action === "createNote") {
     // Create note with provided data
-    createNoteAtCoords(message.noteNumber, message.coords);
+    createNoteAtCoords(message.noteNumber, message.coords, message.selectionText);
     sendResponse({ success: true });
   }
 });
@@ -202,7 +202,7 @@ async function loadExistingNotes() {
         notes[normalizedUrl] = migratedNotes;
 
         // Clean up old URL variations to avoid duplicates after migration
-        const matchingUrls = findMatchingUrlsInStorage(window.location.href, notes);
+        const matchingUrls = findMatchingUrlsInStorage(normalizedUrl, notes);
         for (const oldUrl of matchingUrls) {
           if (oldUrl !== normalizedUrl && notes[oldUrl]) {
             delete notes[oldUrl];
@@ -559,28 +559,30 @@ if ("navigation" in window) {
  * Create a note at specific coordinates
  * @param {number} noteNumber - The note number
  * @param {Object} coords - Click coordinates with target element
+ * @param {String} [selectText=null]
  * @param {string} [backgroundColor="light-yellow"] - Optional background color for the note
  */
-async function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-yellow") {
+async function createNoteAtCoords(noteNumber, coords, selectText = null, backgroundColor = "light-yellow") {
   try {
     // Generate unique note ID
     const noteId = `web-note-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
     // Use selected text if available, otherwise default note text
-    let noteText;
-    if (coords && coords.selectedText) {
-      noteText = coords.selectedText;
-    } else {
-      noteText = `MY NOTE #${noteNumber}`;
-    }
 
     let targetElement = null;
     let elementSelector = null;
     let elementXPath = null;
     let fallbackPosition = null;
+    let selectionData = coords && coords.selectionData ? coords.selectionData : null;
+
+    if (coords) {
+      // Store absolute coordinates as fallback
+      fallbackPosition = { x: coords.x, y: coords.y };
+    }
 
     if (coords && coords.target) {
       targetElement = coords.target;
+
       if (targetElement.nodeType !== Node.ELEMENT_NODE) {
         targetElement = document.elementFromPoint(coords.clientX, coords.clientY);
       }
@@ -592,12 +594,25 @@ async function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-y
         elementSelector = selectorResult.cssSelector;
         elementXPath = selectorResult.xpath;
       }
-    } else if (coords) {
-      // Store absolute coordinates as fallback
-      fallbackPosition = { x: coords.x, y: coords.y };
     } else {
-      // Default fallback position
-      fallbackPosition = { x: 100, y: 100 };
+      const selection = window?.getSelection();
+      const selData = captureSelectionData(selection);
+      if (selData) {
+        elementSelector = selData.startSelector;
+        elementXPath = selData.startSelector;
+        selectionData = selData;
+      }
+    }
+
+    let noteText;
+    if (selectText) {
+      noteText = selectText;
+    } else if (selectionData && selectionData.selectedText) {
+      noteText = selectionData.selectedText;
+    } else if (coords && coords.selectedText) {
+      noteText = coords.selectedText;
+    } else {
+      noteText = `MY NOTE #${noteNumber}`;
     }
 
     // Position the note
@@ -630,7 +645,7 @@ async function createNoteAtCoords(noteNumber, coords, backgroundColor = "light-y
       isVisible: true,
       backgroundColor: backgroundColor,
       // Include selection data if text was selected
-      selectionData: coords && coords.selectionData ? coords.selectionData : null,
+      selectionData: selectionData,
     };
 
     const noteData = NoteDataUtils.createNoteData(baseData, noteText);

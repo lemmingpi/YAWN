@@ -578,7 +578,7 @@ async function deleteNote(url, noteId) {
         // Update storage
         if (urlNotes.length === 0) {
           // Remove the URL key entirely if no notes remain
-          delete notes[matchingUrl];
+          notes[matchingUrl] = [];
         } else {
           notes[matchingUrl] = urlNotes;
         }

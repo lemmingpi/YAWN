@@ -17,7 +17,7 @@
     "https://yawn-api-1040678620671.us-central1.run.app/*",
     "https://localhost/*"
   ],
-  "optional_host_permissions": ["*://*/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Web Notes"

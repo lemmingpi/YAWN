@@ -1,12 +1,9 @@
 /**
  * Permission Manager for YAWN Extension
- * Handles optional host permissions with cross-device sync
+ * Handles optional host permissions
  */
 
 const PermissionManager = {
-  STORAGE_KEY: "grantedDomains",
-  PENDING_DOMAINS_KEY: "pendingDomainPermissions",
-
   /**
    * Get the origin pattern for a URL
    * @param {string} url - Full URL
@@ -29,150 +26,74 @@ const PermissionManager = {
    */
   async hasPermission(url) {
     const origin = this.getOriginPattern(url);
-    if (!origin) return false;
+    if (!origin) {
+      console.log(`[YAWN] hasPermission: Invalid origin for ${url}`);
+      return false;
+    }
 
-    return new Promise(resolve => {
+    const hasIt = await new Promise(resolve => {
       chrome.permissions.contains({ origins: [origin] }, resolve);
     });
+
+    console.log(`[YAWN] hasPermission check for ${origin}: ${hasIt}`);
+    return hasIt;
   },
 
   /**
-   * Request permission for a domain with user-friendly prompt
+   * Request permission for a domain
+   * MUST be called during a user gesture (context menu click, button click, etc.)
+   * Chrome handles "already granted" gracefully - won't show dialog if already approved
    * @param {string} url - URL to request permission for
-   * @param {boolean} showPrompt - Whether to show confirmation dialog
    * @returns {Promise<boolean>} True if permission granted
    */
-  async requestPermission(url, showPrompt = true) {
+  async requestPermission(url) {
     const origin = this.getOriginPattern(url);
-    if (!origin) return false;
-
-    // Check if already have permission
-    const hasPermission = await this.hasPermission(url);
-    if (hasPermission) {
-      console.log(`[YAWN] Already have permission for ${origin}`);
-      return true;
+    if (!origin) {
+      console.error(`[YAWN] requestPermission: Invalid origin for ${url}`);
+      return false;
     }
 
-    console.log(`[YAWN] Requesting permission for ${origin}`);
+    console.log(`[YAWN] Requesting permission for ${origin}...`);
 
-    // Request from Chrome
-    const granted = await new Promise(resolve => {
-      chrome.permissions.request({ origins: [origin] }, resolve);
-    });
+    try {
+      // CRITICAL: Call chrome.permissions.request() IMMEDIATELY without any await before it
+      // This is the FIRST await in the user gesture chain to preserve gesture context
+      const granted = await new Promise((resolve, reject) => {
+        chrome.permissions.request({ origins: [origin] }, result => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(result);
+          }
+        });
+      });
 
-    if (granted) {
-      console.log(`[YAWN] Permission granted for ${origin}`);
-      // Store in sync for other devices
-      await this.syncPermission(origin);
-    } else {
-      console.log(`[YAWN] Permission denied for ${origin}`);
-    }
+      if (granted) {
+        console.log(`[YAWN] ✓ Permission GRANTED for ${origin}`);
+      } else {
+        console.log(`[YAWN] ✗ Permission DENIED for ${origin}`);
+      }
 
-    return granted;
-  },
-
-  /**
-   * Store granted permission in sync storage for other devices
-   * @param {string} origin - Origin pattern
-   */
-  async syncPermission(origin) {
-    const { [this.STORAGE_KEY]: grantedDomains = [] } = await chrome.storage.sync.get(this.STORAGE_KEY);
-
-    if (!grantedDomains.includes(origin)) {
-      grantedDomains.push(origin);
-      await chrome.storage.sync.set({ [this.STORAGE_KEY]: grantedDomains });
-      console.log(`[YAWN] Synced permission for ${origin}`);
+      return granted;
+    } catch (error) {
+      console.error(`[YAWN] ✗ Permission request FAILED for ${origin}:`, error);
+      return false;
     }
   },
 
   /**
-   * Get all synced domains (from other devices)
-   * @returns {Promise<string[]>}
-   */
-  async getSyncedDomains() {
-    const { [this.STORAGE_KEY]: grantedDomains = [] } = await chrome.storage.sync.get(this.STORAGE_KEY);
-    return grantedDomains;
-  },
-
-  /**
-   * Check if a domain was granted on another device but not locally
-   * @param {string} url - URL to check
-   * @returns {Promise<boolean>}
-   */
-  async isPendingFromSync(url) {
-    const origin = this.getOriginPattern(url);
-    if (!origin) return false;
-
-    const syncedDomains = await this.getSyncedDomains();
-    const hasLocalPermission = await this.hasPermission(url);
-
-    return syncedDomains.includes(origin) && !hasLocalPermission;
-  },
-
-  /**
-   * Mark a domain as pending re-request (shown on badge)
-   * @param {string} url - URL
-   */
-  async markPendingPermission(url) {
-    const origin = this.getOriginPattern(url);
-    if (!origin) return;
-
-    const { [this.PENDING_DOMAINS_KEY]: pending = [] } = await chrome.storage.local.get(this.PENDING_DOMAINS_KEY);
-
-    if (!pending.includes(origin)) {
-      pending.push(origin);
-      await chrome.storage.local.set({ [this.PENDING_DOMAINS_KEY]: pending });
-    }
-  },
-
-  /**
-   * Clear pending permission for a domain
-   * @param {string} url - URL
-   */
-  async clearPendingPermission(url) {
-    const origin = this.getOriginPattern(url);
-    if (!origin) return;
-
-    const { [this.PENDING_DOMAINS_KEY]: pending = [] } = await chrome.storage.local.get(this.PENDING_DOMAINS_KEY);
-
-    const filtered = pending.filter(p => p !== origin);
-    await chrome.storage.local.set({ [this.PENDING_DOMAINS_KEY]: filtered });
-  },
-
-  /**
-   * Check if domain has pending permission
-   * @param {string} url - URL
-   * @returns {Promise<boolean>}
-   */
-  async hasPendingPermission(url) {
-    const origin = this.getOriginPattern(url);
-    if (!origin) return false;
-
-    const { [this.PENDING_DOMAINS_KEY]: pending = [] } = await chrome.storage.local.get(this.PENDING_DOMAINS_KEY);
-
-    return pending.includes(origin);
-  },
-
-  /**
-   * Remove permission and unsync
+   * Remove permission
    * @param {string} url - URL
    */
   async revokePermission(url) {
     const origin = this.getOriginPattern(url);
     if (!origin) return;
 
-    // Remove from Chrome
     await new Promise(resolve => {
       chrome.permissions.remove({ origins: [origin] }, resolve);
     });
 
-    // Remove from sync
-    const { [this.STORAGE_KEY]: grantedDomains = [] } = await chrome.storage.sync.get(this.STORAGE_KEY);
-
-    const filtered = grantedDomains.filter(d => d !== origin);
-    await chrome.storage.sync.set({ [this.STORAGE_KEY]: filtered });
-
-    console.log(`[YAWN] Revoked and unsynced permission for ${origin}`);
+    console.log(`[YAWN] Revoked permission for ${origin}`);
   },
 
   /**
@@ -188,26 +109,31 @@ const PermissionManager = {
   },
 
   /**
-   * Initialize on extension startup - check for synced domains
+   * Initialize on extension startup
    */
   async initialize() {
     console.log("[YAWN] Initializing PermissionManager");
+    const permissions = await this.getAllGrantedOrigins();
+    console.log("[YAWN] Current permissions:", permissions);
+  },
 
-    const syncedDomains = await this.getSyncedDomains();
-    const localPermissions = await this.getAllGrantedOrigins();
+  /**
+   * Request permission if needed
+   * MUST be called during user gesture (e.g., popup open, context menu click)
+   * Chrome will not show dialog if permission already granted
+   * @param {string} url - Page URL
+   * @param {number} tabId - Tab ID (currently unused, kept for API compatibility)
+   * @returns {Promise<boolean>} True if permission exists or was granted
+   */
+  async checkAndRequestIfNeeded(url, tabId) {
+    console.log(`[YAWN] checkAndRequestIfNeeded for ${url}`);
 
-    console.log("[YAWN] Synced domains:", syncedDomains);
-    console.log("[YAWN] Local permissions:", localPermissions);
+    // CRITICAL: Call requestPermission() IMMEDIATELY without any await before it
+    // Chrome handles "already granted" gracefully - won't show dialog if approved
+    // This preserves the user gesture context
+    const granted = await this.requestPermission(url);
 
-    // Find domains that are synced but not locally granted
-    for (const origin of syncedDomains) {
-      if (!localPermissions.includes(origin)) {
-        console.log(`[YAWN] Domain ${origin} was granted on another device`);
-        // Mark as pending - will show indicator on next visit
-        const url = origin.replace("/*", "/");
-        await this.markPendingPermission(url);
-      }
-    }
+    return granted;
   },
 };
 

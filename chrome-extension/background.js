@@ -134,8 +134,9 @@ async function injectContentScriptAndRetry(tabId, message) {
       throw new Error("Failed to inject content scripts");
     }
 
-    // Wait a bit for scripts to initialize
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait longer for scripts to initialize (increased from 100ms to 300ms)
+    console.log(`[YAWN] Waiting for scripts to initialize in tab ${tabId}...`);
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     // Now send the message
     const response = await chrome.tabs.sendMessage(tabId, message);
@@ -166,43 +167,45 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 /**
  * Check if page has notes and handle permission-based auto-injection
- * Badge colors: Orange = pending permission, Green = has permission, Blue = no permission
+ * Badge colors: Green = has permission, Blue = no permission
  * @param {number} tabId - Tab ID
  * @param {string} url - Page URL
  */
 async function checkAndOnboardPage(tabId, url) {
+  console.log(`[YAWN] checkAndOnboardPage for tab ${tabId}: ${url}`);
+
+  const hasPermission = await PermissionManager.hasPermission(url);
+  if (hasPermission) {
+    console.log("[YAWN] ✓ Have permission, auto-injecting scripts");
+    const injected = await injectContentScripts(tabId);
+    if (injected) {
+      console.log("[YAWN] ✓ Scripts injected successfully, notes should appear");
+    } else {
+      console.error("[YAWN] ✗ Script injection failed");
+    }
+  }
+
   // Check if this page has notes
   const notes = await getNotes(url);
   const urlNotes = getNotesForUrl(url, notes);
 
   if (urlNotes && urlNotes.length > 0) {
-    console.log(`[YAWN] Found ${urlNotes.length} notes for ${url}`);
+    console.log(`[YAWN] Found ${urlNotes.length} notes for this page`);
+    // Update badge (Green = has permission, Blue = no permission)
+    const badgeColor = hasPermission ? "#4CAF50" : "#2196F3";
+    console.log(`[YAWN] Setting badge: ${urlNotes.length} (color: ${badgeColor})`);
 
-    // Check if we have permission to auto-inject
-    const hasPermission = await PermissionManager.hasPermission(url);
-
-    // Check if domain was granted on another device
-    const isPending = await PermissionManager.hasPendingPermission(url);
-
-    if (hasPermission) {
-      // Auto-inject scripts and display notes
-      console.log(`[YAWN] Have permission, auto-injecting scripts`);
-      await injectContentScripts(tabId);
-    } else if (isPending) {
-      // Show indicator that permission can be restored
-      console.log(`[YAWN] Permission pending from sync for ${url}`);
-    }
-
-    // Update badge (Orange = pending, Green = has permission, Blue = no permission)
     chrome.action.setBadgeText({
       tabId: tabId,
       text: urlNotes.length.toString(),
     });
     chrome.action.setBadgeBackgroundColor({
       tabId: tabId,
-      color: isPending ? "#FFA500" : hasPermission ? "#4CAF50" : "#2196F3",
+      color: badgeColor,
     });
   } else {
+    console.log(`[YAWN] No notes found for this page`);
+
     // Clear badge if no notes
     chrome.action.setBadgeText({
       tabId: tabId,
@@ -392,9 +395,10 @@ async function initializeStats() {
  * Creates a note using coordinates from content script
  * @param {number} tabId - Tab ID to send message to
  * @param {number} noteNumber - The note number for this URL
+ * @param {string} selectionText - Optional selected text from context menu
  * @returns {Promise<boolean>} Promise resolving to success status
  */
-async function createNoteWithCoordinates(tabId, noteNumber) {
+async function createNoteWithCoordinates(tabId, noteNumber, selectionText = null) {
   try {
     // Check for ongoing operation in this tab
     if (ongoingInjections.has(tabId)) {
@@ -438,6 +442,7 @@ async function createNoteWithCoordinates(tabId, noteNumber) {
           action: "createNote",
           noteNumber: noteNumber,
           coords: response.coords,
+          selectionText: selectionText, // Pass selection from context menu
         },
         result => {
           clearTimeout(timeout);
@@ -490,6 +495,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       return;
     }
 
+    // Check and request permission if needed (context menu click is a user gesture)
+    console.log(`[YAWN] Context menu clicked, checking permission...`);
+    await PermissionManager.checkAndRequestIfNeeded(tab.url, tab.id);
+
     switch (info.menuItemId) {
       case EXTENSION_ID:
         // Handle add note action
@@ -535,48 +544,38 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
  * @param {Object} tab - Tab object
  */
 async function handleAddNote(info, tab) {
+  console.log(`[YAWN] ===== handleAddNote START for ${tab.url} =====`);
+
   try {
-    // Get existing notes for this URL
+    // STEP 1: Get note count (fast, synchronous check)
     const notes = await getNotes(tab.url);
     const urlNotes = getNotesForUrl(tab.url, notes);
     const noteNumber = urlNotes.length + 1;
-
-    // Check if this is the first note on this domain
     const isFirstNoteOnDomain = urlNotes.length === 0;
 
-    // Check if we have permission for this domain
-    const hasPermission = await PermissionManager.hasPermission(tab.url);
-    const isPending = await PermissionManager.hasPendingPermission(tab.url);
+    console.log(`[YAWN] This will be note #${noteNumber} on this URL (first on domain: ${isFirstNoteOnDomain})`);
 
-    // Request permission if this is first note OR if pending from sync
-    if (isFirstNoteOnDomain || (isPending && !hasPermission)) {
-      const domain = new URL(tab.url).hostname;
-      console.log(`[YAWN] Requesting permission for ${domain}`);
-
-      const granted = await PermissionManager.requestPermission(tab.url);
-
-      if (granted && isPending) {
-        // Clear pending status
-        await PermissionManager.clearPendingPermission(tab.url);
-      }
-
-      if (!granted) {
-        console.log(`[YAWN] Permission denied, note will still be created but won't auto-display`);
-      }
-    }
-
-    // Inject content scripts if needed (will work due to activeTab or optional permission)
+    // STEP 2: Inject scripts IMMEDIATELY using activeTab permission (before we lose user gesture context)
+    console.log(`[YAWN] Injecting scripts (activeTab permission)...`);
     const injected = await injectContentScripts(tab.id);
     if (!injected) {
-      console.error("[YAWN] Could not inject content scripts");
+      console.error("[YAWN] ✗ Could not inject content scripts");
       return;
     }
 
-    // Get click coordinates from content script and create note
-    const success = await createNoteWithCoordinates(tab.id, noteNumber);
+    // STEP 3: Wait for scripts to initialize properly
+    console.log(`[YAWN] Waiting 500ms for scripts to initialize...`);
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // STEP 4: Create the note
+    // Note: Permission is already requested in context menu handler
+    // Pass info.selectionText so content script has it even if listener wasn't ready
+    console.log(`[YAWN] Creating note #${noteNumber}...`);
+    const success = await createNoteWithCoordinates(tab.id, noteNumber, info.selectionText || null);
 
     if (success) {
-      // Update stats only on successful injection
+      console.log(`[YAWN] ✓ Note created successfully`);
+      // Update stats only on successful creation
       const stats = await getStats();
       await setStats({
         ...stats,
@@ -584,9 +583,14 @@ async function handleAddNote(info, tab) {
         notesCreated: stats.notesCreated + 1,
         lastSeen: Date.now(),
       });
+    } else {
+      console.error(`[YAWN] ✗ Note creation failed`);
     }
   } catch (error) {
+    console.error(`[YAWN] ✗ Error in handleAddNote:`, error);
     logError("Error handling add note action", error);
+  } finally {
+    console.log(`[YAWN] ===== handleAddNote END =====`);
   }
 }
 

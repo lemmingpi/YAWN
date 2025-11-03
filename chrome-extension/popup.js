@@ -451,6 +451,10 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // Initialize sync functionality
     await initializeSyncSection();
+
+    // Note: Permission requests removed from popup opening
+    // Popup opening is NOT a user gesture in Chrome - only button clicks are
+    // Users should use context menu to trigger permission requests
   } catch (error) {
     logError("Error during popup initialization", error);
   }
@@ -874,6 +878,52 @@ async function updateSharingOnAuthChange() {
 // Storage listener already handles auth changes and updates sharing section
 
 // Banner functions removed - functionality no longer needed
+
+// ===== PERMISSION MANAGEMENT =====
+
+/**
+ * Check if current page has notes but needs permission, and request if needed
+ * Called when popup opens - popup opening is a user gesture so permission request will work
+ */
+async function checkAndRequestPermissionOnPopupOpen() {
+  try {
+    console.log("[Popup] Checking for permission needs...");
+
+    // Get current tab
+    const tab = await getCurrentTab();
+    if (!tab || !isTabValid(tab)) {
+      console.log("[Popup] Invalid or no tab, skipping permission check");
+      return;
+    }
+
+    // Get notes for this page
+    const notes = await getNotes(tab.url);
+    const urlNotes = getNotesForUrl(tab.url, notes);
+
+    if (!urlNotes || urlNotes.length === 0) {
+      console.log(`[Popup] No notes for ${tab.url}`);
+      return;
+    }
+
+    console.log(`[Popup] Found ${urlNotes.length} notes, checking/requesting permission...`);
+
+    // Call PermissionManager directly (now available since we include permission-manager.js)
+    const hasPermission = await PermissionManager.checkAndRequestIfNeeded(tab.url, tab.id);
+
+    if (hasPermission) {
+      console.log("[Popup] ✓ Permission available, injecting scripts...");
+      // Inject scripts via background to show notes
+      await chrome.runtime.sendMessage({
+        action: "injectContentScripts",
+        tabId: tab.id,
+      });
+    } else {
+      console.log("[Popup] ✗ Permission not available");
+    }
+  } catch (error) {
+    console.error("[Popup] Error checking/requesting permission:", error);
+  }
+}
 
 // ===== SYNC FUNCTIONALITY =====
 
