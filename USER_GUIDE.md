@@ -81,6 +81,9 @@ When authenticated, additional options appear in your right-click context menu:
 - Automatically generate notes based on page content
 - Uses DOM extraction and AI to create relevant annotations
 
+**⚠️ Important Note about AI Features:**
+The "Generate AI Context" and "Generate Auto Notes with DOM" features scrape content from the current webpage to provide AI-powered analysis. **It is your responsibility to ensure that your use of these features complies with the terms of service of any website you visit.** Some websites prohibit automated scraping or data extraction. Always review and respect the terms of service and robots.txt policies of websites before using these features.
+
 These authenticated features enable collaboration, advanced organization, and AI-powered enhancements to your note-taking workflow.
 
 ---
