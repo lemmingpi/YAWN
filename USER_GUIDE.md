@@ -37,6 +37,52 @@ After installing the extension, you'll see the YAWN icon (🗒️) in your Chrom
 
 **By default, notes are stored locally on your device** - no sign-in required!
 
+### Extension Features When Authenticated
+
+When you sign in with Google and connect to the server, additional features become available in the extension:
+
+#### Enhanced Popup Menu
+
+The extension popup (click the 🗒️ icon) shows additional sections when authenticated:
+
+**User Status Section:**
+- Your name and email address
+- Sign Out button
+- Server sync status indicator
+
+**Sharing Section:**
+- **Share Page** - Share all notes on the current page with other users
+- **Share Site** - Share all notes across the entire website
+- **Manage Shares** - View and manage who has access to your shared content
+- **Sharing Status** - See if the current page or site is already shared
+
+**Data Sync Section:**
+- **Copy Server Notes to Local** - Download all your cloud notes to local storage
+- **Copy Local Notes to Server** - Upload all your local notes to the cloud
+- **Delete All Server Data** - Permanently remove all your data from the server (requires confirmation)
+
+#### Enhanced Context Menu (Right-Click)
+
+When authenticated, additional options appear in your right-click context menu:
+
+**🔗 Share Submenu:**
+- **Share Current Page** - Share all notes on this page with collaborators
+- **Share Current Site** - Share all notes across this entire website
+
+**📋 Register Page (without notes):**
+- Register a page in the server database without creating any notes
+- Useful for tracking pages you want to annotate later
+
+**🤖 Generate AI Context:**
+- Analyze the current page and generate contextual information using AI
+- Creates structured context for better note organization
+
+**🤖 Generate Auto Notes with DOM:**
+- Automatically generate notes based on page content
+- Uses DOM extraction and AI to create relevant annotations
+
+These authenticated features enable collaboration, advanced organization, and AI-powered enhancements to your note-taking workflow.
+
 ---
 
 ## Creating Notes
