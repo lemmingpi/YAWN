@@ -8,6 +8,9 @@
 4. [Storage Options: Local vs Sync](#storage-options-local-vs-sync)
 5. [Editing Notes](#editing-notes)
 6. [Managing Notes](#managing-notes)
+7. [Server Web Dashboard](#server-web-dashboard)
+8. [Tips & Tricks](#tips--tricks)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -162,6 +165,157 @@ If you're using server sync, you can share your notes:
 
 ---
 
+## Server Web Dashboard
+
+The YAWN server provides a comprehensive web dashboard for managing your notes, sites, and pages from any browser. This is separate from the Chrome extension and offers a centralized view of all your data.
+
+### Accessing the Dashboard
+
+1. Navigate to your YAWN server URL (e.g., `https://your-server.com`)
+2. You'll be redirected to the dashboard at `/app/dashboard`
+3. Sign in with Google if not already authenticated
+4. The dashboard will load with your statistics and recent activity
+
+### Dashboard Overview
+
+The main dashboard displays:
+
+- **Statistics Cards**:
+  - Total Sites - Number of domains you're tracking
+  - Total Pages - Number of individual pages with notes
+  - Total Notes - Count of all your notes
+  - Total Artifacts - AI-generated content associated with your notes
+
+- **Recent Activity**:
+  - Recent Pages - Your most recently updated pages
+  - Recent Notes - Latest notes you've created or modified
+
+- **Quick Actions**: Direct links to create new sites, notes, artifacts, or configure LLM settings
+
+### Managing Sites
+
+**Sites** represent domains where you've created notes (e.g., `github.com`, `stackoverflow.com`).
+
+**To view sites:**
+1. Click **"Sites"** in the navigation menu
+2. Browse the list of all sites you're tracking
+3. Use search, filters, and sorting options to find specific sites
+
+**To add a new site:**
+1. Click **"Add Site"** button
+2. Enter the domain name (e.g., `example.com`)
+3. Optionally add user context (personal notes about this site)
+4. Set status (Active/Inactive)
+5. Click **"Save"**
+
+**To view site details:**
+1. Click on any site domain
+2. View all pages and notes associated with that site
+3. See sharing status and manage permissions
+
+### Managing Pages
+
+**Pages** are individual URLs within sites where you've created notes.
+
+**To view pages:**
+1. Click **"Pages"** in the navigation menu
+2. Browse all pages across all your sites
+3. Filter by site or search by page title/URL
+
+**To view page details:**
+1. Click on any page title
+2. View all notes on that specific page
+3. See page metadata (URL, title, creation date)
+4. Manage sharing for the page
+
+### Managing Notes
+
+**Notes** are the sticky notes you create on web pages.
+
+**To view all notes:**
+1. Click **"Notes"** in the navigation menu
+2. Browse your complete collection of notes
+3. Filter by site, page, or search by content
+
+**To view note details:**
+1. Click on any note
+2. View full note content with markdown rendering
+3. See associated artifacts (AI-generated enhancements)
+4. View metadata (creation date, last modified, position on page)
+
+**To edit or delete notes:**
+- Most note editing is done via the Chrome extension directly on web pages
+- The dashboard provides viewing and organizational capabilities
+
+### LLM Features
+
+YAWN includes AI-powered features for enhancing your notes.
+
+#### Artifacts
+
+**Artifacts** are AI-generated content derived from your notes, such as:
+- Summaries of page content
+- Extracted insights
+- Generated documentation
+- Enhanced note formatting
+
+**To view artifacts:**
+1. View any note detail page
+2. Artifacts associated with that note will be displayed
+3. Click on an artifact to see its full content
+
+#### LLM Provider Configuration
+
+**To configure AI providers:**
+1. Click **"LLM Settings"** or navigate to `/app/llm-providers`
+2. Add provider credentials (OpenAI, Anthropic, Google, etc.)
+3. Set default providers for different operations
+4. Test provider connections
+
+**Supported providers:**
+- OpenAI (GPT models)
+- Anthropic (Claude models)
+- Google (Gemini models)
+- Other compatible providers
+
+### Sharing Features
+
+Share your notes with other users when using the server.
+
+**To share a page:**
+1. Navigate to the page detail view
+2. Click **"Share"** button
+3. Enter the email of the user to share with
+4. Set permission level (View/Edit)
+5. User will receive access to all notes on that page
+
+**To share an entire site:**
+1. Navigate to the site detail view
+2. Click **"Share Site"** button
+3. All pages and notes on that site will be shared
+
+**To manage existing shares:**
+1. View any site or page detail
+2. See the list of current shares
+3. Revoke access or modify permissions as needed
+
+### Navigation
+
+The dashboard includes:
+- **Top Navigation Bar**: Links to Dashboard, Sites, Pages, Notes
+- **User Menu**: Profile, settings, and sign out
+- **Breadcrumbs**: Track your location in the hierarchy (Sites → Pages → Notes)
+- **Quick Search**: Find content across all your data
+
+### Data Synchronization
+
+The web dashboard always displays your server data in real-time:
+- Changes made in the Chrome extension sync automatically
+- Refresh the dashboard to see the latest updates
+- Use the refresh button on the dashboard for manual updates
+
+---
+
 ## Tips & Tricks
 
 - **Selected text notes**: Highlight text before creating a note to automatically capture and highlight that text
@@ -174,19 +328,44 @@ If you're using server sync, you can share your notes:
 
 ## Troubleshooting
 
-### Notes not appearing?
+### Extension Issues
+
+#### Notes not appearing?
 - Ensure you're on the exact same URL where you created them
 - Check your storage mode - local notes won't appear on other devices
 
-### Sync not working?
+#### Sync not working?
 - Verify you're signed in (check the popup)
 - Ensure server URL is configured correctly
 - Check your internet connection
 
-### Extension not loading?
+#### Extension not loading?
 - Reload the extension from `chrome://extensions/`
 - Check that all files are present in the extension folder
 - Look for error messages in the Chrome console (F12)
+
+### Server Dashboard Issues
+
+#### Can't access the dashboard?
+- Verify the server URL is correct
+- Check that the server is running (contact your administrator)
+- Try clearing browser cache and cookies
+
+#### Dashboard shows "Not authenticated"?
+- Click the sign-in button and authenticate with Google
+- Check that you're using the correct Google account
+- Ensure cookies are enabled in your browser
+
+#### Dashboard data not loading?
+- Check your internet connection
+- Click the refresh button on the dashboard
+- Verify your authentication token hasn't expired (sign out and sign back in)
+- Check browser console (F12) for API errors
+
+#### Sharing not working?
+- Ensure both users are authenticated on the same server
+- Verify the email address is correct
+- Check that the recipient has created an account on the server
 
 ---
 
