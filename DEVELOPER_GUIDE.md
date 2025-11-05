@@ -4,12 +4,56 @@ This guide provides comprehensive information for developers working on YAWN (Ye
 
 ## Table of Contents
 
-1. [Architecture Overview](#architecture-overview)
-2. [Code Organization](#code-organization)
-3. [Data Model](#data-model)
-4. [Component Communication](#component-communication)
-5. [Development Workflows](#development-workflows)
-6. [Adding New Features](#adding-new-features)
+1. [Quick Command Reference](#quick-command-reference)
+2. [Architecture Overview](#architecture-overview)
+3. [Code Organization](#code-organization)
+4. [Data Model](#data-model)
+5. [Component Communication](#component-communication)
+6. [Development Workflows](#development-workflows)
+7. [Adding New Features](#adding-new-features)
+
+---
+
+## Quick Command Reference
+
+### Essential Commands
+
+```bash
+# Setup
+make help         # Show all available commands
+make setup        # Complete development environment setup
+make dev          # Start development server with auto-reload
+make test         # Run test suite with coverage
+make lint         # Run all code quality checks (Python + JS)
+make format       # Auto-format code (Black, isort, Prettier)
+```
+
+### Other Useful Commands
+
+```bash
+# Testing
+make test-fast    # Run tests without coverage (faster)
+
+# Code Quality
+make lint-all     # Lint both Python and JavaScript
+make format-all   # Format both Python and JavaScript
+make pre-commit   # Run pre-commit hooks manually
+
+# Database
+alembic upgrade head                              # Apply migrations
+alembic downgrade -1                              # Rollback one migration
+alembic revision --autogenerate -m "description"  # Create migration
+
+# Extension
+make validate-extension    # Validate extension structure
+make package-extension     # Create Chrome Web Store package
+
+# Cleanup
+make clean        # Clean Python environment
+make clean-npm    # Clean Node.js environment
+```
+
+See [SETUP_GUIDE.md](SETUP_GUIDE.md) for complete setup instructions.
 
 ---
 

@@ -130,49 +130,6 @@ The API will be available at:
 - **[CLAUDE.md](CLAUDE.md)** - AI assistant guidelines and project state
 - **[CODE_REFERENCE.md](CODE_REFERENCE.md)** - Code navigation reference
 
-## Development
-
-### Essential Commands
-
-```bash
-make help         # Show all available commands
-make setup        # Complete development environment setup
-make dev          # Start development server with auto-reload
-make test         # Run test suite with coverage
-make lint         # Run all code quality checks (Python + JS)
-make format       # Auto-format code (Black, isort, Prettier)
-```
-
-### Project Structure
-
-```
-yawn/
-├── backend/                # FastAPI backend
-│   ├── app/               # Application code
-│   │   ├── main.py       # FastAPI app, middleware, lifespan
-│   │   ├── models.py     # SQLAlchemy ORM models (11 tables)
-│   │   ├── schemas.py    # Pydantic validation schemas
-│   │   ├── routers/      # API endpoints (modular)
-│   │   ├── llm/          # LLM integration subsystem
-│   │   └── templates/    # Jinja2 HTML templates (web dashboard)
-│   ├── alembic/          # Database migrations
-│   └── tests/            # Pytest test suite
-├── chrome-extension/      # Chrome extension (production-ready)
-│   ├── manifest.json     # Extension configuration
-│   ├── content.js        # Main content script
-│   ├── background.js     # Service worker
-│   ├── popup.html/js     # Extension popup interface
-│   ├── server-api.js     # Backend API client
-│   ├── auth-manager.js   # JWT authentication
-│   └── ...               # Modular JavaScript files
-├── requirements/         # Python dependency management
-│   ├── base.txt         # Production dependencies
-│   └── dev.txt          # Development dependencies
-├── scripts/             # Development and packaging scripts
-├── Makefile            # Development automation
-└── README.md           # This file
-```
-
 ## Data Model
 
 ### Core Entities
