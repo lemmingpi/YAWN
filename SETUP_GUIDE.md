@@ -9,8 +9,9 @@ Complete guide for setting up YAWN (Yet Another Web Notes App) for local develop
 3. [Database Setup](#database-setup)
 4. [Chrome Extension Setup](#chrome-extension-setup)
 5. [Configuration](#configuration)
-6. [Deployment](#deployment)
-7. [Troubleshooting](#troubleshooting)
+6. [Secrets Management](#secrets-management)
+7. [Deployment](#deployment)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -346,6 +347,310 @@ GOOGLE_GEMINI_API_KEY="..."
 ```
 
 Add these to your environment file or configure via the web dashboard at `/app/llm-providers`.
+
+---
+
+## Secrets Management
+
+YAWN requires several secrets for authentication, database access, and LLM integration. This section covers how to generate, store, and use these secrets securely.
+
+### Required Secrets
+
+#### 1. Database Password
+
+**Purpose**: Secure database authentication
+
+**Generate**:
+```bash
+# Generate strong random password
+openssl rand -base64 32
+```
+
+**Usage**:
+- Local: Set in `DATABASE_URL` in `backend/env/env.dev`
+- Production: Store in GCP Secret Manager as `db-password`
+
+#### 2. JWT Secret Key
+
+**Purpose**: Sign and verify authentication tokens
+
+**Generate**:
+```bash
+# Generate cryptographically secure secret
+openssl rand -hex 64
+```
+
+**Usage**:
+- Local: Set `JWT_SECRET_KEY` in `backend/env/env.dev`
+- Production: Store in GCP Secret Manager as `jwt-secret`
+
+**Configuration**:
+```bash
+JWT_SECRET_KEY=your_generated_secret_here
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440  # 24 hours
+```
+
+#### 3. Google OAuth Credentials
+
+**Purpose**: User authentication via Google Sign-In
+
+**Obtain** (see [Google OAuth Setup](#google-oauth-setup) above):
+- `GOOGLE_CLIENT_ID` - From GCP Console
+- `GOOGLE_CLIENT_SECRET` - From GCP Console
+
+**Usage**:
+- Local: Set in `backend/env/env.dev`
+- Production: Can be public (Client ID) or in Secret Manager (Client Secret)
+
+#### 4. LLM API Keys
+
+**Purpose**: Access to AI providers for note generation and enhancements
+
+**Providers** (choose one or more):
+
+**Google Gemini API**:
+```bash
+# Get key from: https://makersuite.google.com/app/apikey
+GOOGLE_AI_API_KEY=your_gemini_key
+GEMINI_MODEL=gemini-1.5-flash  # or gemini-1.5-pro
+```
+
+**OpenAI API**:
+```bash
+# Get key from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxx
+OPENAI_MODEL=gpt-3.5-turbo  # or gpt-4-turbo
+```
+
+**Anthropic Claude API**:
+```bash
+# Get key from: https://console.anthropic.com/settings/keys
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxx
+ANTHROPIC_MODEL=claude-3-haiku-20240307  # or claude-3-5-sonnet-20241022
+```
+
+**Usage**:
+- Local: Set in `backend/env/env.dev`
+- Production: Store in GCP Secret Manager
+
+**Cost Considerations**:
+- **Gemini**: Free tier (15 requests/min, 1,500/day) - recommended for development
+- **OpenAI**: $5 free credit for 3 months (new accounts)
+- **Anthropic**: Pay-as-you-go, no free tier
+
+### Local Development Setup
+
+**Method 1: Environment Files** (Recommended)
+
+Edit `backend/env/env.dev`:
+
+```bash
+# Database
+DATABASE_URL="postgresql+asyncpg://webnotes_user:your_db_password@localhost:5432/webnotes"
+
+# JWT
+JWT_SECRET_KEY=your_jwt_secret_here
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+
+# LLM Provider (choose one)
+GOOGLE_AI_API_KEY=your_gemini_key
+LLM_PROVIDER=gemini
+
+# Optional: Additional providers
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+
+# Server Config
+HOST=localhost
+PORT=8080
+DEBUG=True
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+
+# CORS
+ALLOWED_ORIGINS='["http://localhost:3000", "http://localhost:8080", "chrome-extension://*"]'
+```
+
+**Method 2: Shell Environment**
+
+```bash
+# Export secrets as environment variables
+export DATABASE_URL="postgresql+asyncpg://webnotes_user:password@localhost:5432/webnotes"
+export JWT_SECRET_KEY="your_jwt_secret"
+export GOOGLE_AI_API_KEY="your_gemini_key"
+export GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+export GOOGLE_CLIENT_SECRET="your-client-secret"
+
+# Run backend
+cd backend
+python -m app.main
+```
+
+**Security Notes**:
+- ⚠️ **Never commit `.env` or `env.dev` files with real secrets to git**
+- ✅ Use `.env.example` or `.env.template` for documentation
+- ✅ Add `env.dev` and `env.prod` to `.gitignore`
+
+### Production Setup (GCP Secret Manager)
+
+#### Enable Secret Manager API
+
+```bash
+gcloud services enable secretmanager.googleapis.com
+```
+
+#### Create Secrets
+
+```bash
+# Database password
+echo -n "YOUR_DATABASE_PASSWORD" | gcloud secrets create db-password --data-file=-
+
+# JWT secret
+echo -n "YOUR_JWT_SECRET" | gcloud secrets create jwt-secret --data-file=-
+
+# Google OAuth (optional, can be env var)
+echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets create google-client-secret --data-file=-
+
+# LLM API keys
+echo -n "YOUR_GEMINI_KEY" | gcloud secrets create gemini-api-key --data-file=-
+echo -n "YOUR_OPENAI_KEY" | gcloud secrets create openai-api-key --data-file=-
+echo -n "YOUR_ANTHROPIC_KEY" | gcloud secrets create anthropic-api-key --data-file=-
+```
+
+#### Grant Access to Cloud Run
+
+```bash
+# Get project number
+PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)')
+
+# Grant access to each secret
+for SECRET in db-password jwt-secret gemini-api-key openai-api-key anthropic-api-key google-client-secret; do
+  gcloud secrets add-iam-policy-binding $SECRET \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+done
+```
+
+#### Configure Cloud Run with Secrets
+
+When deploying to Cloud Run:
+
+```bash
+gcloud run deploy yawn-api \
+  --image=YOUR_IMAGE \
+  --region=us-central1 \
+  --set-secrets="DATABASE_URL=db-password:latest,JWT_SECRET_KEY=jwt-secret:latest,GOOGLE_AI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest" \
+  --set-env-vars="GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com,LLM_PROVIDER=gemini,ENVIRONMENT=production,LOG_LEVEL=INFO"
+```
+
+**Note**: Non-secret config (like `GOOGLE_CLIENT_ID`, `LLM_PROVIDER`) can be set as environment variables.
+
+#### View and Manage Secrets
+
+```bash
+# List all secrets
+gcloud secrets list
+
+# View secret versions
+gcloud secrets versions list SECRET_NAME
+
+# Access secret value (for debugging)
+gcloud secrets versions access latest --secret=SECRET_NAME
+
+# Update secret (creates new version)
+echo -n "NEW_VALUE" | gcloud secrets versions add SECRET_NAME --data-file=-
+
+# Delete old versions (keep latest 3)
+gcloud secrets versions list SECRET_NAME --format="value(name)" | tail -n +4 | while read version; do
+  gcloud secrets versions destroy $version --secret=SECRET_NAME --quiet
+done
+```
+
+### Secret Rotation
+
+For security, rotate secrets periodically (recommended: quarterly).
+
+**Rotation Procedure**:
+
+1. **Generate new secret**:
+   ```bash
+   NEW_PASSWORD=$(openssl rand -base64 32)
+   ```
+
+2. **Update in GCP Secret Manager**:
+   ```bash
+   echo -n "$NEW_PASSWORD" | gcloud secrets versions add db-password --data-file=-
+   ```
+
+3. **Update dependent services**:
+   ```bash
+   # For database password, update Cloud SQL user
+   gcloud sql users set-password webnotes_user \
+     --instance=yawn-postgres \
+     --password=$NEW_PASSWORD
+   ```
+
+4. **Restart Cloud Run** (picks up latest secret version):
+   ```bash
+   gcloud run services update yawn-api --region=us-central1
+   ```
+
+5. **Verify** application still works
+
+6. **Delete old secret version**:
+   ```bash
+   gcloud secrets versions destroy VERSION_NUMBER --secret=db-password
+   ```
+
+### Secrets Checklist
+
+Before deploying to production:
+
+- [ ] All secrets generated with cryptographically secure methods
+- [ ] Database password is strong (32+ characters)
+- [ ] JWT secret is at least 64 characters
+- [ ] LLM API keys obtained and tested
+- [ ] Google OAuth credentials configured
+- [ ] Secrets stored in GCP Secret Manager (not in code)
+- [ ] Cloud Run service account has `secretAccessor` role
+- [ ] Local `.env` files excluded from git (`.gitignore`)
+- [ ] Secret rotation schedule established
+- [ ] Backup of secrets stored securely (password manager)
+
+### Troubleshooting
+
+**Issue**: Cloud Run can't access secrets
+
+**Solution**: Verify IAM permissions:
+```bash
+gcloud secrets get-iam-policy SECRET_NAME
+```
+
+**Issue**: "Secret not found" error
+
+**Solution**: Check secret exists in correct project:
+```bash
+gcloud secrets list --project=YOUR_PROJECT_ID
+```
+
+**Issue**: Database connection fails with wrong password
+
+**Solution**: Verify secret matches database user password:
+```bash
+# View secret (locally)
+gcloud secrets versions access latest --secret=db-password
+
+# Reset database password to match
+gcloud sql users set-password webnotes_user \
+  --instance=yawn-postgres \
+  --password=SECRET_VALUE
+```
 
 ---
 
