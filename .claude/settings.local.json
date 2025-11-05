@@ -37,14 +37,25 @@
       "Bash(alembic revision:*)",
       "Bash(cat:*)",
       "Bash(find:*)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(git log:*)",
+      "Bash(code chrome-extension/content.js)",
+      "Bash(code:*)",
+      "mcp__serena__*",
+      "mcp__serena__check_onboarding_performed",
+      "mcp__serena__onboarding",
+      "mcp__serena__list_dir",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/pre-commit run:*)",
+      "Bash(for file in content.js sharing-interface.js markdown-utils.js)",
+      "Bash(do echo \"=== $file ===\")",
+      "Bash(done)"
     ],
-    "deny": [
-      "Bash(git commit:-amend:*)"
-    ],
+    "deny": [],
     "ask": [],
     "additionalDirectories": [
       "C:\\Users\\gordo\\cluade\\notes1\\"
     ]
-  }
+  },
+  "outputStyle": "default"
 }

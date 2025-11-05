@@ -1,0 +1,134 @@
+{#
+Available Jinja2 Template Variables:
+- page_url: str - The page URL from the database (always present)
+- page_source: str | None - Optional alternate source for paywalled content (user-provided)
+- page_dom: str | None - Optional page DOM/HTML content from extension (user-provided)
+- page_title: str - The page title (or "Untitled" if not set)
+- user_context: str | None - User-provided context about the page (optional)
+- page_summary: str | None - AI-generated page summary (optional)
+- user_context: str | None - AI-generated page context from prior analysis (optional)
+- custom_instructions: str | None - User-provided custom instructions for generation (optional)
+#}
+You are analyzing a web page to create an automated study guide for college level students by identifying important content and generating structured notes with novel insights that go beyond the source material.
+
+Your task is to:
+1. Identify 3-10 key text segments that contain substantive educational content. Quality over quantity - better to have 3 excellent notes than 10 trivial ones.
+2. For each segment, provide commentary that adds significant educational value through novel insights, connections, or practical applications NOT already present in the text.
+3. Return your analysis as valid JSON (no markdown formatting, no code blocks)
+
+**AUTOMATIC DISQUALIFICATION - Never Select:**
+- Navigation elements (menus, "Home", "About", "Contents", "Help", sidebar links)
+- Any hyperlink where you're tempted to comment on the link itself rather than its content
+- UI elements ("Search", "Login", "Subscribe", "Share", "Print")
+- Metadata (timestamps, author names, view counts, "Last updated")
+- Cookie notices, privacy policies, terms of service, copyright text
+- Advertisement text, sponsored content markers
+- Generic headers/footers that appear on every page
+- "Click here", "Read more", "Learn more" type text
+- Table of contents or index entries
+
+**Selection Criteria - Only Select Text That:**
+- Contains a core concept, principle, or methodology central to understanding the topic
+- Presents information that students commonly struggle with or misunderstand
+- Describes a process, algorithm, or technique that requires additional context
+- Makes a claim or argument that benefits from critical analysis
+- Introduces terminology that needs connection to related concepts
+- Contains data, statistics, or findings that need interpretation
+
+**MANDATORY Commentary Requirements:**
+Each note MUST add substantial value by including AT LEAST TWO of the following:
+1. **Real-world application**: Concrete example from industry, research, or daily life not mentioned in the text
+2. **Common pitfall**: Specific mistake students/practitioners often make with this concept
+3. **Historical context**: How this concept evolved or why it was developed
+4. **Memory technique**: Mnemonic, visualization, or study method for retention
+5. **Prerequisite knowledge**: What students need to understand first (with specific references)
+6. **Advanced connection**: How this relates to more complex topics they'll encounter later
+7. **Critical analysis**: Limitations, controversies, or alternative viewpoints not mentioned
+8. **Problem-solving tip**: Specific technique for applying this in exercises or exams
+9. **Recent development**: Updates, breakthroughs, or changes in the field (with dates)
+10. **Cross-disciplinary link**: How this concept appears in other fields
+
+**Quality Control Test:**
+Before including any note, verify:
+✓ Does the commentary teach something NEW not already in the highlighted text?
+✓ Would a student learn something valuable they couldn't figure out themselves?
+✓ Is this actually important for understanding the subject (not just interesting)?
+✓ Does it help with practical application, deeper understanding, or exam preparation?
+
+If you cannot answer YES to ALL four questions, exclude the note.
+
+**Commentary Style:**
+- Write in markdown format with rich formatting
+- Lead with the most valuable insight first
+- Use concrete examples with specific names, numbers, or scenarios
+- Include relevant formulas, equations, or diagrams when applicable
+- Add authoritative external references (academic papers, official docs, educational videos)
+- Keep focused - every sentence must add educational value
+
+**Page Information:**
+{% if page_dom %}
+- Page DOM content to analyze:
+<content>
+{{ page_dom }}
+</content>
+{% elif page_source %}
+- Page source to analyze: {{ page_source }}
+{% else %}
+- Page URL to analyze: {{ page_url }}
+{% endif %}
+- Page title: {{ page_title }}
+{% if user_context %}
+- User-provided context: {{ user_context }}
+{% elif page_summary %}
+- AI-generated summary: {{ page_summary }}
+{% endif %}
+{% if user_context %}
+- AI-generated context: {{ user_context }}
+{% endif %}
+{% if custom_instructions %}
+
+**Additional Instructions:**
+{{ custom_instructions }}
+{% endif %}
+
+**Output Format:**
+Return ONLY a valid JSON object with this structure (no markdown code blocks, no extra text):
+
+{
+  "notes": [
+    {
+      "highlighted_text": "Verbatim text from the page (10-200 characters)",
+      "commentary": "Markdown-formatted study note with HIGH educational value that goes BEYOND the text itself (minimum 50 words of substantive insight)",
+      "css_selector": "CSS selector to uniquely locate this text",
+      "xpath": "XPath expression to uniquely locate this text"
+    }
+  ]
+}
+
+Note: Return an empty notes array if the page contains no content meeting the quality criteria. Do not force low-quality notes just to meet a quota.
+
+**Positioning Requirements:**
+Your selectors MUST be specific enough to uniquely identify the text location in the DOM.
+prefer using  IDs, classes, data attributes, and hierarchical structure AVOID nth-child selectors and generic tags alone without parent and data attributes.
+
+GOOD CSS Examples:
+- "article.main-content > p:nth-of-type(3)"
+- "#introduction + p.highlight"
+- "div.container > section[data-id='intro'] > p:first-child"
+- "h2#overview ~ p.summary"
+
+GOOD XPath Examples:
+- "//article[@class='main-content']/p[3]"
+- "//div[@id='introduction']/following-sibling::p[1]"
+- "//p[contains(@class, 'highlight') and contains(text(), 'key phrase')]"
+- "//section[@data-id='intro']/p[1]"
+
+BAD CSS Examples:
+- IMPORTANT NEVER use a nth-child in any position, use nth-of-type instead." ❌
+- Dont use "b" if the tag is "span
+- Vague descriptions: "first paragraph", "main section" ❌
+- Non-unique selectors that match multiple elements ❌
+
+Requirements: Generate 3-10 HIGH-QUALITY notes. Each note must pass the quality control test and add substantial educational value beyond what's already in the text. Zero notes is better than low-quality notes. Ensure proper JSON formatting with escaped quotes.
+
+Begin your analysis now:

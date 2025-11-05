@@ -8,7 +8,6 @@
 // Constants
 const EXTENSION_CONSTANTS = {
   STATS_KEY: "extensionStats",
-  NOTES_KEY: "webNotes",
   SCRIPT_INJECTION_TIMEOUT: 5000,
   DEFAULT_STATS: {
     installDate: Date.now(),
@@ -21,12 +20,32 @@ const EXTENSION_CONSTANTS = {
 };
 
 /**
+ * Detect if we're running in a service worker/background script context
+ * @returns {boolean} True if in service worker context
+ */
+function isServiceWorkerContext() {
+  return (
+    typeof self !== "undefined" &&
+    typeof ServiceWorkerGlobalScope !== "undefined" &&
+    self instanceof ServiceWorkerGlobalScope
+  );
+}
+
+/**
+ * Detect if we're running in a content script context
+ * @returns {boolean} True if in content script context
+ */
+function isContentScriptContext() {
+  return typeof window !== "undefined" && typeof document !== "undefined" && !isServiceWorkerContext();
+}
+
+/**
  * Centralized error logging with context
  * @param {string} context - Where the error occurred
  * @param {Error|any} error - The error object or message
  * @param {string} prefix - Optional prefix for log messages
  */
-function logError(context, error, prefix = "[Web Notes]") {
+function logError(context, error, prefix = "[YAWN]") {
   console.error(`${prefix} ${context}:`, error);
 }
 
@@ -76,49 +95,43 @@ async function setStats(stats) {
 }
 
 /**
- * Gets configuration from chrome.storage.sync
- * @returns {Promise<Object>} Promise resolving to config object
+ * Check if server sync is enabled
+ * @returns {Promise<boolean>} True if server sync is enabled
  */
-async function getWNConfig() {
+async function isServerSyncEnabled() {
   try {
-    return new Promise(resolve => {
-      chrome.storage.sync.get(["syncServerUrl", "useChromeSync"], result => {
-        if (chrome.runtime.lastError) {
-          logError("Failed to get config", chrome.runtime.lastError);
-          resolve({ syncServerUrl: "", useChromeSync: false });
-        } else {
-          resolve({
-            syncServerUrl: result.syncServerUrl || "",
-            useChromeSync: result.useChromeSync || false,
-          });
-        }
-      });
-    });
+    const config = await getWNConfig();
+    return !!config.syncServerUrl;
   } catch (error) {
-    logError("Error in getConfig", error);
-    return { syncServerUrl: "", useChromeSync: false };
+    logError("Failed to check server sync status", error);
+    return false;
   }
 }
 
 /**
- * Saves configuration to chrome.storage.sync
- * @param {Object} config - Configuration object
- * @returns {Promise<boolean>} Promise resolving to success status
+ * Check if user is authenticated for server operations
+ * @returns {Promise<boolean>} True if authenticated requests should be made
  */
-async function setWNConfig(config) {
+async function isServerAuthenticated() {
   try {
-    return new Promise(resolve => {
-      chrome.storage.sync.set(config, () => {
-        if (chrome.runtime.lastError) {
-          logError("Failed to set config", chrome.runtime.lastError);
-          resolve(false);
-        } else {
-          resolve(true);
-        }
-      });
-    });
+    // Check if we're in service worker (background) context
+    const isServiceWorker = typeof importScripts === "function";
+
+    if (isServiceWorker) {
+      // Background service worker - check directly but ensure initialization
+      if (typeof AuthManager === "undefined") {
+        return false;
+      }
+      // Wait for initialization before checking
+      await AuthManager.waitForInitialization();
+      return AuthManager.isAuthenticated();
+    } else {
+      // Content script or popup - ask background script via message passing
+      const response = await chrome.runtime.sendMessage({ action: "AUTHMANAGER_isAuthenticated" });
+      return response.success && response.data === true;
+    }
   } catch (error) {
-    logError("Error in setConfig", error);
+    logError("Failed to check auth status", error);
     return false;
   }
 }
@@ -149,97 +162,78 @@ async function getBytesUsed() {
 
 /**
  * Gets notes from appropriate storage based on configuration
- * If server sync is enabled, fetches from server and merges with local cache
+ * If authenticated with server: fetches from server
+ * Otherwise: fetches from local storage
  * @returns {Promise<Object>} Promise resolving to notes object organized by URL
  */
-async function getNotes() {
+async function getNotes(urlOverride = null) {
   try {
-    const config = await getWNConfig();
-    const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+    // Check if user is authenticated with server
+    const isServerEnabled = await isServerSyncEnabled();
+    const isAuthenticated = await isServerAuthenticated();
 
-    // Get local notes first
-    const localNotes = await new Promise(resolve => {
-      storage.get([EXTENSION_CONSTANTS.NOTES_KEY], result => {
-        if (chrome.runtime.lastError) {
-          logError("Failed to get local notes", chrome.runtime.lastError);
-          resolve({});
-        } else {
-          resolve(result[EXTENSION_CONSTANTS.NOTES_KEY] || {});
+    console.log(`[YAWN] Server sync enabled: ${isServerEnabled}, authenticated: ${isAuthenticated}`);
+    const currentUrl = urlOverride || (typeof window !== "undefined" ? window.location?.href : null);
+    const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
+
+    // If authenticated with server, fetch from server only
+    if (isServerEnabled && isAuthenticated) {
+      try {
+        if (currentUrl) {
+          let serverNotes = [];
+
+          // Use direct API call in service worker context, message passing in content script
+          if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+            // Direct API call in background/service worker
+            serverNotes = await ServerAPI.fetchNotesForPage(currentUrl);
+          } else if (isContentScriptContext()) {
+            // Message passing in content script
+            const response = await chrome.runtime.sendMessage({ action: "API_fetchNotesForPage", url: currentUrl });
+            serverNotes = response.success ? response.data : [];
+          } else {
+            // Popup context - use message passing
+            const response = await chrome.runtime.sendMessage({ action: "API_fetchNotesForPage", url: currentUrl });
+            serverNotes = response.success ? response.data : [];
+          }
+
+          // Convert server notes to extension format
+          const convertedNotes = serverNotes.map(serverNote => convertNoteFromServerFormat(serverNote));
+
+          // Set URL for each note
+          convertedNotes.forEach(note => {
+            note.url = currentUrl;
+          });
+
+          const result = {};
+          result[normalizedUrl] = convertedNotes;
+
+          console.log(`[YAWN] Loaded ${convertedNotes.length} notes from server`);
+          return result;
         }
-      });
-    });
-
-    // If server sync is enabled, check authentication and fetch from server
-    if (config.syncServerUrl && typeof ServerAPI !== "undefined") {
-      // Check if server sync is enabled and authentication is available
-      const isServerEnabled = await ServerAPI.isEnabled();
-      const isAuthenticated = await ServerAPI.isAuthenticatedMode();
-
-      console.log(`[Web Notes] Server sync enabled: ${isServerEnabled}, authenticated: ${isAuthenticated}`);
-
-      if (isServerEnabled && isAuthenticated) {
-        const serverNotes = await (typeof ErrorHandler !== "undefined"
-          ? ErrorHandler.withErrorHandling(
-              "fetch_notes",
-              async () => {
-                const currentUrl = window.location?.href;
-                if (currentUrl) {
-                  const serverNotes = await ServerAPI.fetchNotesForPage(currentUrl);
-                  const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
-
-                  // Convert server notes to extension format
-                  const convertedNotes = serverNotes.map(serverNote => ServerAPI.convertFromServerFormat(serverNote));
-
-                  // Set URL for each note
-                  convertedNotes.forEach(note => {
-                    note.url = currentUrl;
-                  });
-
-                  // Merge server notes with local notes
-                  const mergedNotes = { ...localNotes };
-                  mergedNotes[normalizedUrl] = convertedNotes;
-
-                  console.log(`[Web Notes] Merged ${convertedNotes.length} server notes with local notes`);
-                  return mergedNotes;
-                }
-                return localNotes;
-              },
-              { showUserFeedback: false }
-            ) // Don't show feedback for background fetches
-          : (async () => {
-              try {
-                const currentUrl = window.location?.href;
-                if (currentUrl) {
-                  const serverNotes = await ServerAPI.fetchNotesForPage(currentUrl);
-                  const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
-
-                  const convertedNotes = serverNotes.map(serverNote => ServerAPI.convertFromServerFormat(serverNote));
-
-                  convertedNotes.forEach(note => {
-                    note.url = currentUrl;
-                  });
-
-                  const mergedNotes = { ...localNotes };
-                  mergedNotes[normalizedUrl] = convertedNotes;
-
-                  console.log(`[Web Notes] Merged ${convertedNotes.length} server notes with local notes`);
-                  return mergedNotes;
-                }
-              } catch (serverError) {
-                console.warn("[Web Notes] Server fetch failed, using local notes:", serverError);
-              }
-              return localNotes;
-            })());
-
-        if (serverNotes) {
-          return serverNotes;
-        }
-      } else if (isServerEnabled && !isAuthenticated) {
-        console.log("[Web Notes] Server configured but user not authenticated, using local notes only");
+        return {};
+      } catch (serverError) {
+        console.error("[YAWN] Server fetch failed:", serverError);
+        return {};
       }
     }
 
-    return localNotes;
+    // Otherwise, fetch from local storage
+    const config = await getWNConfig();
+    const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+
+    const localNotesMap = await new Promise(resolve => {
+      storage.get([STORAGE_KEYS.NOTES_KEY], result => {
+        if (chrome.runtime.lastError) {
+          console.error("[YAWN] Failed to get local notes", chrome.runtime.lastError);
+          resolve({});
+        } else {
+          resolve(result[STORAGE_KEYS.NOTES_KEY] || {});
+        }
+      });
+    });
+    const localNotes = localNotesMap[normalizedUrl] || [];
+    console.log(`[YAWN] Loaded ${localNotes.length} notes from local storage`);
+    return localNotesMap;
   } catch (error) {
     logError("Error in getNotes", error);
     return {};
@@ -248,20 +242,84 @@ async function getNotes() {
 
 /**
  * Save notes to appropriate storage based on configuration
- * If server sync is enabled, also syncs to server
+ * If authenticated with server: saves to server
+ * Otherwise: saves to local storage
  * @param {Object} notes - Notes object organized by URL
+ * @param {string} url - URL for server sync (required)
  * @returns {Promise<boolean>} Promise resolving to success status
  */
-async function setNotes(notes) {
+async function setNotes(notes, url) {
   try {
+    // Check if user is authenticated with server
+    const isServerEnabled = await isServerSyncEnabled();
+    const isAuthenticated = await isServerAuthenticated();
+    const normalizedUrl = normalizeUrlForNoteStorage(url);
+
+    // If authenticated with server, save to server only
+    if (isServerEnabled && isAuthenticated) {
+      try {
+        // Sync notes for current page to server
+        if (url) {
+          const pageNotes = notes[normalizedUrl] || notes[url] || [];
+
+          if (pageNotes.length > 0) {
+            // Use direct API call in service worker context, message passing otherwise
+            if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+              await ServerAPI.bulkSyncNotes(normalizedUrl, pageNotes);
+            } else {
+              await chrome.runtime.sendMessage({ action: "API_bulkSyncNotes", url: normalizedUrl, notes: pageNotes });
+            }
+            console.log(`[YAWN] Synced ${pageNotes.length} notes to server for %{url}`);
+            return true;
+          }
+        } else {
+          for (const key in notes) {
+            if (key) {
+              setNotes(notes, key);
+            }
+          }
+        }
+        return true;
+      } catch (serverError) {
+        console.error("[YAWN] Server sync failed:", serverError);
+        return false;
+      }
+    }
+
+    // Otherwise, save to local storage
     const config = await getWNConfig();
     const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
 
-    // Save to local storage first
-    const localSuccess = await new Promise(resolve => {
-      storage.set({ [EXTENSION_CONSTANTS.NOTES_KEY]: notes }, () => {
+    const localNotes = await new Promise(resolve => {
+      storage.get([STORAGE_KEYS.NOTES_KEY], result => {
         if (chrome.runtime.lastError) {
-          logError("Failed to set notes locally", chrome.runtime.lastError);
+          console.error("[YAWN] Failed to get local notes:", chrome.runtime.lastError);
+          resolve({});
+        } else {
+          resolve(result[STORAGE_KEYS.NOTES_KEY] || {});
+        }
+      });
+    });
+
+    // if url is set, just overlay the one else overlay all urls in the incomming notes.
+    if (url) {
+      // if inbound notes were applied to the unnormalized use the new url.
+      // TODO need to test real world situations where we may need to merge instead.
+      if (notes[url]) {
+        localNotes[normalizedUrl] = notes[url];
+      } else {
+        localNotes[normalizedUrl] = notes[normalizedUrl];
+      }
+    } else {
+      for (const key in notes) {
+        localNotes[key] = notes[key];
+      }
+    }
+
+    const localSuccess = await new Promise(resolve => {
+      storage.set({ [STORAGE_KEYS.NOTES_KEY]: localNotes }, () => {
+        if (chrome.runtime.lastError) {
+          console.error("[YAWN] Failed to set notes locally:", chrome.runtime.lastError);
           resolve(false);
         } else {
           resolve(true);
@@ -269,41 +327,7 @@ async function setNotes(notes) {
       });
     });
 
-    // If server sync is enabled and user is authenticated, also save to server
-    if (config.syncServerUrl && typeof ServerAPI !== "undefined" && localSuccess) {
-      try {
-        // Check authentication before attempting server sync
-        const isAuthenticated = await ServerAPI.isAuthenticatedMode();
-        if (!isAuthenticated) {
-          console.log("[Web Notes] User not authenticated, skipping server sync");
-          return localSuccess;
-        }
-
-        // Only sync notes for current page to avoid bulk operations
-        const currentUrl = window.location?.href;
-        if (currentUrl) {
-          const normalizedUrl = normalizeUrlForNoteStorage(currentUrl);
-          const pageNotes = notes[normalizedUrl] || [];
-
-          if (pageNotes.length > 0) {
-            await ServerAPI.bulkSyncNotes(currentUrl, pageNotes);
-            console.log(`[Web Notes] Synced ${pageNotes.length} notes to server`);
-          }
-        }
-      } catch (serverError) {
-        // Handle authentication errors gracefully
-        if (
-          serverError.message === "AUTHENTICATION_REQUIRED" ||
-          (serverError.message && (serverError.message.includes("HTTP 401") || serverError.message.includes("HTTP 403")))
-        ) {
-          console.log("[Web Notes] Authentication failed during sync, notes saved locally only:", serverError.message);
-        } else {
-          console.warn("[Web Notes] Server sync failed, notes saved locally:", serverError);
-        }
-        // Local save succeeded, so still return true
-      }
-    }
-
+    console.log("[YAWN] Saved notes to local storage");
     return localSuccess;
   } catch (error) {
     logError("Error in setNotes", error);
@@ -312,9 +336,9 @@ async function setNotes(notes) {
 }
 
 /**
- * Update a single note in storage, searching across URL variations that match
- * when normalized (ignoring anchor fragments)
- * If server sync is enabled, also updates on server
+ * Update a single note in storage
+ * If authenticated with server: updates on server
+ * Otherwise: updates in local storage
  * @param {string} url - The URL where the note exists
  * @param {string} noteId - The note ID to update
  * @param {Object} noteData - The updated note data
@@ -322,7 +346,36 @@ async function setNotes(notes) {
  */
 async function updateNote(url, noteId, noteData) {
   try {
-    const config = await getWNConfig();
+    const isServerEnabled = await isServerSyncEnabled();
+    const isAuthenticated = await isServerAuthenticated();
+
+    // If authenticated with server, update on server
+    if (isServerEnabled && isAuthenticated) {
+      try {
+        const updatedData = {
+          ...noteData,
+          lastEdited: Date.now(),
+        };
+
+        // Use direct API call in service worker context, message passing otherwise
+        if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+          await ServerAPI.updateNote(noteId, updatedData);
+        } else {
+          await chrome.runtime.sendMessage({
+            action: "API_updateNote",
+            serverId: noteId, // For server notes, noteId IS the serverId
+            noteData: updatedData,
+          });
+        }
+        console.log(`[YAWN] Updated note ${noteId} on server`);
+        return true;
+      } catch (serverError) {
+        console.error("[YAWN] Server update failed:", serverError);
+        return false;
+      }
+    }
+
+    // Otherwise, update in local storage
     const notes = await getNotes();
     const matchingUrls = findMatchingUrlsInStorage(url, notes);
 
@@ -332,9 +385,8 @@ async function updateNote(url, noteId, noteData) {
       const noteIndex = urlNotes.findIndex(note => note.id === noteId);
 
       if (noteIndex !== -1) {
-        const existingNote = urlNotes[noteIndex];
         const updatedNote = {
-          ...existingNote,
+          ...urlNotes[noteIndex],
           ...noteData,
           lastEdited: Date.now(),
         };
@@ -342,80 +394,18 @@ async function updateNote(url, noteId, noteData) {
         urlNotes[noteIndex] = updatedNote;
         notes[matchingUrl] = urlNotes;
 
-        // Save locally first
-        const localSuccess = await setNotes(notes);
-
-        // If server sync is enabled and note has server ID, update on server
-        if (config.syncServerUrl && typeof ServerAPI !== "undefined" && localSuccess) {
-          try {
-            // Check authentication before attempting server sync
-            const isAuthenticated = await ServerAPI.isAuthenticatedMode();
-            if (!isAuthenticated) {
-              console.log("[Web Notes] User not authenticated, skipping server update");
-            } else {
-              if (existingNote.serverId) {
-                await ServerAPI.updateNote(existingNote.serverId, updatedNote);
-                console.log(`[Web Notes] Updated note ${existingNote.serverId} on server`);
-              } else {
-                // Note doesn't have server ID, create it on server
-                const serverNote = await ServerAPI.createNote(url, updatedNote);
-                // Update local note with server ID
-                updatedNote.serverId = serverNote.id;
-                await setNotes(notes);
-                console.log(`[Web Notes] Created note ${serverNote.id} on server during update`);
-              }
-            }
-          } catch (serverError) {
-            // Handle authentication errors gracefully
-            if (serverError.message === "AUTHENTICATION_REQUIRED") {
-              console.log("[Web Notes] Authentication required for server update, note updated locally only");
-            } else {
-              console.warn("[Web Notes] Server update failed, note updated locally:", serverError);
-            }
-          }
-        }
-
-        return localSuccess;
+        const success = await setNotes(notes, matchingUrl);
+        console.log("[YAWN] Updated note in local storage");
+        return success;
       }
     }
 
-    // Note not found in any matching URL variations
-    logError("Note not found for update", { url, noteId, searchedUrls: matchingUrls });
+    // Note not found
+    logError("Note not found for update", { url, noteId });
     return false;
   } catch (error) {
     logError("Error updating note", error);
     return false;
-  }
-}
-
-/**
- * Normalize URL for note storage by removing anchor fragments while preserving query parameters
- * This allows notes to be visible across anchor navigation within the same page
- * @param {string} url - The URL to normalize
- * @returns {string} Normalized URL without anchor fragment
- */
-function normalizeUrlForNoteStorage(url) {
-  try {
-    if (!url || typeof url !== "string") {
-      logError("Invalid URL for normalization", url);
-      return url || "";
-    }
-
-    const urlObj = new URL(url);
-    // Remove the hash/fragment (everything after #)
-    urlObj.hash = "";
-
-    // Keep query parameters as they're important for dynamic page content
-    return urlObj.toString();
-  } catch (error) {
-    // If URL parsing fails, try simple string manipulation as fallback
-    logError("URL parsing failed, using string fallback", error);
-
-    const hashIndex = url.indexOf("#");
-    if (hashIndex !== -1) {
-      return url.substring(0, hashIndex);
-    }
-    return url;
   }
 }
 
@@ -431,10 +421,10 @@ function findMatchingUrlsInStorage(targetUrl, notes) {
     const normalizedTarget = normalizeUrlForNoteStorage(targetUrl);
     const matchingUrls = [];
 
-    for (const storedUrl of Object.keys(notes)) {
-      const normalizedStored = normalizeUrlForNoteStorage(storedUrl);
+    for (const url of Object.keys(notes)) {
+      const normalizedStored = normalizeUrlForNoteStorage(url);
       if (normalizedStored === normalizedTarget) {
-        matchingUrls.push(storedUrl);
+        matchingUrls.push(url);
       }
     }
 
@@ -481,48 +471,57 @@ function getNotesForUrl(url, allNotes) {
 
 /**
  * Add a new note to storage
- * If server sync is enabled, also creates on server
+ * If authenticated with server: creates on server
+ * Otherwise: saves to local storage
  * @param {string} url - The URL where to add the note
  * @param {Object} noteData - The note data to add
  * @returns {Promise<boolean>} Promise resolving to success status
  */
 async function addNote(url, noteData) {
   try {
-    const config = await getWNConfig();
+    const isServerEnabled = await isServerSyncEnabled();
+    const isAuthenticated = await isServerAuthenticated();
+
+    // If authenticated with server, create on server
+    if (isServerEnabled && isAuthenticated) {
+      try {
+        let serverNote = null;
+
+        // Use direct API call in service worker context, message passing otherwise
+        if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+          serverNote = await ServerAPI.createNote(url, noteData);
+        } else {
+          const createResponse = await chrome.runtime.sendMessage({
+            action: "API_createNote",
+            url: url,
+            noteData: noteData,
+          });
+          serverNote = createResponse.success ? createResponse.data : null;
+        }
+
+        if (serverNote) {
+          noteData.serverId = serverNote.id;
+          console.log(`[YAWN] Created note ${serverNote.id} on server`);
+          return true;
+        }
+        return false;
+      } catch (serverError) {
+        console.error("[YAWN] Server create failed:", serverError);
+        return false;
+      }
+    }
+
+    // Otherwise, save to local storage
     const notes = await getNotes();
     const normalizedUrl = normalizeUrlForNoteStorage(url);
     const urlNotes = notes[normalizedUrl] || [];
 
-    // Add to local storage first
     urlNotes.push(noteData);
     notes[normalizedUrl] = urlNotes;
-    const localSuccess = await setNotes(notes);
+    const success = await setNotes(notes, normalizedUrl);
 
-    // If server sync is enabled, also create on server
-    if (config.syncServerUrl && typeof ServerAPI !== "undefined" && localSuccess) {
-      try {
-        // Check authentication before attempting server sync
-        const isAuthenticated = await ServerAPI.isAuthenticatedMode();
-        if (!isAuthenticated) {
-          console.log("[Web Notes] User not authenticated, skipping server create");
-        } else {
-          const serverNote = await ServerAPI.createNote(url, noteData);
-          // Update local note with server ID
-          noteData.serverId = serverNote.id;
-          await setNotes(notes);
-          console.log(`[Web Notes] Created note ${serverNote.id} on server`);
-        }
-      } catch (serverError) {
-        // Handle authentication errors gracefully
-        if (serverError.message === "AUTHENTICATION_REQUIRED") {
-          console.log("[Web Notes] Authentication required for server create, note saved locally only");
-        } else {
-          console.warn("[Web Notes] Server create failed, note saved locally:", serverError);
-        }
-      }
-    }
-
-    return localSuccess;
+    console.log(`[YAWN] Added note to local storage`);
+    return success;
   } catch (error) {
     logError("Error adding note", error);
     return false;
@@ -530,19 +529,42 @@ async function addNote(url, noteData) {
 }
 
 /**
- * Delete a note from storage, searching across URL variations that match when normalized
- * If server sync is enabled, also deletes from server
+ * Delete a note from storage
+ * If authenticated with server: deletes from server
+ * Otherwise: deletes from local storage
  * @param {string} url - The URL where the note exists
  * @param {string} noteId - The note ID to delete
  * @returns {Promise<boolean>} Promise resolving to success status
  */
 async function deleteNote(url, noteId) {
   try {
-    const config = await getWNConfig();
+    const isServerEnabled = await isServerSyncEnabled();
+    const isAuthenticated = await isServerAuthenticated();
+
+    // If authenticated with server, delete from server
+    if (isServerEnabled && isAuthenticated) {
+      try {
+        // Use direct API call in service worker context, message passing otherwise
+        if (isServiceWorkerContext() && typeof ServerAPI !== "undefined") {
+          await ServerAPI.deleteNote(noteId);
+        } else {
+          await chrome.runtime.sendMessage({
+            action: "API_deleteNote",
+            serverId: noteId, // For server notes, noteId IS the serverId
+          });
+        }
+        console.log(`[YAWN] Deleted note ${noteId} from server`);
+        return true;
+      } catch (serverError) {
+        console.error("[YAWN] Server delete failed:", serverError);
+        return false;
+      }
+    }
+
+    // Otherwise, delete from local storage
     const notes = await getNotes();
     const matchingUrls = findMatchingUrlsInStorage(url, notes);
     let noteFound = false;
-    let deletedNote = null;
 
     // Try to find and delete the note from any of the matching URL variations
     for (const matchingUrl of matchingUrls) {
@@ -550,59 +572,30 @@ async function deleteNote(url, noteId) {
       const noteIndex = urlNotes.findIndex(note => note.id === noteId);
 
       if (noteIndex !== -1) {
-        deletedNote = urlNotes[noteIndex];
-
         // Remove the note from the array
         urlNotes.splice(noteIndex, 1);
 
         // Update storage
         if (urlNotes.length === 0) {
           // Remove the URL key entirely if no notes remain
-          delete notes[matchingUrl];
+          notes[matchingUrl] = [];
         } else {
           notes[matchingUrl] = urlNotes;
         }
 
         noteFound = true;
-        console.log(`[Web Notes] Deleted note ${noteId} from URL: ${matchingUrl}`);
         break;
       }
     }
 
     if (!noteFound) {
-      logError("Note not found for deletion", {
-        url,
-        noteId,
-        searchedUrls: matchingUrls,
-      });
+      logError("Note not found for deletion", { url, noteId });
       return false;
     }
 
-    // Save locally first
-    const localSuccess = await setNotes(notes);
-
-    // If server sync is enabled and note has server ID, delete from server
-    if (config.syncServerUrl && typeof ServerAPI !== "undefined" && deletedNote?.serverId && localSuccess) {
-      try {
-        // Check authentication before attempting server sync
-        const isAuthenticated = await ServerAPI.isAuthenticatedMode();
-        if (!isAuthenticated) {
-          console.log("[Web Notes] User not authenticated, skipping server delete");
-        } else {
-          await ServerAPI.deleteNote(deletedNote.serverId);
-          console.log(`[Web Notes] Deleted note ${deletedNote.serverId} from server`);
-        }
-      } catch (serverError) {
-        // Handle authentication errors gracefully
-        if (serverError.message === "AUTHENTICATION_REQUIRED") {
-          console.log("[Web Notes] Authentication required for server delete, note deleted locally only");
-        } else {
-          console.warn("[Web Notes] Server delete failed, note deleted locally:", serverError);
-        }
-      }
-    }
-
-    return localSuccess;
+    const success = await setNotes(notes);
+    console.log("[YAWN] Deleted note from local storage");
+    return success;
   } catch (error) {
     logError("Error deleting note", error);
     return false;
@@ -664,10 +657,11 @@ if (typeof module !== "undefined" && module.exports) {
     updateNote,
     addNote,
     deleteNote,
-    normalizeUrlForNoteStorage,
     findMatchingUrlsInStorage,
     getNotesForUrl,
     isTabValid,
     safeApiCall,
+    isServerSyncEnabled,
+    isServerAuthenticated,
   };
 }

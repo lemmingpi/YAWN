@@ -19,7 +19,9 @@ from ..models import Note, NoteArtifact, Page, Site
 router = APIRouter(prefix="/app", tags=["web"])
 
 # Initialize Jinja2 templates
-templates = Jinja2Templates(directory="app/templates")
+# Use absolute path to work from any directory
+TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Get Google Client ID from environment
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -27,9 +29,15 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
-    request: Request, db: AsyncSession = Depends(get_db)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """Main dashboard page showing overview statistics and recent activity.
+    """Main dashboard page - returns HTML that will check auth client-side.
+
+    The page loads without authentication and uses JavaScript to:
+    1. Check if user is authenticated (via localStorage token)
+    2. Fetch dashboard data from API if authenticated
+    3. Show login prompt if not authenticated
 
     Args:
         request: FastAPI request object
@@ -38,50 +46,12 @@ async def dashboard(
     Returns:
         Rendered dashboard HTML page
     """
-    # Get statistics
-    stats = await get_dashboard_stats(db)
-
-    # Get recent sites (last 5)
-    recent_sites_query = (
-        select(Site)
-        .where(Site.is_active.is_(True))
-        .order_by(Site.created_at.desc())
-        .limit(5)
-    )
-    recent_sites_result = await db.execute(recent_sites_query)
-    recent_sites = recent_sites_result.scalars().all()
-
-    # Get page counts for recent sites
-    for site in recent_sites:
-        page_count_result = await db.execute(
-            select(func.count(Page.id)).where(Page.site_id == site.id)
-        )
-        site.pages_count = page_count_result.scalar() or 0
-
-    # Get recent notes (last 5)
-    recent_notes_query = (
-        select(Note)
-        .where(Note.is_active.is_(True))
-        .order_by(Note.created_at.desc())
-        .limit(5)
-    )
-    recent_notes_result = await db.execute(recent_notes_query)
-    recent_notes = recent_notes_result.scalars().all()
-
-    # Get artifact counts for recent notes
-    for note in recent_notes:
-        artifact_count_result = await db.execute(
-            select(func.count(NoteArtifact.id)).where(NoteArtifact.note_id == note.id)
-        )
-        note.artifacts_count = artifact_count_result.scalar() or 0
-
+    # Always return the dashboard template
+    # JavaScript will handle checking auth and fetching data
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
-            "stats": stats,
-            "recent_sites": recent_sites,
-            "recent_notes": recent_notes,
             "google_client_id": GOOGLE_CLIENT_ID,
         },
     )
@@ -102,6 +72,24 @@ async def sites_page(
     """
     return templates.TemplateResponse(
         "sites.html", {"request": request, "google_client_id": GOOGLE_CLIENT_ID}
+    )
+
+
+@router.get("/pages", response_class=HTMLResponse)
+async def pages_page(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> HTMLResponse:
+    """Pages management page.
+
+    Args:
+        request: FastAPI request object
+        db: Database session
+
+    Returns:
+        Rendered pages HTML page
+    """
+    return templates.TemplateResponse(
+        "pages.html", {"request": request, "google_client_id": GOOGLE_CLIENT_ID}
     )
 
 

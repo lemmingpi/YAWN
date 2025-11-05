@@ -100,7 +100,7 @@ function createColorDropdown(textarea) {
       });
 
       // Add click handler for color selection
-      colorButton.addEventListener("click", (event) => {
+      colorButton.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
         handleColorSelection(colorOption.name, textarea);
@@ -141,7 +141,7 @@ function createColorDropdown(textarea) {
     });
 
     // Toggle dropdown on button click
-    dropdownButton.addEventListener("click", (event) => {
+    dropdownButton.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
       toggleColorDropdown(dropdownMenu);
@@ -161,7 +161,7 @@ function createColorDropdown(textarea) {
 
     return dropdownContainer;
   } catch (error) {
-    console.error("[Web Notes] Error creating color dropdown:", error);
+    console.error("[YAWN] Error creating color dropdown:", error);
     return document.createElement("div"); // Return empty div as fallback
   }
 }
@@ -180,7 +180,7 @@ function toggleColorDropdown(dropdownMenu) {
       showColorDropdown(dropdownMenu);
     }
   } catch (error) {
-    console.error("[Web Notes] Error toggling color dropdown:", error);
+    console.error("[YAWN] Error toggling color dropdown:", error);
   }
 }
 
@@ -204,7 +204,7 @@ function showColorDropdown(dropdownMenu) {
       document.addEventListener("click", handleClickOutsideColorDropdown);
     }, 0);
   } catch (error) {
-    console.error("[Web Notes] Error showing color dropdown:", error);
+    console.error("[YAWN] Error showing color dropdown:", error);
   }
 }
 
@@ -217,7 +217,7 @@ function hideColorDropdown(dropdownMenu) {
     dropdownMenu.style.display = "none";
     document.removeEventListener("click", handleClickOutsideColorDropdown);
   } catch (error) {
-    console.error("[Web Notes] Error hiding color dropdown:", error);
+    console.error("[YAWN] Error hiding color dropdown:", error);
   }
 }
 
@@ -236,7 +236,7 @@ function handleClickOutsideColorDropdown(event) {
       });
     }
   } catch (error) {
-    console.error("[Web Notes] Error handling outside click:", error);
+    console.error("[YAWN] Error handling outside click:", error);
   }
 }
 
@@ -247,12 +247,9 @@ function handleClickOutsideColorDropdown(event) {
  */
 function handleColorSelection(colorName, textarea) {
   try {
-    console.log(`[Web Notes] Color selected: ${colorName}`);
-
     // Get the current note element from the textarea's context
     const noteElement = textarea.closest(".web-note");
     if (!noteElement || !noteElement.noteData) {
-      console.error("[Web Notes] Could not find note element or note data for color change");
       return;
     }
 
@@ -271,29 +268,20 @@ function handleColorSelection(colorName, textarea) {
     const colorValue = NoteColorUtils.getColorValue(colorName);
     noteElement.style.background = colorValue;
 
-    console.log(`[Web Notes] Applied background color ${colorName} (${colorValue}) to note ${noteData.id}`);
-
     // Create text highlighting if selection data exists
     if (updatedNoteData.selectionData && updatedNoteData.selectionData.selectedText) {
       const highlightColor = NoteColorUtils.getColorValue(updatedNoteData.backgroundColor || "light-yellow");
       createTextHighlight(updatedNoteData, highlightColor);
     }
     // Save to storage
-    updateNote(window.location.href, noteData.id, updatedNoteData).then(success => {
-      if (success) {
-        console.log(`[Web Notes] Note ${noteData.id} color saved successfully`);
-      } else {
-        console.error(`[Web Notes] Failed to save note ${noteData.id} color`);
-      }
-    });
+    updateNote(window.location.href, noteData.id, updatedNoteData).then(success => {});
 
     // Maintain focus on textarea
     setTimeout(() => {
       textarea.focus();
     }, 0);
-
   } catch (error) {
-    console.error("[Web Notes] Error handling color selection:", error);
+    console.error("[YAWN] Error handling color selection:", error);
   }
 }
 

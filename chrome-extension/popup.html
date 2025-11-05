@@ -219,6 +219,39 @@
         opacity: 0.5;
         pointer-events: none;
       }
+
+      .sync-section {
+        margin-top: 16px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 12px;
+        font-size: 12px;
+        text-align: left;
+      }
+
+      .sync-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .sync-actions .button {
+        width: 100%;
+        margin: 0;
+        padding: 8px 12px;
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .danger-button {
+        background: rgba(244, 67, 54, 0.3);
+        border-color: rgba(244, 67, 54, 0.5);
+      }
+
+      .danger-button:hover {
+        background: rgba(244, 67, 54, 0.5);
+      }
     </style>
   </head>
   <body>
@@ -274,6 +307,17 @@
         </div>
       </div>
 
+      <div class="sync-section" id="sync-section" style="display: none">
+        <strong>Data Sync:</strong>
+        <div class="sync-actions">
+          <button class="button" id="copy-server-to-local-btn">Copy Server Notes to Local</button>
+          <button class="button" id="copy-local-to-server-btn">Copy Local Notes to Server</button>
+          <button class="button danger-button disabled" id="delete-all-server-data-btn" title="Coming soon">
+            Delete All Server Data
+          </button>
+        </div>
+      </div>
+
       <div class="status">
         <strong>Status:</strong>
         Extension loaded successfully!
@@ -290,9 +334,11 @@
       </div>
     </div>
 
+    <script src="base-utils.js"></script>
     <script src="shared-utils.js"></script>
     <script src="auth-manager.js"></script>
     <script src="server-api.js"></script>
+    <script src="permission-manager.js"></script>
     <script src="error-handling.js"></script>
     <script src="popup.js"></script>
   </body>

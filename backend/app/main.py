@@ -7,12 +7,12 @@ necessary routers, middleware, and startup/shutdown events.
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import AsyncGenerator, Dict
+from typing import Any, AsyncGenerator, Dict
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 # Load environment variables from file specified by ENV_FILE (fallback to ".env")
@@ -22,12 +22,15 @@ load_dotenv(os.getenv("ENV_FILE", ".env"))
 from .config import settings  # noqa: E402
 from .database import create_tables  # noqa: E402
 from .llm.provider_manager import provider_manager  # noqa: E402
+from .logging_config import setup_logging  # noqa: E402
 from .middleware import (  # noqa: E402
     RequestLoggingMiddleware,
     SecurityHeadersMiddleware,
 )
 from .routers import (  # noqa: E402
     artifacts,
+    auto_notes,
+    dashboard,
     llm_providers,
     notes,
     pages,
@@ -37,6 +40,9 @@ from .routers import (  # noqa: E402
     web,
 )
 from .schemas import HealthCheckResponse  # noqa: E402
+
+# Setup logging as early as possible
+setup_logging()
 
 
 @asynccontextmanager
@@ -102,16 +108,22 @@ app = FastAPI(
 
 # Configure middleware
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RequestLoggingMiddleware, log_body=False)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Configure CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
+# Use regex if configured, otherwise use explicit origins list
+cors_config: Dict[str, Any] = {
+    "allow_credentials": True,
+    "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    "allow_headers": ["*"],
+}
+
+if settings.ALLOWED_ORIGINS_REGEX:
+    cors_config["allow_origin_regex"] = settings.ALLOWED_ORIGINS_REGEX
+else:
+    cors_config["allow_origins"] = settings.ALLOWED_ORIGINS
+
+app.add_middleware(CORSMiddleware, **cors_config)
 
 # Include API routers
 app.include_router(users.router)
@@ -119,20 +131,25 @@ app.include_router(sites.router)
 app.include_router(pages.router)
 app.include_router(notes.router)
 app.include_router(artifacts.router)
+app.include_router(auto_notes.router)
 app.include_router(llm_providers.router)
 app.include_router(sharing.router)
+app.include_router(dashboard.router)
 
 # Include web dashboard router
 app.include_router(web.router)
 
 # Static files for web interface
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# Use absolute path to work from any directory
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> FileResponse:
     """Serve favicon."""
-    return FileResponse("app/static/favicon.ico")
+    favicon_path = os.path.join(STATIC_DIR, "favicon.ico")
+    return FileResponse(favicon_path)
 
 
 @app.get("/", response_class=RedirectResponse)
@@ -239,7 +256,9 @@ async def detailed_status() -> dict:
 
 # Exception handlers
 @app.exception_handler(404)
-async def not_found_handler(request: Request, exc: HTTPException) -> HTMLResponse:
+async def not_found_handler(
+    request: Request, exc: HTTPException
+) -> HTMLResponse | JSONResponse:
     """Handle 404 errors for web interface."""
     if request.url.path.startswith("/app/"):
         # For web interface, return HTML 404 page
@@ -252,7 +271,7 @@ async def not_found_handler(request: Request, exc: HTTPException) -> HTMLRespons
         )
     else:
         # For API endpoints, return JSON
-        raise HTTPException(status_code=404, detail="Endpoint not found")
+        return JSONResponse(status_code=404, content={"detail": "Endpoint not found"})
 
 
 if __name__ == "__main__":

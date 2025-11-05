@@ -67,12 +67,11 @@ const ErrorHandler = {
       operation: operation,
     });
 
-    console.error(`[Web Notes] ${operation} failed (${errorType}):`, error);
+    console.error(`[YAWN] ${operation} failed (${errorType}):`, error);
 
     // Determine if operation should be retried
     const shouldRetry =
-      currentCount < this.maxRetries &&
-      (errorType === this.ERROR_TYPES.NETWORK || errorType === this.ERROR_TYPES.SERVER);
+      currentCount < this.maxRetries && (errorType === this.ERROR_TYPES.NETWORK || errorType === this.ERROR_TYPES.SERVER);
 
     // Show user feedback for certain error types
     if (!shouldRetry && options.showUserFeedback !== false) {
@@ -129,8 +128,7 @@ const ErrorHandler = {
       messageEl.textContent = message;
 
       // Style the message
-      const backgroundColor =
-        type === "error" ? "#f44336" : type === "warning" ? "#ff9800" : "#4caf50";
+      const backgroundColor = type === "error" ? "#f44336" : type === "warning" ? "#ff9800" : "#4caf50";
 
       messageEl.style.cssText = `
         position: fixed;
@@ -172,7 +170,7 @@ const ErrorHandler = {
         }, 300);
       }, duration);
     } catch (error) {
-      console.error("[Web Notes] Error showing user message:", error);
+      console.error("[YAWN] Error showing user message:", error);
     }
   },
 
@@ -225,7 +223,7 @@ const ErrorHandler = {
         const retryCount = this.errorCounts.get(`${operation}_retry`) || 0;
         const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Max 10 seconds
 
-        console.log(`[Web Notes] Retrying ${operation} in ${delay}ms...`);
+        console.log(`[YAWN] Retrying ${operation} in ${delay}ms...`);
 
         setTimeout(async () => {
           this.errorCounts.set(`${operation}_retry`, retryCount + 1);
@@ -247,7 +245,7 @@ const ErrorHandler = {
 // Global error handler for unhandled promise rejections
 if (typeof window !== "undefined") {
   window.addEventListener("unhandledrejection", event => {
-    console.error("[Web Notes] Unhandled promise rejection:", event.reason);
+    console.error("[YAWN] Unhandled promise rejection:", event.reason);
     ErrorHandler.handleError("unhandled_promise", event.reason);
   });
 }

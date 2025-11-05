@@ -132,10 +132,11 @@ class TestBuildPrompt:
         prompt = context_builder.build_prompt(
             note=mock_note,
             artifact_type=ArtifactType.ANALYSIS,
+            user_instructions="My Usr Context",
         )
 
-        assert "Analysis:" in prompt
-        assert "detailed analysis" in prompt
+        assert mock_note.content in prompt
+        assert "My Usr Context" in prompt
 
     def test_build_prompt_questions(self, context_builder, mock_note):
         """Test building prompt for questions artifact."""
@@ -152,10 +153,11 @@ class TestBuildPrompt:
         prompt = context_builder.build_prompt(
             note=mock_note,
             artifact_type=ArtifactType.ACTION_ITEMS,
+            user_instructions="My Usr Context",
         )
 
-        assert "Action Items:" in prompt
-        assert "actionable items" in prompt
+        assert mock_note.content in prompt
+        assert "My Usr Context" in prompt
 
     def test_build_prompt_code_snippet(self, context_builder, mock_note):
         """Test building prompt for code snippet artifact."""
@@ -384,8 +386,16 @@ class TestArtifactTemplates:
 
     def test_all_templates_exist(self):
         """Test that templates exist for all artifact types."""
+        # Visualization types use Jinja2 templates, not ARTIFACT_TEMPLATES
+        visualization_types = {
+            ArtifactType.SCENE_ILLUSTRATION,
+            ArtifactType.DATA_CHART,
+            ArtifactType.SCIENTIFIC_VISUALIZATION,
+        }
+
         for artifact_type in ArtifactType:
-            assert artifact_type in ARTIFACT_TEMPLATES
+            if artifact_type not in visualization_types:
+                assert artifact_type in ARTIFACT_TEMPLATES
 
     def test_templates_have_placeholders(self):
         """Test that templates have required placeholders."""

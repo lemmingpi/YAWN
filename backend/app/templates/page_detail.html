@@ -53,16 +53,12 @@
                     <p class="mb-0">{{ page.page_summary }}</p>
                 </div>
                 {% endif %}
-
-                {% if page.user_context %}
-                <div class="mb-3">
-                    <h6 class="text-muted">User Context:</h6>
-                    <p class="mb-0">{{ page.user_context }}</p>
-                </div>
-                {% endif %}
             </div>
             <div class="col-md-4">
                 <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="showAutoNoteModal()">
+                        <i class="bi bi-stars me-1"></i>Generate Auto-Notes
+                    </button>
                     <button class="btn btn-outline-primary" onclick="editPage()">
                         <i class="bi bi-pencil me-1"></i>Edit Page
                     </button>
@@ -80,61 +76,63 @@
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card stats-card text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-sticky display-4 mb-2"></i>
-                    <h3 class="card-title mb-1" id="totalNotes">0</h3>
-                    <p class="card-text">Total Notes</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card stats-card text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-magic display-4 mb-2"></i>
-                    <h3 class="card-title mb-1" id="totalArtifacts">0</h3>
-                    <p class="card-text">Total Artifacts</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card stats-card text-white h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-calendar-event display-4 mb-2"></i>
-                    <h3 class="card-title mb-1" id="recentActivity">0</h3>
-                    <p class="card-text">Recent Notes (7d)</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Notes Section -->
+    <!-- Tabbed Content Section -->
     <div class="content-wrapper p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">
-                <i class="bi bi-sticky text-primary me-2"></i>Notes on this Page
-            </h5>
-            <div class="search-box">
-                <i class="bi bi-search"></i>
-                <input type="text" class="form-control" id="notesSearch" placeholder="Search notes...">
-            </div>
-        </div>
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs mb-3" id="pageDetailTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="context-tab" data-bs-toggle="tab" data-bs-target="#context-content" type="button" role="tab" aria-controls="context-content" aria-selected="true">
+                    <i class="bi bi-file-text me-1"></i>User Context
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="notes-tab" data-bs-toggle="tab" data-bs-target="#notes-content" type="button" role="tab" aria-controls="notes-content" aria-selected="false">
+                    <i class="bi bi-sticky me-1"></i>Notes
+                </button>
+            </li>
+        </ul>
 
-        <div class="row" id="notesContainer">
-            <div class="text-center py-3">
-                <div class="spinner-border spinner-border-sm text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
+        <!-- Tab Content -->
+        <div class="tab-content" id="pageDetailTabsContent">
+            <!-- User Context Tab -->
+            <div class="tab-pane fade show active" id="context-content" role="tabpanel" aria-labelledby="context-tab">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="text-muted mb-0">User Context:</h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="showGenerateContextModal()">
+                        <i class="bi bi-magic me-1"></i>Generate AI Context Summary
+                    </button>
                 </div>
-                <span class="ms-2">Loading notes...</span>
+                <div id="userContextDisplay" class="p-3 border rounded bg-light" style="white-space: pre-wrap; min-height: 150px;">
+                    {{ page.user_context or 'No context set. Click "Generate AI Context Summary" to create an AI-powered summary.' }}
+                </div>
             </div>
-        </div>
 
-        <div id="notesEmpty" class="text-center py-4 d-none">
-            <i class="bi bi-sticky display-1 text-muted"></i>
-            <h6 class="mt-2 text-muted">No notes found for this page</h6>
+            <!-- Notes Tab -->
+            <div class="tab-pane fade" id="notes-content" role="tabpanel" aria-labelledby="notes-tab">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-sticky text-primary me-2"></i>Notes on this Page
+                    </h5>
+                    <div class="search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" class="form-control" id="notesSearch" placeholder="Search notes...">
+                    </div>
+                </div>
+
+                <div class="row" id="notesContainer">
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span class="ms-2">Loading notes...</span>
+                    </div>
+                </div>
+
+                <div id="notesEmpty" class="text-center py-4 d-none">
+                    <i class="bi bi-sticky display-1 text-muted"></i>
+                    <h6 class="mt-2 text-muted">No notes found for this page</h6>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -173,6 +171,21 @@
                             </label>
                         </div>
                     </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editPagePaywalled" {{ 'checked' if page.is_paywalled else '' }} onchange="toggleEditPageSource()">
+                            <label class="form-check-label" for="editPagePaywalled">
+                                Page is Paywalled
+                                <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" title="Mark if page content is behind a paywall. You can provide alternate source text for AI context generation."></i>
+                            </label>
+                            <span class="form-text text-muted">Obey all copyright and usage restrictions of the target page.</span>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="editPageSourceContainer" style="display: {{ 'block' if page.is_paywalled else 'none' }};">
+                        <label for="editPageSource" class="form-label">Alternate Page Source</label>
+                        <textarea class="form-control" id="editPageSource" rows="4" placeholder="Provide alternate page source text for paywalled content...">{{ page.page_source or '' }}</textarea>
+                        <small class="form-text text-muted">This text will be used for AI analysis when the original page is inaccessible.</small>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -181,6 +194,243 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Generate Context Modal -->
+<div class="modal fade" id="generateContextModal" tabindex="-1" aria-labelledby="generateContextModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="generateContextModalLabel">Generate AI Context</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="generateContextForm">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>What is AI Context?</strong><br>
+                        This generates a structured summary optimized for AI use (not human reading).
+                        The AI will analyze your page and notes to extract key information like writing style,
+                        technical details, or scholarly metadata based on the content type.
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="sourceUrl" class="form-label">Source URL</label>
+                        <input
+                            type="text"
+                            class="form-control"
+                            id="sourceUrl"
+                            value="{{ page.url }}"
+                            readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="paywalledCheckbox"
+                                onchange="toggleSourceUrlEditable()">
+                            <label
+                                class="form-check-label"
+                                for="paywalledCheckbox"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="right"
+                                title="If a site is paywalled, you may need to specify an alternate source or description. Please obey the terms of service of content creators.">
+                                PayWalled <i class="bi bi-info-circle text-muted"></i>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="customInstructions" class="form-label">
+                            Custom Instructions (Optional)
+                        </label>
+                        <textarea
+                            class="form-control"
+                            id="customInstructions"
+                            rows="4"
+                            placeholder="Add any specific instructions for the AI (e.g., 'Focus on character development' or 'Emphasize the methodology section')"></textarea>
+                        <small class="text-muted">
+                            Leave blank for automatic detection, or add guidance to customize the output.
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Estimated Cost:</label>
+                        <div class="p-2 bg-light border rounded">
+                            <span class="text-muted">~$0.00</span>
+                            <small class="text-muted ms-2">(Placeholder - cost tracking coming soon)</small>
+                        </div>
+                    </div>
+
+                    <div id="generationProgress" class="d-none">
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar"
+                                 style="width: 100%">Generating...</div>
+                        </div>
+                        <p class="text-muted mt-2 mb-0">
+                            <i class="bi bi-hourglass-split"></i> Analyzing page and notes...
+                        </p>
+                    </div>
+
+                    <div id="generationResult" class="d-none">
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            <strong>Context Generated!</strong>
+                            <div class="mt-2">
+                                <small>
+                                    <strong>Content Type:</strong> <span id="detectedContentType"></span><br>
+                                    <strong>Tokens Used:</strong> <span id="tokensUsed"></span><br>
+                                    <strong>Generation Time:</strong> <span id="generationTime"></span>ms
+                                </small>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <strong>Generated Context:</strong>
+                        </div>
+                        <div id="generatedContextPreview" class="p-3 border rounded bg-light" style="white-space: pre-wrap; max-height: 300px; overflow-y: auto;">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-info" onclick="previewPrompt()">
+                        <i class="bi bi-eye me-1"></i>Preview Prompt
+                    </button>
+                    <button type="submit" class="btn btn-primary" id="generateBtn">
+                        <i class="bi bi-magic me-1"></i>Generate Context
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Auto-Note Generation Modal -->
+<div class="modal fade" id="autoNoteModal" tabindex="-1" aria-labelledby="autoNoteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="autoNoteModalLabel">
+                    <i class="bi bi-stars me-2"></i>Generate Auto-Notes
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="autoNoteForm">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>What are Auto-Notes?</strong><br>
+                        The AI will analyze this page and automatically create 5-15 structured notes with
+                        highlighted text and commentary. Choose a template based on your goal.
+                    </div>
+
+                    {% if page.is_paywalled %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Paywalled Page Notice:</strong><br>
+                        This page is marked as paywalled. Auto-note generation is disabled because the LLM
+                        cannot accurately position notes without access to the original page content.
+                        You can still preview what would be generated using your alternate page source.
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="autoNoteTemplate" class="form-label">Template Type <span class="text-danger">*</span></label>
+                        <select class="form-select" id="autoNoteTemplate" required>
+                            <option value="study_guide">📚 Study Guide - Extract key concepts and explanations</option>
+                            <option value="content_review">✍️ Content Review - Editorial feedback and expansion suggestions</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            <strong>Study Guide:</strong> Best for learning materials, articles, documentation<br>
+                            <strong>Content Review:</strong> Best for your own writing that needs feedback
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="autoNoteInstructions" class="form-label">
+                            Custom Instructions (Optional)
+                        </label>
+                        <textarea
+                            class="form-control"
+                            id="autoNoteInstructions"
+                            rows="3"
+                            placeholder="E.g., 'Focus on technical implementation details' or 'Emphasize philosophical arguments'"></textarea>
+                        <small class="form-text text-muted">
+                            Provide specific guidance for the AI about what to focus on.
+                        </small>
+                    </div>
+
+                    <!-- Result display area -->
+                    <div id="autoNoteResult" style="display: none;">
+                        <hr>
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle me-2"></i>
+                            <strong>Notes Generated!</strong>
+                            <div class="mt-2">
+                                <small>
+                                    <strong>Notes Created:</strong> <span id="autoNoteCount"></span><br>
+                                    <strong>Tokens Used:</strong> <span id="autoNoteTokens"></span><br>
+                                    <strong>Cost:</strong> $<span id="autoNoteCost"></span><br>
+                                    <strong>Generation Time:</strong> <span id="autoNoteTime"></span>ms
+                                </small>
+                            </div>
+                            <div class="mt-3">
+                                <strong>Batch ID:</strong> <code id="autoNoteBatchId"></code>
+                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="archiveBatch()">
+                                    <i class="bi bi-archive me-1"></i>Archive This Batch
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-info" onclick="previewAutoNotePrompt()">
+                        <i class="bi bi-eye me-1"></i>Preview Prompt
+                    </button>
+                    <button type="submit" class="btn btn-primary" id="autoNoteGenerateBtn" {% if page.is_paywalled %}disabled{% endif %}>
+                        <i class="bi bi-stars me-1"></i>Generate Notes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Prompt Preview Modal -->
+<div class="modal fade" id="promptPreviewModal" tabindex="-1" aria-labelledby="promptPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="promptPreviewModalLabel">Prompt Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    This is the exact prompt that will be sent to the LLM. You can select and copy this text.
+                </div>
+                <div class="mb-3">
+                    <label for="promptPreviewText" class="form-label">Full Prompt:</label>
+                    <textarea
+                        class="form-control font-monospace"
+                        id="promptPreviewText"
+                        rows="20"
+                        readonly
+                        style="font-size: 0.875rem;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="copyPromptToClipboard()">
+                    <i class="bi bi-clipboard me-1"></i>Copy to Clipboard
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -241,31 +491,8 @@ class PageDetailManager {
     }
 
     async loadStats() {
-        try {
-            const notesResponse = await authenticatedFetch(`/api/notes?page_id=${this.pageId}&limit=1000`);
-            const notes = await notesResponse.json();
-
-            document.getElementById('totalNotes').textContent = notes.length;
-
-            // Calculate artifacts count and recent activity
-            let totalArtifacts = 0;
-            let recentNotes = 0;
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-            for (const note of notes) {
-                totalArtifacts += note.artifacts_count || 0;
-                if (new Date(note.created_at) > sevenDaysAgo) {
-                    recentNotes++;
-                }
-            }
-
-            document.getElementById('totalArtifacts').textContent = totalArtifacts;
-            document.getElementById('recentActivity').textContent = recentNotes;
-
-        } catch (error) {
-            console.error('Error loading stats:', error);
-        }
+        // Stats tiles removed from UI, this method kept for backward compatibility
+        // Can be safely removed if not needed elsewhere
     }
 
     async loadNotes() {
@@ -278,11 +505,32 @@ class PageDetailManager {
             if (search) params.append('search', search);
 
             const response = await authenticatedFetch(`/api/notes?${params}`);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
             const notes = await response.json();
+
+            // Ensure notes is an array
+            if (!Array.isArray(notes)) {
+                console.error('Expected notes to be an array, got:', typeof notes);
+                throw new Error('Invalid response format');
+            }
 
             this.renderNotes(notes);
         } catch (error) {
             console.error('Error loading notes:', error);
+            // Show error state
+            const container = document.getElementById('notesContainer');
+            container.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Failed to load notes: ${error.message}
+                    </div>
+                </div>
+            `;
         }
     }
 
@@ -332,7 +580,9 @@ class PageDetailManager {
             title: document.getElementById('editPageTitle').value.trim() || null,
             page_summary: document.getElementById('editPageSummary').value.trim() || null,
             user_context: document.getElementById('editPageContext').value.trim() || null,
-            is_active: document.getElementById('editPageActive').checked
+            is_active: document.getElementById('editPageActive').checked,
+            is_paywalled: document.getElementById('editPagePaywalled').checked,
+            page_source: document.getElementById('editPageSource').value.trim() || null
         };
 
         try {
@@ -393,6 +643,327 @@ async function deletePage() {
         alert('Error: Failed to delete page');
     }
 }
+
+// Global functions for context generation
+function showGenerateContextModal() {
+    const modal = new bootstrap.Modal(document.getElementById('generateContextModal'));
+
+    // Reset modal state
+    document.getElementById('sourceUrl').value = '{{ page.url }}';
+    document.getElementById('sourceUrl').readOnly = true;
+    document.getElementById('paywalledCheckbox').checked = false;
+    document.getElementById('customInstructions').value = '';
+    document.getElementById('generationProgress').classList.add('d-none');
+    document.getElementById('generationResult').classList.add('d-none');
+    document.getElementById('generateBtn').disabled = false;
+
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    modal.show();
+}
+
+function toggleSourceUrlEditable() {
+    const sourceUrlInput = document.getElementById('sourceUrl');
+    const isChecked = document.getElementById('paywalledCheckbox').checked;
+    sourceUrlInput.readOnly = !isChecked;
+    if (isChecked) {
+        sourceUrlInput.focus();
+    } else {
+        sourceUrlInput.value = '{{ page.url }}';
+    }
+}
+
+async function previewPrompt() {
+    const customInstructions = document.getElementById('customInstructions').value.trim();
+    const sourceUrl = document.getElementById('sourceUrl').value.trim();
+    const isPaywalled = document.getElementById('paywalledCheckbox').checked;
+
+    try {
+        const requestData = {
+            custom_instructions: customInstructions || null,
+            page_source: isPaywalled ? sourceUrl : null
+        };
+
+        const response = await authenticatedFetch(`/api/pages/{{ page.id }}/preview-context`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to preview prompt');
+        }
+
+        const result = await response.json();
+
+        // Show preview in modal with selectable text
+        document.getElementById('promptPreviewText').value = result.prompt;
+        const previewModal = new bootstrap.Modal(document.getElementById('promptPreviewModal'));
+        previewModal.show();
+
+    } catch (error) {
+        console.error('Error previewing prompt:', error);
+        alert('Error: ' + error.message);
+    }
+}
+
+function copyPromptToClipboard() {
+    const promptText = document.getElementById('promptPreviewText');
+    promptText.select();
+    document.execCommand('copy');
+
+    // Show feedback
+    const copyBtn = event.target.closest('button');
+    const originalHtml = copyBtn.innerHTML;
+    copyBtn.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
+    copyBtn.classList.add('btn-success');
+    copyBtn.classList.remove('btn-primary');
+
+    setTimeout(() => {
+        copyBtn.innerHTML = originalHtml;
+        copyBtn.classList.remove('btn-success');
+        copyBtn.classList.add('btn-primary');
+    }, 2000);
+}
+
+async function generatePageContext(event) {
+    event.preventDefault();
+
+    const customInstructions = document.getElementById('customInstructions').value.trim();
+    const sourceUrl = document.getElementById('sourceUrl').value.trim();
+    const isPaywalled = document.getElementById('paywalledCheckbox').checked;
+    const generateBtn = document.getElementById('generateBtn');
+    const progressDiv = document.getElementById('generationProgress');
+    const resultDiv = document.getElementById('generationResult');
+
+    // Show progress, hide previous results
+    progressDiv.classList.remove('d-none');
+    resultDiv.classList.add('d-none');
+    generateBtn.disabled = true;
+
+    try {
+        // TODO: Get actual LLM provider ID (hardcoded to 1 for now)
+        const requestData = {
+            llm_provider_id: 1,
+            custom_instructions: customInstructions || null,
+            page_source: isPaywalled ? sourceUrl : null
+        };
+
+        const response = await authenticatedFetch(`/api/pages/{{ page.id }}/generate-context`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to generate context');
+        }
+
+        const result = await response.json();
+
+        // Hide progress, show results
+        progressDiv.classList.add('d-none');
+        resultDiv.classList.remove('d-none');
+
+        // Populate result fields
+        document.getElementById('detectedContentType').textContent = result.detected_content_type;
+        document.getElementById('tokensUsed').textContent = result.tokens_used.toLocaleString();
+        document.getElementById('generationTime').textContent = result.generation_time_ms;
+        document.getElementById('generatedContextPreview').textContent = result.user_context;
+
+        // Update the main page display
+        document.getElementById('userContextDisplay').textContent = result.user_context;
+
+        // Show success message
+        setTimeout(() => {
+            alert('Context generated successfully! The page has been updated.');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('generateContextModal'));
+            modal.hide();
+        }, 2000);
+
+    } catch (error) {
+        console.error('Error generating context:', error);
+        progressDiv.classList.add('d-none');
+        generateBtn.disabled = false;
+        alert('Error: ' + error.message);
+    }
+}
+
+// Helper function for edit page paywall toggle
+function toggleEditPageSource() {
+    const isPaywalled = document.getElementById('editPagePaywalled').checked;
+    const sourceContainer = document.getElementById('editPageSourceContainer');
+    sourceContainer.style.display = isPaywalled ? 'block' : 'none';
+}
+
+// Auto-Note Generation Functions
+let currentBatchId = null;
+
+function showAutoNoteModal() {
+    const modal = new bootstrap.Modal(document.getElementById('autoNoteModal'));
+
+    // Reset modal state
+    document.getElementById('autoNoteTemplate').value = 'study_guide';
+    document.getElementById('autoNoteInstructions').value = '';
+    document.getElementById('autoNoteResult').style.display = 'none';
+    document.getElementById('autoNoteGenerateBtn').disabled = {{ 'true' if page.is_paywalled else 'false' }};
+    currentBatchId = null;
+
+    modal.show();
+}
+
+async function previewAutoNotePrompt() {
+    const templateType = document.getElementById('autoNoteTemplate').value;
+    const customInstructions = document.getElementById('autoNoteInstructions').value.trim();
+
+    try {
+        const response = await authenticatedFetch('/api/auto-notes/pages/{{ page.id }}/preview', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                template_type: templateType,
+                custom_instructions: customInstructions || null,
+                page_source: {{ 'page.page_source' if page.is_paywalled else 'null' }}
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+
+            // Show in existing prompt preview modal
+            document.getElementById('promptPreviewText').value = data.prompt;
+            document.getElementById('promptLength').textContent = data.prompt_length.toLocaleString();
+            document.getElementById('estimatedTokens').textContent = data.estimated_tokens.toLocaleString();
+
+            const previewModal = new bootstrap.Modal(document.getElementById('promptPreviewModal'));
+            previewModal.show();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.detail || 'Failed to preview prompt'));
+        }
+    } catch (error) {
+        console.error('Error previewing prompt:', error);
+        alert('Error: Failed to preview prompt');
+    }
+}
+
+document.getElementById('autoNoteForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const templateType = document.getElementById('autoNoteTemplate').value;
+    const customInstructions = document.getElementById('autoNoteInstructions').value.trim();
+    const generateBtn = document.getElementById('autoNoteGenerateBtn');
+
+    // Disable button and show loading
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+
+    try {
+        const response = await authenticatedFetch('/api/auto-notes/pages/{{ page.id }}/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                llm_provider_id: 1,  // Default to first provider
+                template_type: templateType,
+                custom_instructions: customInstructions || null,
+                page_source: null  // Not used for generation, only preview
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+
+            // Store batch ID
+            currentBatchId = data.generation_batch_id;
+
+            // Show success result
+            document.getElementById('autoNoteCount').textContent = data.notes.length;
+            document.getElementById('autoNoteTokens').textContent = data.tokens_used.toLocaleString();
+            document.getElementById('autoNoteCost').textContent = data.cost_usd.toFixed(4);
+            document.getElementById('autoNoteTime').textContent = data.generation_time_ms.toLocaleString();
+            document.getElementById('autoNoteBatchId').textContent = data.generation_batch_id;
+            document.getElementById('autoNoteResult').style.display = 'block';
+
+            // Open the page in a new tab
+            window.open('{{ page.url }}', '_blank');
+
+            // Reload notes to show new ones
+            setTimeout(() => {
+                if (pageDetailManager) {
+                    pageDetailManager.loadNotes();
+                    pageDetailManager.loadStats();
+                }
+            }, 1000);
+
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.detail || 'Failed to generate notes'));
+        }
+    } catch (error) {
+        console.error('Error generating notes:', error);
+        alert('Error: Failed to generate notes');
+    } finally {
+        // Re-enable button
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = '<i class="bi bi-stars me-1"></i>Generate Notes';
+    }
+});
+
+async function archiveBatch() {
+    if (!currentBatchId) {
+        alert('No batch to archive');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to archive all notes from batch ${currentBatchId}? This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await authenticatedFetch(`/api/auto-notes/batch/${currentBatchId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            alert(`Successfully archived ${data.deleted_count} notes`);
+
+            // Close modal and reload
+            const modal = bootstrap.Modal.getInstance(document.getElementById('autoNoteModal'));
+            modal.hide();
+
+            if (pageDetailManager) {
+                pageDetailManager.loadNotes();
+                pageDetailManager.loadStats();
+            }
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.detail || 'Failed to archive batch'));
+        }
+    } catch (error) {
+        console.error('Error archiving batch:', error);
+        alert('Error: Failed to archive batch');
+    }
+}
+
+// Attach form submit handler
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('generateContextForm').addEventListener('submit', generatePageContext);
+});
 
 // Initialize page detail manager when page loads
 let pageDetailManager;

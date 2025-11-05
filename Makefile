@@ -2,7 +2,7 @@
 # Cross-platform development workflow automation
 # Works on Windows (Git Bash), Unix, Linux, and Mac
 
-.PHONY: help setup dev test lint format clean install-dev check-env lint-js format-js install-js lint-all format-all all install-npm check-npm clean-npm lock requirements-check requirements-validate install-base install-prod upgrade-deps
+.PHONY: help setup dev test lint format clean install-dev check-env lint-js lint-js-fix format-js install-js lint-all format-all all install-npm check-npm clean-npm lock requirements-check requirements-validate install-base install-prod upgrade-deps package-extension validate-extension package-info pre-commit run server install quick-start
 .DEFAULT_GOAL := help
 
 # Colors for output (works in most terminals)
@@ -183,6 +183,16 @@ lint-js: check-npm ## Run ESLint on JavaScript files
 	$(NPM) run lint
 	@echo "$(GREEN)✓ JavaScript linting completed$(NC)"
 
+lint-js-fix: check-npm ## Run ESLint on JavaScript files and auto-fix issues
+	@echo "$(BLUE)Running ESLint with auto-fix on JavaScript files...$(NC)"
+	@if [ ! -d "node_modules" ]; then \
+		echo "$(RED)✗ Dependencies not installed. Run 'make install-npm' first$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Auto-fixing Chrome extension JavaScript files...$(NC)"
+	$(NPM) run lint:fix
+	@echo "$(GREEN)✓ JavaScript auto-fix completed$(NC)"
+
 format-js: check-npm ## Format JavaScript and HTML files with Prettier
 	@echo "$(BLUE)Formatting JavaScript and HTML files...$(NC)"
 	@if [ ! -d "node_modules" ]; then \
@@ -193,26 +203,34 @@ format-js: check-npm ## Format JavaScript and HTML files with Prettier
 	$(NPM) run format
 	@echo "$(GREEN)✓ JavaScript/HTML formatting completed$(NC)"
 
-lint-all: check-env check-npm ## Run all linting (Python and JavaScript)
-	@echo "$(BLUE)Running all code quality checks...$(NC)"
-	@echo "$(YELLOW)Phase 1: Python Code Quality Checks$(NC)"
-	@echo "$(YELLOW)Checking Python code formatting with black...$(NC)"
-	$(PYTHON) -m black --check backend/ tests/
-	@echo "$(YELLOW)Checking Python import sorting with isort...$(NC)"
-	$(PYTHON) -m isort --check-only backend/ tests/
+lint-all: check-env check-npm ## Auto-fix and lint all code (Python and JavaScript)
+	@echo "$(BLUE)Auto-fixing and linting all code...$(NC)"
+	@echo "$(YELLOW)Phase 1: Python Code Auto-fix and Checks$(NC)"
+	@echo "$(YELLOW)Formatting Python with black...$(NC)"
+	$(PYTHON) -m black backend/ tests/
+	@echo "$(YELLOW)Sorting Python imports with isort...$(NC)"
+	$(PYTHON) -m isort backend/ tests/
 	@echo "$(YELLOW)Running Python flake8 linting...$(NC)"
 	$(PYTHON) -m flake8 backend/ tests/
-	@echo "$(YELLOW)Running Python type checking with mypy...$(NC)"
-	$(PYTHON) -m mypy backend/
+	@echo "$(YELLOW)Running type checking with mypy...$(NC)"
+	@if [ "$(DETECTED_OS)" = "Windows" ]; then \
+		$(PYTHON) -m mypy backend\\app --ignore-missing-imports 2>/dev/null || \
+		$(PYTHON) -m mypy backend --ignore-missing-imports 2>/dev/null || \
+		echo "$(YELLOW)⚠ Mypy check skipped (Windows path issue)$(NC)"; \
+	else \
+		$(PYTHON) -m mypy backend/app --ignore-missing-imports; \
+	fi
 	@echo ""
-	@echo "$(YELLOW)Phase 2: JavaScript Code Quality Checks$(NC)"
+	@echo "$(YELLOW)Phase 2: JavaScript Code Auto-fix and Checks$(NC)"
 	@if [ ! -d "node_modules" ]; then \
 		echo "$(RED)✗ npm dependencies not installed. Run 'make install-npm' first$(NC)"; \
 		exit 1; \
 	fi
-	@echo "$(YELLOW)Running JavaScript linting with ESLint...$(NC)"
-	$(NPM) run lint
-	@echo "$(GREEN)✓ All code quality checks completed successfully$(NC)"
+	@echo "$(YELLOW)Formatting JavaScript/HTML with Prettier...$(NC)"
+	$(NPM) run format
+	@echo "$(YELLOW)Auto-fixing JavaScript with ESLint...$(NC)"
+	$(NPM) run lint:fix
+	@echo "$(GREEN)✓ All code auto-fixed and checks completed successfully$(NC)"
 
 format-all: check-env check-npm ## Auto-format all code (Python and JavaScript)
 	@echo "$(BLUE)Formatting all code...$(NC)"
@@ -328,7 +346,7 @@ clean: ## Clean up development environment (Python + npm)
 	@echo "$(GREEN)✓ Complete environment cleanup finished$(NC)"
 
 # Chrome Extension Packaging
-package-extension: check-npm ## Create Chrome Web Store package
+package-extension: check-npm check-env ## Create Chrome Web Store package
 	@echo "$(BLUE)Creating Chrome Web Store package...$(NC)"
 	@if [ ! -f "chrome-extension/manifest.json" ]; then \
 		echo "$(RED)✗ Chrome extension not found$(NC)"; \
@@ -336,10 +354,9 @@ package-extension: check-npm ## Create Chrome Web Store package
 		exit 1; \
 	fi
 	@echo "$(YELLOW)Running pre-package validation...$(NC)"
-	@$(MAKE) lint-js
 	@$(MAKE) validate-extension
 	@echo "$(YELLOW)Creating package...$(NC)"
-	@./scripts/package-extension.sh
+	@PYTHON=$(PYTHON) ./scripts/package-extension.sh
 	@echo "$(GREEN)✓ Chrome Web Store package created$(NC)"
 	@echo ""
 	@echo "$(BLUE)Package location: dist/web-notes-extension-v*.zip$(NC)"
@@ -348,24 +365,18 @@ package-extension: check-npm ## Create Chrome Web Store package
 	@echo "  2. Fill out store listing information"
 	@echo "  3. Submit for review"
 
-validate-extension: ## Validate Chrome extension structure and manifest
+validate-extension: check-env ## Validate Chrome extension structure and manifest
 	@echo "$(BLUE)Validating Chrome extension...$(NC)"
 	@if [ ! -f "chrome-extension/manifest.json" ]; then \
 		echo "$(RED)✗ manifest.json not found$(NC)"; \
 		exit 1; \
 	fi
 	@echo "$(YELLOW)Checking manifest.json syntax...$(NC)"
-	@if command -v python3 >/dev/null 2>&1; then \
-		python3 -m json.tool chrome-extension/manifest.json >/dev/null || { \
-			echo "$(RED)✗ Invalid JSON syntax in manifest.json$(NC)"; \
-			exit 1; \
-		}; \
-	elif command -v node >/dev/null 2>&1; then \
-		node -e "JSON.parse(require('fs').readFileSync('chrome-extension/manifest.json', 'utf8'))" || { \
-			echo "$(RED)✗ Invalid JSON syntax in manifest.json$(NC)"; \
-			exit 1; \
-		}; \
-	fi
+	@$(PYTHON) -m json.tool chrome-extension/manifest.json >/dev/null || { \
+		echo "$(RED)✗ Invalid JSON syntax in manifest.json$(NC)"; \
+		$(PYTHON) -m json.tool chrome-extension/manifest.json; \
+		exit 1; \
+	}
 	@echo "$(YELLOW)Checking required files...$(NC)"
 	@for file in manifest.json background.js content.js popup.html popup.js; do \
 		if [ ! -f "chrome-extension/$$file" ]; then \

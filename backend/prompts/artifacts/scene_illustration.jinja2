@@ -1,0 +1,57 @@
+{#
+Scene Illustration - Direct image generation using Gemini 2.5 Flash Image
+
+Available Template Variables:
+- highlighted_text: str | None - Text describing the scene, setting, or characters
+- note_content: str - User's visualization guidance (style, focus, mood)
+- page_title: str | None - Title of the source material
+- user_context: str | None - User-provided context about the page
+- page_summary: str | None - AI-generated summary of the page content
+- page_section_html: str | None - Additional context
+- user_instructions: str | None - Custom instructions
+
+This prompt is optimized for Gemini's native image generation capabilities.
+#}
+Create a detailed image based on the following description. Be hyper-specific about visual elements, composition, lighting, and style.
+
+{{ note_content }}
+
+{% if highlighted_text %}
+
+Scene from text:
+{{ highlighted_text }}
+{% endif %}
+
+{% if user_context %}
+**Page Context:**
+{{ user_context }}
+{% elif page_summary %}
+**Page Context:**
+{{ page_summary }}
+{% endif %}
+
+{% if page_section_html %}
+Context:
+{{ page_section_html | truncate(500) }}
+{% endif %}
+
+
+{% if page_title %}
+Source: {{ page_title }}
+{% endif %}
+
+
+{% if user_instructions %}
+
+Additional requirements:
+{{ user_instructions }}
+{% endif %}
+
+Visual details to include:
+- Setting and environment (time of day, weather, location type)
+- Lighting quality (natural, artificial, dramatic, soft)
+- Composition and framing (wide shot, close-up, perspective)
+- Color palette and mood
+- Style (photorealistic, digital art, painting, illustration)
+- Any characters, objects, or key elements from the text
+- Atmosphere and emotional tone

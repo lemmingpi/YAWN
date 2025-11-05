@@ -11,7 +11,7 @@
  */
 const ServerAPI = {
   // Default configuration
-  DEFAULT_SERVER_URL: "http://localhost:8000/api",
+  DEFAULT_SERVER_URL: "https://yawn-api-1040678620671.us-central1.run.app/api",
   REQUEST_TIMEOUT: 30000, // 30 seconds
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000, // 1 second
@@ -25,7 +25,8 @@ const ServerAPI = {
 
   /**
    * Get server configuration from storage with caching
-   * @returns {Promise<Object>} Server configuration
+   * Uses base-utils.js for config access
+   * @returns {Promise<Object>} Server configuration with serverUrl, enabled, and useChromeSync
    */
   async getConfig() {
     const now = Date.now();
@@ -36,18 +37,22 @@ const ServerAPI = {
     }
 
     try {
+      // Get config from base-utils
       const config = await getWNConfig();
+
       this.cachedConfig = {
         serverUrl: config.syncServerUrl || this.DEFAULT_SERVER_URL,
         enabled: !!config.syncServerUrl, // Enable server sync if URL is configured
+        useChromeSync: config.useChromeSync || false, // Which chrome storage to use
       };
       this.configLastFetched = now;
       return this.cachedConfig;
     } catch (error) {
-      console.error("[Web Notes] Failed to get server config:", error);
+      console.error("[YAWN] Failed to get server config:", error);
       return {
         serverUrl: this.DEFAULT_SERVER_URL,
         enabled: false,
+        useChromeSync: false,
       };
     }
   },
@@ -59,6 +64,15 @@ const ServerAPI = {
   async isEnabled() {
     const config = await this.getConfig();
     return config.enabled;
+  },
+
+  /**
+   * Get base web URL (without /api suffix)
+   * @returns {Promise<string>} Base web URL
+   */
+  async getBaseUrl() {
+    const config = await this.getConfig();
+    return config.serverUrl.replace(/\/api$/, "");
   },
 
   /**
@@ -94,14 +108,12 @@ const ServerAPI = {
     };
 
     try {
-      console.log(`[Web Notes] API Request: ${options.method || "GET"} ${url}`);
       const response = await fetch(url, requestOptions);
 
       // Handle non-2xx status codes
       if (!response.ok) {
         // Handle 401 Unauthorized - try to refresh token
         if (response.status === 401 && typeof AuthManager !== "undefined") {
-          console.log("[Web Notes] Received 401, attempting token refresh");
           const refreshed = await AuthManager.refreshTokenIfNeeded();
 
           // Retry the request once with new token if refresh was successful
@@ -116,11 +128,10 @@ const ServerAPI = {
 
       return response;
     } catch (error) {
-      console.error(`[Web Notes] API Request failed (attempt ${retryCount + 1}):`, error);
+      console.error(`[YAWN] API Request failed (attempt ${retryCount + 1}):`, error);
 
       // Retry logic for network errors (but not for 401 retries)
       if (retryCount < this.RETRY_ATTEMPTS && this.shouldRetry(error)) {
-        console.log(`[Web Notes] Retrying request in ${this.RETRY_DELAY}ms...`);
         await this.delay(this.RETRY_DELAY);
         return this.makeRequest(endpoint, options, retryCount + 1);
       }
@@ -165,7 +176,6 @@ const ServerAPI = {
       // Check if user is authenticated before making the request
       const isAuthenticated = await this.isAuthenticatedMode();
       if (!isAuthenticated) {
-        console.log("[Web Notes] User not authenticated, skipping server note fetch");
         return [];
       }
 
@@ -173,16 +183,16 @@ const ServerAPI = {
       const response = await this.makeRequest(`/notes/by-url?url=${encodedUrl}&is_active=true`);
       const notes = await response.json();
 
-      console.log(`[Web Notes] Fetched ${notes.length} notes for URL ${url}`);
+      console.log(`[YAWN] Fetched ${notes.length} notes for URL ${url}`);
       return notes;
     } catch (error) {
       // Handle authentication errors gracefully
       if (error.message && (error.message.includes("HTTP 401") || error.message.includes("HTTP 403"))) {
-        console.log("[Web Notes] Authentication failed, skipping server note fetch:", error.message);
+        console.log("[YAWN] Authentication failed, skipping server note fetch:", error.message);
         return [];
       }
 
-      console.error("[Web Notes] Failed to fetch notes for page:", error);
+      console.error("[YAWN] Failed to fetch notes for page:", error);
       throw error;
     }
   },
@@ -209,7 +219,7 @@ const ServerAPI = {
       });
 
       const createdNote = await response.json();
-      console.log(`[Web Notes] Created note ${createdNote.id} on server`);
+      console.log(`[YAWN] Created note ${createdNote.id} on server`);
 
       return createdNote;
     } catch (error) {
@@ -220,11 +230,11 @@ const ServerAPI = {
           error.message.includes("HTTP 403") ||
           error.message.includes("not authenticated"))
       ) {
-        console.log("[Web Notes] Authentication failed during note creation:", error.message);
+        console.log("[YAWN] Authentication failed during note creation:", error.message);
         throw new Error("AUTHENTICATION_REQUIRED");
       }
 
-      console.error("[Web Notes] Failed to create note:", error);
+      console.error("[YAWN] Failed to create note:", error);
       throw error;
     }
   },
@@ -251,7 +261,7 @@ const ServerAPI = {
       });
 
       const updatedNote = await response.json();
-      console.log(`[Web Notes] Updated note ${serverId} on server`);
+      console.log(`[YAWN] Updated note ${serverId} on server`);
 
       return updatedNote;
     } catch (error) {
@@ -262,11 +272,11 @@ const ServerAPI = {
           error.message.includes("HTTP 403") ||
           error.message.includes("not authenticated"))
       ) {
-        console.log("[Web Notes] Authentication failed during note update:", error.message);
+        console.log("[YAWN] Authentication failed during note update:", error.message);
         throw new Error("AUTHENTICATION_REQUIRED");
       }
 
-      console.error("[Web Notes] Failed to update note:", error);
+      console.error("[YAWN] Failed to update note:", error);
       throw error;
     }
   },
@@ -277,6 +287,7 @@ const ServerAPI = {
    * @returns {Promise<void>}
    */
   async deleteNote(serverId) {
+    console.log("[YAWN] Delete Note " + serverId);
     try {
       // Check authentication before attempting to delete note
       const isAuthenticated = await this.isAuthenticatedMode();
@@ -288,7 +299,7 @@ const ServerAPI = {
         method: "DELETE",
       });
 
-      console.log(`[Web Notes] Deleted note ${serverId} from server`);
+      console.log(`[YAWN] Deleted note ${serverId} from server`);
     } catch (error) {
       // Handle authentication errors gracefully
       if (
@@ -297,11 +308,11 @@ const ServerAPI = {
           error.message.includes("HTTP 403") ||
           error.message.includes("not authenticated"))
       ) {
-        console.log("[Web Notes] Authentication failed during note deletion:", error.message);
+        console.log("[YAWN] Authentication failed during note deletion:", error.message);
         throw new Error("AUTHENTICATION_REQUIRED");
       }
 
-      console.error("[Web Notes] Failed to delete note:", error);
+      console.error("[YAWN] Failed to delete note:", error);
       throw error;
     }
   },
@@ -330,7 +341,7 @@ const ServerAPI = {
       });
 
       const result = await response.json();
-      console.log(`[Web Notes] Bulk synced ${result.created_notes.length} notes, ${result.errors.length} errors`);
+      console.log(`[YAWN] Bulk synced ${result.created_notes.length} notes, ${result.errors.length} errors`);
 
       return result;
     } catch (error) {
@@ -341,11 +352,11 @@ const ServerAPI = {
           error.message.includes("HTTP 403") ||
           error.message.includes("not authenticated"))
       ) {
-        console.log("[Web Notes] Authentication failed during bulk sync:", error.message);
+        console.log("[YAWN] Authentication failed during bulk sync:", error.message);
         throw new Error("AUTHENTICATION_REQUIRED");
       }
 
-      console.error("[Web Notes] Failed to bulk sync notes:", error);
+      console.error("[YAWN] Failed to bulk sync notes:", error);
       throw error;
     }
   },
@@ -359,13 +370,13 @@ const ServerAPI = {
   convertToServerFormatWithURL(extensionNote, url) {
     return {
       content: extensionNote.content || "",
-      position_x: extensionNote.fallbackPosition?.x || 0,
-      position_y: extensionNote.fallbackPosition?.y || 0,
+      position_x: Math.floor(extensionNote.fallbackPosition?.x || 0),
+      position_y: Math.floor(extensionNote.fallbackPosition?.y || 0),
       anchor_data: {
         elementSelector: extensionNote.elementSelector || null,
         elementXPath: extensionNote.elementXPath || null,
-        offsetX: extensionNote.offsetX || 0,
-        offsetY: extensionNote.offsetY || 0,
+        offsetX: Math.floor(extensionNote.offsetX || 0),
+        offsetY: Math.floor(extensionNote.offsetY || 0),
         selectionData: extensionNote.selectionData || null,
         backgroundColor: extensionNote.backgroundColor || "light-yellow",
         isMarkdown: extensionNote.isMarkdown || false,
@@ -374,7 +385,7 @@ const ServerAPI = {
       is_active: extensionNote.isVisible !== false,
       server_link_id: extensionNote.id, // Use extension ID as link ID
       url: url,
-      page_title: document.title || "",
+      page_title: url || "",
     };
   },
 
@@ -387,13 +398,13 @@ const ServerAPI = {
   convertToServerFormat(extensionNote, pageId) {
     return {
       content: extensionNote.content || "",
-      position_x: extensionNote.fallbackPosition?.x || 0,
-      position_y: extensionNote.fallbackPosition?.y || 0,
+      position_x: Math.floor(extensionNote.fallbackPosition?.x || 0),
+      position_y: Math.floor(extensionNote.fallbackPosition?.y || 0),
       anchor_data: {
         elementSelector: extensionNote.elementSelector || null,
         elementXPath: extensionNote.elementXPath || null,
-        offsetX: extensionNote.offsetX || 0,
-        offsetY: extensionNote.offsetY || 0,
+        offsetX: Math.floor(extensionNote.offsetX || 0),
+        offsetY: Math.floor(extensionNote.offsetY || 0),
         selectionData: extensionNote.selectionData || null,
         backgroundColor: extensionNote.backgroundColor || "light-yellow",
         isMarkdown: extensionNote.isMarkdown || false,
@@ -488,8 +499,163 @@ const ServerAPI = {
       }
       return {};
     } catch (error) {
-      console.error("[Web Notes] Failed to get auth headers:", error);
+      console.error("[YAWN] Failed to get auth headers:", error);
       return {};
+    }
+  },
+
+  /**
+   * Register a page without creating a note
+   * @param {string} url - Page URL
+   * @param {string} title - Page title
+   * @returns {Promise<Object>} Created page data
+   */
+  async registerPage(url, title) {
+    try {
+      // Check authentication before attempting to register page
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot register page on server");
+      }
+
+      const pageData = {
+        url: url,
+        title: title || null,
+      };
+
+      const response = await this.makeRequest("/pages/with-url", {
+        method: "POST",
+        body: JSON.stringify(pageData),
+      });
+
+      const createdPage = await response.json();
+      console.log("[YAWN] Page registered successfully:", createdPage);
+      return createdPage;
+    } catch (error) {
+      console.error("[YAWN] Failed to register page:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Generate auto notes with DOM content
+   * @param {number} pageId - Page ID
+   * @param {string} pageDom - Page DOM/HTML content
+   * @returns {Promise<Object>} Generated notes response
+   */
+  async generateAutoNotesWithDOM(pageId, pageDom) {
+    try {
+      // Check authentication before attempting
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot generate auto notes");
+      }
+
+      const requestData = {
+        llm_provider_id: 1, // Default to Gemini
+        template_type: "study_guide",
+        page_dom: pageDom, // Send DOM content in page_dom field
+        custom_instructions:
+          "Use the provided DOM content to generate precise study notes with exact text matches and accurate CSS selectors.",
+      };
+
+      const response = await this.makeRequest(`/auto-notes/pages/${pageId}/generate`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+      });
+
+      const result = await response.json();
+      console.log(`[YAWN] Generated ${result.notes?.length || 0} auto notes with DOM`);
+      return result;
+    } catch (error) {
+      console.error("[YAWN] Failed to generate auto notes with DOM:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Generate auto notes with DOM chunk (for large pages)
+   * Used in batched parallel processing - processes multiple chunks simultaneously
+   * @param {number} pageId - Page ID (already registered)
+   * @param {Object} chunkData - Chunk metadata and content
+   * @returns {Promise<Object>} Generation response for this chunk
+   */
+  async generateAutoNotesWithDOMChunk(pageId, chunkData) {
+    try {
+      // Check authentication before attempting
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot generate auto notes");
+      }
+
+      const requestData = {
+        llm_provider_id: 1, // Default to Gemini
+        template_type: "study_guide",
+        chunk_index: chunkData.chunk_index,
+        total_chunks: chunkData.total_chunks,
+        chunk_dom: chunkData.chunk_dom,
+        parent_context: chunkData.parent_context,
+        batch_id: chunkData.batch_id, // Frontend-generated batch ID
+        position_offset: chunkData.position_offset, // Position offset for this chunk
+        custom_instructions:
+          "Use the provided DOM content chunk to generate precise study notes. " +
+          `This is chunk ${chunkData.chunk_index + 1} of ${chunkData.total_chunks}.`,
+      };
+
+      const response = await this.makeRequest(`/auto-notes/pages/${pageId}/generate/chunked`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+      });
+
+      const result = await response.json();
+      console.log(
+        `[YAWN] Generated ${result.notes?.length || 0} notes ` +
+          `from chunk ${chunkData.chunk_index + 1}/${chunkData.total_chunks}`,
+      );
+      return result;
+    } catch (error) {
+      console.error("[YAWN] Failed to generate auto notes with DOM chunk:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Generate auto notes with server-side chunking
+   * Server handles all chunking and parallel processing
+   * @param {number} pageId - Page ID
+   * @param {string} fullDOM - Complete DOM content
+   * @param {string} templateType - Template type ('study_guide' or 'content_review')
+   * @param {string|null} customInstructions - Optional custom instructions for generation
+   * @returns {Promise<Object>} Generation response with all notes
+   */
+  async generateAutoNotesWithFullDOM(pageId, fullDOM, templateType = "study_guide", customInstructions = null) {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated");
+      }
+
+      const requestData = {
+        llm_provider_id: 1, // Default to Gemini
+        template_type: templateType,
+        full_dom: fullDOM,
+        custom_instructions: customInstructions || undefined, // Let backend use default if null
+      };
+
+      // New endpoint that handles everything server-side
+      const response = await this.makeRequest(`/auto-notes/pages/${pageId}/generate/full-dom`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+        // Increase timeout for large pages
+        signal: AbortSignal.timeout(180000), // 3 minutes
+      });
+
+      const result = await response.json();
+      console.log(`[YAWN] Generated ${result.notes?.length || 0} notes from ${result.total_chunks} chunks`);
+      return result;
+    } catch (error) {
+      console.error("[YAWN] Failed to generate auto notes:", error);
+      throw error;
     }
   },
 
@@ -501,7 +667,7 @@ const ServerAPI = {
     try {
       return typeof AuthManager !== "undefined" && AuthManager.isAuthenticated();
     } catch (error) {
-      console.error("[Web Notes] Failed to check auth mode:", error);
+      console.error("[YAWN] Failed to check auth mode:", error);
       return false;
     }
   },
@@ -514,15 +680,12 @@ const ServerAPI = {
   async ensureAuthenticated(interactive = true) {
     try {
       if (typeof AuthManager === "undefined") {
-        console.log("[Web Notes] AuthManager not available, using local mode");
         return false;
       }
 
       if (AuthManager.isAuthenticated()) {
         return true;
       }
-
-      console.log("[Web Notes] Attempting authentication for server sync");
 
       // Try auto-auth first
       let success = await AuthManager.attemptAutoAuth();
@@ -534,14 +697,14 @@ const ServerAPI = {
       }
 
       if (success) {
-        console.log("[Web Notes] Authentication successful, server sync enabled");
+        console.log("[YAWN] Authentication successful, server sync enabled");
       } else {
-        console.log("[Web Notes] Authentication failed, continuing in local mode");
+        console.log("[YAWN] Authentication failed, continuing in local mode");
       }
 
       return success;
     } catch (error) {
-      console.error("[Web Notes] Authentication attempt failed:", error);
+      console.error("[YAWN] Authentication attempt failed:", error);
       return false;
     }
   },
@@ -552,7 +715,144 @@ const ServerAPI = {
   clearConfigCache() {
     this.cachedConfig = null;
     this.configLastFetched = 0;
-    console.log("[Web Notes] Cleared configuration cache");
+    console.log("[YAWN] Cleared configuration cache");
+  },
+
+  /**
+   * Get current user information
+   * @returns {Promise<Object>} User information
+   */
+  async getCurrentUser() {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated");
+      }
+
+      const response = await this.makeRequest("/users/me");
+      const user = await response.json();
+
+      return user;
+    } catch (error) {
+      console.error("[YAWN] Failed to get current user:", error);
+      throw error;
+    }
+  },
+  // ===== AI CONTEXT GENERATION API ENDPOINTS =====
+
+  /**
+   * Get list of active LLM providers
+   * @returns {Promise<Array>} Array of LLM provider objects
+   */
+  async getLLMProviders() {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot fetch LLM providers");
+      }
+
+      const response = await this.makeRequest("/llm/providers");
+      const providers = await response.json();
+
+      console.log(`[YAWN] Retrieved ${providers.length} LLM providers`);
+      return providers;
+    } catch (error) {
+      console.error("[YAWN] Failed to get LLM providers:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get or create a page by URL
+   * @param {string} url - Page URL
+   * @param {string} title - Page title
+   * @returns {Promise<Object>} Page object with ID
+   */
+  async getOrCreatePageByUrl(url, title) {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot get/create page");
+      }
+
+      // Use the existing registerPage method which creates or gets a page
+      return await this.registerPage(url, title);
+    } catch (error) {
+      console.error("[YAWN] Failed to get/create page:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Generate AI context for a page
+   * @param {number} pageId - Page ID
+   * @param {number} llmProviderId - LLM provider ID
+   * @param {string|null} customInstructions - Optional custom instructions
+   * @param {string|null} pageSource - Optional alternate page source (for paywalled content)
+   * @param {string|null} pageDom - Optional page DOM for content extraction
+   * @returns {Promise<Object>} Generated context response
+   */
+  async generatePageContext(pageId, llmProviderId, customInstructions = null, pageSource = null, pageDom = null) {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot generate page context");
+      }
+
+      const requestData = {
+        llm_provider_id: llmProviderId,
+        custom_instructions: customInstructions,
+        page_source: pageSource,
+        page_dom: pageDom,
+      };
+
+      const response = await this.makeRequest(`/pages/${pageId}/generate-context`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+      });
+
+      const result = await response.json();
+      console.log(`[YAWN] Generated page context: ${result.detected_content_type}`);
+      return result;
+    } catch (error) {
+      console.error("[YAWN] Failed to generate page context:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Preview the context generation prompt
+   * @param {number} pageId - Page ID
+   * @param {string|null} customInstructions - Optional custom instructions
+   * @param {string|null} pageSource - Optional alternate page source
+   * @param {string|null} pageDom - Optional page DOM for content extraction
+   * @returns {Promise<Object>} Preview response with prompt text
+   */
+  async previewContextPrompt(pageId, customInstructions = null, pageSource = null, pageDom = null) {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot preview context prompt");
+      }
+
+      const requestData = {
+        custom_instructions: customInstructions,
+        page_source: pageSource,
+        page_dom: pageDom,
+      };
+
+      const response = await this.makeRequest(`/pages/${pageId}/preview-context`, {
+        method: "POST",
+        body: JSON.stringify(requestData),
+      });
+
+      const result = await response.json();
+      console.log(`[YAWN] Preview prompt generated: ${result.prompt.length} characters`);
+      return result;
+    } catch (error) {
+      console.error("[YAWN] Failed to preview context prompt:", error);
+      throw error;
+    }
   },
 
   // ===== SHARING API ENDPOINTS =====
@@ -579,10 +879,10 @@ const ServerAPI = {
       });
 
       const share = await response.json();
-      console.log(`[Web Notes] Shared page ${pageId} with ${userEmail} (${permissionLevel})`);
+      console.log(`[YAWN] Shared page ${pageId} with ${userEmail} (${permissionLevel})`);
       return share;
     } catch (error) {
-      console.error("[Web Notes] Failed to share page:", error);
+      console.error("[YAWN] Failed to share page:", error);
       throw error;
     }
   },
@@ -609,10 +909,10 @@ const ServerAPI = {
       });
 
       const share = await response.json();
-      console.log(`[Web Notes] Shared site ${siteId} with ${userEmail} (${permissionLevel})`);
+      console.log(`[YAWN] Shared site ${siteId} with ${userEmail} (${permissionLevel})`);
       return share;
     } catch (error) {
-      console.error("[Web Notes] Failed to share site:", error);
+      console.error("[YAWN] Failed to share site:", error);
       throw error;
     }
   },
@@ -631,10 +931,10 @@ const ServerAPI = {
       const response = await this.makeRequest(`/pages/${pageId}/shares`);
       const shares = await response.json();
 
-      console.log(`[Web Notes] Retrieved ${shares.length} shares for page ${pageId}`);
+      console.log(`[YAWN] Retrieved ${shares.length} shares for page ${pageId}`);
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to get page shares:", error);
+      console.error("[YAWN] Failed to get page shares:", error);
       throw error;
     }
   },
@@ -653,10 +953,10 @@ const ServerAPI = {
       const response = await this.makeRequest(`/sites/${siteId}/shares`);
       const shares = await response.json();
 
-      console.log(`[Web Notes] Retrieved ${shares.length} shares for site ${siteId}`);
+      console.log(`[YAWN] Retrieved ${shares.length} shares for site ${siteId}`);
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to get site shares:", error);
+      console.error("[YAWN] Failed to get site shares:", error);
       throw error;
     }
   },
@@ -669,13 +969,9 @@ const ServerAPI = {
     try {
       const response = await this.makeRequest("/my-shares");
       const shares = await response.json();
-
-      console.log(
-        `[Web Notes] Retrieved user shares: ${shares.shared_pages?.length || 0} pages, ${shares.shared_sites?.length || 0} sites`
-      );
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to get user shares:", error);
+      console.error("[YAWN] Failed to get user shares:", error);
       throw error;
     }
   },
@@ -705,10 +1001,9 @@ const ServerAPI = {
       });
 
       const updatedShare = await response.json();
-      console.log(`[Web Notes] Updated page share permission for user ${userId} to ${newPermission}`);
       return updatedShare;
     } catch (error) {
-      console.error("[Web Notes] Failed to update page share permission:", error);
+      console.error("[YAWN] Failed to update page share permission:", error);
       throw error;
     }
   },
@@ -738,10 +1033,9 @@ const ServerAPI = {
       });
 
       const updatedShare = await response.json();
-      console.log(`[Web Notes] Updated site share permission for user ${userId} to ${newPermission}`);
       return updatedShare;
     } catch (error) {
-      console.error("[Web Notes] Failed to update site share permission:", error);
+      console.error("[YAWN] Failed to update site share permission:", error);
       throw error;
     }
   },
@@ -762,9 +1056,9 @@ const ServerAPI = {
         method: "DELETE",
       });
 
-      console.log(`[Web Notes] Removed page share for user ${userId}`);
+      console.log(`[YAWN] Removed page share for user ${userId}`);
     } catch (error) {
-      console.error("[Web Notes] Failed to remove page share:", error);
+      console.error("[YAWN] Failed to remove page share:", error);
       throw error;
     }
   },
@@ -785,9 +1079,9 @@ const ServerAPI = {
         method: "DELETE",
       });
 
-      console.log(`[Web Notes] Removed site share for user ${userId}`);
+      console.log(`[YAWN] Removed site share for user ${userId}`);
     } catch (error) {
-      console.error("[Web Notes] Failed to remove site share:", error);
+      console.error("[YAWN] Failed to remove site share:", error);
       throw error;
     }
   },
@@ -819,10 +1113,10 @@ const ServerAPI = {
       });
 
       const invite = await response.json();
-      console.log(`[Web Notes] Invited ${userEmail} to ${resourceType} ${resourceId}`);
+      console.log(`[YAWN] Invited ${userEmail} to ${resourceType} ${resourceId}`);
       return invite;
     } catch (error) {
-      console.error("[Web Notes] Failed to invite user:", error);
+      console.error("[YAWN] Failed to invite user:", error);
       throw error;
     }
   },
@@ -845,10 +1139,10 @@ const ServerAPI = {
       });
 
       const shares = await response.json();
-      console.log(`[Web Notes] Bulk shared page ${pageId} with ${shares.length} users`);
+      console.log(`[YAWN] Bulk shared page ${pageId} with ${shares.length} users`);
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to bulk share page:", error);
+      console.error("[YAWN] Failed to bulk share page:", error);
       throw error;
     }
   },
@@ -871,11 +1165,231 @@ const ServerAPI = {
       });
 
       const shares = await response.json();
-      console.log(`[Web Notes] Bulk shared site ${siteId} with ${shares.length} users`);
+      console.log(`[YAWN] Bulk shared site ${siteId} with ${shares.length} users`);
       return shares;
     } catch (error) {
-      console.error("[Web Notes] Failed to bulk share site:", error);
+      console.error("[YAWN] Failed to bulk share site:", error);
       throw error;
+    }
+  },
+
+  // ===== DATA SYNC HELPERS =====
+
+  /**
+   * Copy all server notes to local storage
+   * Uses existing GET /api/notes/ endpoint
+   * Directly accesses chrome.storage without using shared-utils
+   * @returns {Promise<Object>} Result with success status and notes count
+   */
+  async copyServerNotesToLocal() {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot copy server notes");
+      }
+
+      // Fetch all notes from server using existing endpoint
+      // Use high limit to get all notes (API supports up to 1000 per request)
+      const response = await this.makeRequest("/notes?limit=1000&is_active=true");
+      const serverNotes = await response.json();
+
+      if (!serverNotes || !Array.isArray(serverNotes)) {
+        throw new Error("Invalid response from server");
+      }
+
+      // Get config to determine which storage to use
+      const config = await this.getConfig();
+      const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+
+      // Get current local notes directly from chrome storage
+      const localNotes = await new Promise(resolve => {
+        storage.get([STORAGE_KEYS.NOTES_KEY], result => {
+          if (chrome.runtime.lastError) {
+            console.error("[YAWN] Failed to get local notes:", chrome.runtime.lastError);
+            resolve({});
+          } else {
+            resolve(result[STORAGE_KEYS.NOTES_KEY] || {});
+          }
+        });
+      });
+
+      // Convert server notes to extension format and group by URL
+      const notesByUrl = {};
+      for (const serverNote of serverNotes) {
+        const extensionNote = this.convertFromServerFormat(serverNote);
+
+        // Get the URL from the page relationship (server notes have page info)
+        const url = serverNote.url || "";
+        extensionNote.url = url;
+
+        // Normalize URL for consistent storage keys
+        const normalizedUrl = normalizeUrlForNoteStorage(url);
+
+        if (!notesByUrl[normalizedUrl]) {
+          notesByUrl[normalizedUrl] = [];
+        }
+        notesByUrl[normalizedUrl].push(extensionNote);
+      }
+
+      // Merge with local notes, replacing with server notes
+      Object.keys(notesByUrl).forEach(normalizedUrl => {
+        localNotes[normalizedUrl] = notesByUrl[normalizedUrl];
+      });
+
+      // Save back to local storage directly (no server sync)
+      const saveSuccess = await new Promise(resolve => {
+        storage.set({ [STORAGE_KEYS.NOTES_KEY]: localNotes }, () => {
+          if (chrome.runtime.lastError) {
+            console.error("[YAWN] Failed to set notes locally:", chrome.runtime.lastError);
+            resolve(false);
+          } else {
+            resolve(true);
+          }
+        });
+      });
+
+      if (!saveSuccess) {
+        throw new Error("Failed to save notes to local storage");
+      }
+
+      console.log(`[YAWN] Copied ${serverNotes.length} notes from server to local`);
+      return {
+        success: true,
+        notes_count: serverNotes.length,
+      };
+    } catch (error) {
+      console.error("[YAWN] Failed to copy server notes to local:", error);
+      return {
+        success: false,
+        error: error.message,
+        notes_count: 0,
+      };
+    }
+  },
+
+  /**
+   * Copy all local notes to server storage
+   * Uses existing POST /api/notes/bulk-with-url endpoint
+   * Directly accesses chrome.storage without using shared-utils
+   * @returns {Promise<Object>} Result with success status and notes count
+   */
+  async copyLocalNotesToServer() {
+    try {
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot copy local notes to server");
+      }
+
+      // Get config to determine which storage to use
+      const config = await this.getConfig();
+      const storage = config.useChromeSync ? chrome.storage.sync : chrome.storage.local;
+
+      // Get all local notes directly from chrome storage
+      const localNotes = await new Promise(resolve => {
+        storage.get([STORAGE_KEYS.NOTES_KEY], result => {
+          if (chrome.runtime.lastError) {
+            console.error("[YAWN] Failed to get local notes:", chrome.runtime.lastError);
+            resolve({});
+          } else {
+            resolve(result[STORAGE_KEYS.NOTES_KEY] || {});
+          }
+        });
+      });
+
+      // Flatten notes structure and convert to server format
+      const allNotes = [];
+      Object.keys(localNotes).forEach(url => {
+        const urlNotes = localNotes[url] || [];
+        urlNotes.forEach(note => {
+          // Convert to server format with URL
+          const serverNote = this.convertToServerFormatWithURL(note, url);
+          allNotes.push(serverNote);
+        });
+      });
+
+      if (allNotes.length === 0) {
+        console.log("[YAWN] No local notes to copy");
+        return {
+          success: true,
+          notes_count: 0,
+        };
+      }
+
+      // Use existing bulk create endpoint
+      const response = await this.makeRequest("/notes/bulk-with-url", {
+        method: "POST",
+        body: JSON.stringify({ notes: allNotes }),
+      });
+
+      const result = await response.json();
+
+      const successCount = result.created_notes ? result.created_notes.length : 0;
+      console.log(`[YAWN] Copied ${successCount} notes from local to server`);
+
+      if (result.errors && result.errors.length > 0) {
+        console.warn(`[YAWN] ${result.errors.length} errors occurred:`, result.errors);
+      }
+
+      return {
+        success: true,
+        notes_count: successCount,
+        errors: result.errors || [],
+      };
+    } catch (error) {
+      console.error("[YAWN] Failed to copy local notes to server:", error);
+      return {
+        success: false,
+        error: error.message,
+        notes_count: 0,
+      };
+    }
+  },
+
+  /**
+   * Delete all user data from server (hard delete)
+   * This will delete all sites, pages, notes, shares, and artifacts for the current user
+   * @returns {Promise<Object>} Result object with success status
+   */
+  async deleteAllUserData() {
+    try {
+      // Verify user is authenticated
+      const isAuthenticated = await this.isAuthenticatedMode();
+      if (!isAuthenticated) {
+        throw new Error("User not authenticated - cannot delete user data");
+      }
+
+      // Get current user info to get user ID
+      const userInfo = await this.getCurrentUser();
+      if (!userInfo || !userInfo.id) {
+        throw new Error("Failed to get current user information");
+      }
+
+      // Call DELETE /api/users/{user_id} endpoint
+      const response = await this.makeRequest(`/users/${userInfo.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to delete user data: ${response.status}`);
+      }
+
+      console.log("[YAWN] Successfully deleted all user data");
+
+      // Clear local authentication state after successful deletion
+      if (typeof AuthManager !== "undefined") {
+        await AuthManager.signOut();
+      }
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error("[YAWN] Failed to delete user data:", error);
+      return {
+        success: false,
+        error: error.message,
+      };
     }
   },
 };

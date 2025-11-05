@@ -108,16 +108,16 @@ Regular paragraph text to test basic styling.`;
 
             let verificationResults = [];
             verificationResults.push(
-              `Contains h1 styles: ${renderedHTML.includes("h1") && renderedHTML.includes("font-size: 16px !important")}`
+              `Contains h1 styles: ${renderedHTML.includes("h1") && renderedHTML.includes("font-size: 16px !important")}`,
             );
             verificationResults.push(
-              `Contains ul styles: ${renderedHTML.includes("ul") && renderedHTML.includes("list-style-type: disc !important")}`
+              `Contains ul styles: ${renderedHTML.includes("ul") && renderedHTML.includes("list-style-type: disc !important")}`,
             );
             verificationResults.push(
-              `Contains a styles: ${renderedHTML.includes("<a") && renderedHTML.includes("color: #3498db !important")}`
+              `Contains a styles: ${renderedHTML.includes("<a") && renderedHTML.includes("color: #3498db !important")}`,
             );
             verificationResults.push(
-              `Contains strong styles: ${renderedHTML.includes("<strong") && renderedHTML.includes("font-weight: bold !important")}`
+              `Contains strong styles: ${renderedHTML.includes("<strong") && renderedHTML.includes("font-weight: bold !important")}`,
             );
 
             verificationDiv.innerHTML = "<strong>Style Verification:</strong><br>" + verificationResults.join("<br>");

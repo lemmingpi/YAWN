@@ -4,7 +4,11 @@
  */
 
 // Import shared utilities
+importScripts("./base-utils.js");
 importScripts("./shared-utils.js");
+importScripts("./auth-manager.js");
+importScripts("./server-api.js");
+importScripts("./permission-manager.js");
 
 // Constants
 const EXTENSION_ID = "add-web-note";
@@ -15,6 +19,247 @@ const MENU_TITLE = "🗒️ Add Web Note";
 
 // Track ongoing injections to prevent race conditions
 const ongoingInjections = new Set();
+
+// ===== CONTENT SCRIPT INJECTION MANAGEMENT =====
+
+/**
+ * Track which tabs have content scripts injected
+ * Map of tabId -> injection status
+ */
+const injectedTabs = new Map();
+
+/**
+ * List of content scripts to inject in order
+ */
+const CONTENT_SCRIPTS = [
+  "libs/marked.min.js",
+  "libs/dompurify.min.js",
+  "base-utils.js",
+  "note-state.js",
+  "color-utils.js",
+  "color-dropdown.js",
+  "markdown-utils.js",
+  "shared-utils.js",
+  "error-handling.js",
+  "contentDialog.js",
+  "contextGeneratorDialog.js",
+  "sharing-interface.js",
+  "sharing.js",
+  "selector-utils.js",
+  "ai-generation.js",
+  "note-positioning.js",
+  "note-interaction-editing.js",
+  "content.js", // MUST be last
+];
+
+/**
+ * Check if content scripts are already injected in a tab
+ * @param {number} tabId - The tab ID to check
+ * @returns {Promise<boolean>} True if scripts are injected
+ */
+async function isContentScriptInjected(tabId) {
+  // Check cache first
+  if (injectedTabs.get(tabId) === true) {
+    // Verify scripts are still active
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { action: "ping" });
+      return response && response.success === true;
+    } catch (error) {
+      // Scripts not responding, clear cache
+      injectedTabs.delete(tabId);
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Inject all content scripts into a tab
+ * @param {number} tabId - The tab ID to inject into
+ * @returns {Promise<boolean>} True if injection succeeded
+ */
+async function injectContentScripts(tabId) {
+  try {
+    // Check if already injected
+    if (await isContentScriptInjected(tabId)) {
+      console.log(`[YAWN] Scripts already injected in tab ${tabId}`);
+      return true;
+    }
+
+    // Check if injection is already in progress
+    if (ongoingInjections.has(tabId)) {
+      console.log(`[YAWN] Injection already in progress for tab ${tabId}`);
+      // Wait for ongoing injection
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return isContentScriptInjected(tabId);
+    }
+
+    // Mark injection as in progress
+    ongoingInjections.add(tabId);
+
+    console.log(`[YAWN] Injecting content scripts into tab ${tabId}`);
+
+    // Inject all scripts in order
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      files: CONTENT_SCRIPTS,
+      injectImmediately: false,
+    });
+
+    // Mark as injected
+    injectedTabs.set(tabId, true);
+    console.log(`[YAWN] Successfully injected scripts into tab ${tabId}`);
+
+    return true;
+  } catch (error) {
+    console.error(`[YAWN] Failed to inject scripts into tab ${tabId}:`, error);
+    injectedTabs.delete(tabId);
+    return false;
+  } finally {
+    ongoingInjections.delete(tabId);
+  }
+}
+
+/**
+ * Inject content scripts and retry a message
+ * @param {number} tabId - The tab ID
+ * @param {Object} message - The message to send after injection
+ * @returns {Promise<any>} The response from the message
+ */
+async function injectContentScriptAndRetry(tabId, message) {
+  try {
+    // First try to inject scripts
+    const injected = await injectContentScripts(tabId);
+    if (!injected) {
+      throw new Error("Failed to inject content scripts");
+    }
+
+    // Wait longer for scripts to initialize (increased from 100ms to 300ms)
+    console.log(`[YAWN] Waiting for scripts to initialize in tab ${tabId}...`);
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Now send the message
+    const response = await chrome.tabs.sendMessage(tabId, message);
+    return response;
+  } catch (error) {
+    logError(`Failed to inject and retry message in tab ${tabId}`, error);
+    throw error;
+  }
+}
+
+/**
+ * Handle tab removal - clean up injection tracking
+ */
+chrome.tabs.onRemoved.addListener(tabId => {
+  injectedTabs.delete(tabId);
+  ongoingInjections.delete(tabId);
+});
+
+/**
+ * Handle tab navigation - mark as needing re-injection
+ */
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === "loading") {
+    // Page is navigating, clear injection status
+    injectedTabs.delete(tabId);
+  }
+});
+
+/**
+ * Check if page has notes and handle permission-based auto-injection
+ * Badge colors: Green = has permission, Blue = no permission
+ * @param {number} tabId - Tab ID
+ * @param {string} url - Page URL
+ */
+async function checkAndOnboardPage(tabId, url) {
+  console.log(`[YAWN] checkAndOnboardPage for tab ${tabId}: ${url}`);
+
+  const hasPermission = await PermissionManager.hasPermission(url);
+  if (hasPermission) {
+    console.log("[YAWN] ✓ Have permission, auto-injecting scripts");
+    const injected = await injectContentScripts(tabId);
+    if (injected) {
+      console.log("[YAWN] ✓ Scripts injected successfully, notes should appear");
+    } else {
+      console.error("[YAWN] ✗ Script injection failed");
+    }
+  }
+
+  // Check if this page has notes
+  const notes = await getNotes(url);
+  const urlNotes = getNotesForUrl(url, notes);
+
+  if (urlNotes && urlNotes.length > 0) {
+    console.log(`[YAWN] Found ${urlNotes.length} notes for this page`);
+    // Update badge (Green = has permission, Blue = no permission)
+    const badgeColor = hasPermission ? "#4CAF50" : "#2196F3";
+    console.log(`[YAWN] Setting badge: ${urlNotes.length} (color: ${badgeColor})`);
+
+    chrome.action.setBadgeText({
+      tabId: tabId,
+      text: urlNotes.length.toString(),
+    });
+    chrome.action.setBadgeBackgroundColor({
+      tabId: tabId,
+      color: badgeColor,
+    });
+  } else {
+    console.log(`[YAWN] No notes found for this page`);
+
+    // Clear badge if no notes
+    chrome.action.setBadgeText({
+      tabId: tabId,
+      text: "",
+    });
+  }
+}
+
+/**
+ * Check for existing notes when tab becomes active
+ */
+chrome.tabs.onActivated.addListener(async activeInfo => {
+  try {
+    console.log(`[YAWN] onActivated called`);
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+
+    // Skip chrome:// and other restricted URLs
+    if (!isTabValid(tab) || !tab.url) {
+      return;
+    }
+
+    // Skip if page is still loading (onCompleted will handle it)
+    if (tab.status === "loading") {
+      return;
+    }
+
+    await checkAndOnboardPage(tab.id, tab.url);
+  } catch (error) {
+    console.debug("[YAWN] Error checking for notes on tab activation:", error);
+  }
+});
+
+/**
+ * Check for existing notes when page completes loading
+ */
+chrome.webNavigation.onCompleted.addListener(async details => {
+  // Only process main frame
+  if (details.frameId !== 0) return;
+
+  try {
+    const tab = await chrome.tabs.get(details.tabId);
+
+    // Skip chrome:// and other restricted URLs
+    if (!isTabValid(tab)) {
+      return;
+    }
+
+    console.log(`[YAWN] Page loaded: ${details.url}`);
+
+    await checkAndOnboardPage(details.tabId, details.url);
+  } catch (error) {
+    console.debug("[YAWN] Error checking for notes on page load:", error);
+  }
+});
 
 /**
  * Creates context menu with error handling
@@ -50,31 +295,75 @@ async function createContextMenu() {
         title: "Share Current Site",
         contexts: ["page"],
       });
-    }, "Creating context menu");
 
-    console.log("[Web Notes Extension] Context menu created successfully");
+      // Register page menu item (hidden by default, shown when user is authenticated)
+      chrome.contextMenus.create({
+        id: "register-page",
+        title: "📋 Register Page (without notes)",
+        contexts: ["page"],
+        visible: false, // Hidden by default, shown when user is authenticated
+      });
+
+      // Generate AI Context menu item (hidden by default, shown when user is authenticated)
+      chrome.contextMenus.create({
+        id: "generate-ai-context",
+        title: "🤖 Generate AI Context",
+        contexts: ["page"],
+        visible: false, // Hidden by default, shown when user is authenticated
+      });
+
+      // DOM test auto-notes menu item (hidden by default, shown when user is authenticated)
+      chrome.contextMenus.create({
+        id: "generate-dom-test-notes",
+        title: "🤖 Generate Auto Notes with DOM",
+        contexts: ["page"],
+        visible: false, // Hidden by default, shown when user is authenticated
+      });
+    }, "Creating context menu");
   } catch (error) {
     logError("Failed to create context menu", error);
   }
 }
 
 /**
- * Update context menu visibility based on sharing capability
- * @param {boolean} canShare - Whether sharing is available
+ * Update context menu visibility based on authentication
+ * @param {boolean} isAuthenticated - Whether user is authenticated
  */
-async function updateSharingContextMenu(canShare) {
+async function updateAuthenticatedContextMenus(isAuthenticated) {
   try {
     await safeApiCall(() => {
+      // Update sharing submenu visibility
       chrome.contextMenus.update("share-submenu", {
-        visible: canShare,
+        visible: isAuthenticated,
       });
-    }, "Updating sharing context menu");
 
-    console.log(`[Web Notes Extension] Sharing context menu ${canShare ? "enabled" : "disabled"}`);
+      // Update register page menu visibility
+      chrome.contextMenus.update("register-page", {
+        visible: isAuthenticated,
+      });
+
+      // Update generate AI context menu visibility
+      chrome.contextMenus.update("generate-ai-context", {
+        visible: isAuthenticated,
+      });
+
+      // Update DOM test auto-notes menu visibility
+      chrome.contextMenus.update("generate-dom-test-notes", {
+        visible: isAuthenticated,
+      });
+    }, "Updating authenticated context menus");
   } catch (error) {
     // Silently fail if context menu doesn't exist yet
     console.debug("Context menu update failed (expected during initialization):", error);
   }
+}
+
+/**
+ * Legacy function name for backward compatibility
+ * @param {boolean} canShare - Whether sharing is available
+ */
+async function updateSharingContextMenu(canShare) {
+  await updateAuthenticatedContextMenus(canShare);
 }
 
 /**
@@ -96,7 +385,6 @@ async function initializeStats() {
 
     if (!result || !result[EXTENSION_CONSTANTS.STATS_KEY]) {
       await setStats(EXTENSION_CONSTANTS.DEFAULT_STATS);
-      console.log("[Web Notes Extension] Stats initialized");
     }
   } catch (error) {
     logError("Failed to initialize stats", error);
@@ -107,9 +395,10 @@ async function initializeStats() {
  * Creates a note using coordinates from content script
  * @param {number} tabId - Tab ID to send message to
  * @param {number} noteNumber - The note number for this URL
+ * @param {string} selectionText - Optional selected text from context menu
  * @returns {Promise<boolean>} Promise resolving to success status
  */
-async function createNoteWithCoordinates(tabId, noteNumber) {
+async function createNoteWithCoordinates(tabId, noteNumber, selectionText = null) {
   try {
     // Check for ongoing operation in this tab
     if (ongoingInjections.has(tabId)) {
@@ -153,6 +442,7 @@ async function createNoteWithCoordinates(tabId, noteNumber) {
           action: "createNote",
           noteNumber: noteNumber,
           coords: response.coords,
+          selectionText: selectionText, // Pass selection from context menu
         },
         result => {
           clearTimeout(timeout);
@@ -161,7 +451,7 @@ async function createNoteWithCoordinates(tabId, noteNumber) {
           } else {
             resolve(result);
           }
-        }
+        },
       );
     });
 
@@ -178,13 +468,22 @@ async function createNoteWithCoordinates(tabId, noteNumber) {
 // Event Listeners
 
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log("[Web Notes Extension] Extension installed/updated");
-
   try {
     await createContextMenu();
     await initializeStats();
+    await PermissionManager.initialize();
   } catch (error) {
     logError("Error during extension initialization", error);
+  }
+});
+
+// Also initialize on startup
+chrome.runtime.onStartup.addListener(async () => {
+  console.log("[YAWN] Extension startup");
+  try {
+    await PermissionManager.initialize();
+  } catch (error) {
+    logError("Error during startup initialization", error);
   }
 });
 
@@ -196,10 +495,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       return;
     }
 
+    // Check and request permission if needed (context menu click is a user gesture)
+    console.log(`[YAWN] Context menu clicked, checking permission...`);
+    await PermissionManager.checkAndRequestIfNeeded(tab.url, tab.id);
+
     switch (info.menuItemId) {
       case EXTENSION_ID:
         // Handle add note action
         await handleAddNote(info, tab);
+        break;
+
+      case "register-page":
+        // Handle register page action
+        await handleRegisterPage(tab);
+        break;
+
+      case "generate-ai-context":
+        // Handle generate AI context action
+        await handleGenerateAIContext(tab);
         break;
 
       case "share-current-page":
@@ -212,8 +525,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         await handleShareSite(info, tab);
         break;
 
+      case "generate-dom-test-notes":
+        // Handle DOM test auto-notes generation
+        await handleGenerateDOMTestNotes(tab);
+        break;
+
       default:
-        console.log(`[Web Notes Extension] Unknown context menu item: ${info.menuItemId}`);
+        console.log(`[YAWN] Unknown context menu item: ${info.menuItemId}`);
     }
   } catch (error) {
     logError("Error handling context menu click", error);
@@ -226,17 +544,38 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
  * @param {Object} tab - Tab object
  */
 async function handleAddNote(info, tab) {
+  console.log(`[YAWN] ===== handleAddNote START for ${tab.url} =====`);
+
   try {
-    // Get next note number using enhanced URL matching
-    const notes = await getNotes();
+    // STEP 1: Get note count (fast, synchronous check)
+    const notes = await getNotes(tab.url);
     const urlNotes = getNotesForUrl(tab.url, notes);
     const noteNumber = urlNotes.length + 1;
+    const isFirstNoteOnDomain = urlNotes.length === 0;
 
-    // Get click coordinates from content script and create note
-    const success = await createNoteWithCoordinates(tab.id, noteNumber);
+    console.log(`[YAWN] This will be note #${noteNumber} on this URL (first on domain: ${isFirstNoteOnDomain})`);
+
+    // STEP 2: Inject scripts IMMEDIATELY using activeTab permission (before we lose user gesture context)
+    console.log(`[YAWN] Injecting scripts (activeTab permission)...`);
+    const injected = await injectContentScripts(tab.id);
+    if (!injected) {
+      console.error("[YAWN] ✗ Could not inject content scripts");
+      return;
+    }
+
+    // STEP 3: Wait for scripts to initialize properly
+    console.log(`[YAWN] Waiting 500ms for scripts to initialize...`);
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // STEP 4: Create the note
+    // Note: Permission is already requested in context menu handler
+    // Pass info.selectionText so content script has it even if listener wasn't ready
+    console.log(`[YAWN] Creating note #${noteNumber}...`);
+    const success = await createNoteWithCoordinates(tab.id, noteNumber, info.selectionText || null);
 
     if (success) {
-      // Update stats only on successful injection
+      console.log(`[YAWN] ✓ Note created successfully`);
+      // Update stats only on successful creation
       const stats = await getStats();
       await setStats({
         ...stats,
@@ -244,9 +583,14 @@ async function handleAddNote(info, tab) {
         notesCreated: stats.notesCreated + 1,
         lastSeen: Date.now(),
       });
+    } else {
+      console.error(`[YAWN] ✗ Note creation failed`);
     }
   } catch (error) {
+    console.error(`[YAWN] ✗ Error in handleAddNote:`, error);
     logError("Error handling add note action", error);
+  } finally {
+    console.log(`[YAWN] ===== handleAddNote END =====`);
   }
 }
 
@@ -257,7 +601,8 @@ async function handleAddNote(info, tab) {
  */
 async function handleSharePage(info, tab) {
   try {
-    console.log("[Web Notes Extension] Share page requested via context menu");
+    // Inject content scripts if needed
+    await injectContentScripts(tab.id);
 
     // Send message to content script to open sharing dialog
     chrome.tabs
@@ -265,7 +610,7 @@ async function handleSharePage(info, tab) {
         type: "shareCurrentPage",
       })
       .catch(error => {
-        console.error("[Web Notes Extension] Failed to send share page message:", error);
+        console.error("[YAWN] Failed to send share page message:", error);
       });
   } catch (error) {
     logError("Error handling share page action", error);
@@ -279,7 +624,8 @@ async function handleSharePage(info, tab) {
  */
 async function handleShareSite(info, tab) {
   try {
-    console.log("[Web Notes Extension] Share site requested via context menu");
+    // Inject content scripts if needed
+    await injectContentScripts(tab.id);
 
     // Send message to content script to open sharing dialog
     chrome.tabs
@@ -287,10 +633,99 @@ async function handleShareSite(info, tab) {
         type: "shareCurrentSite",
       })
       .catch(error => {
-        console.error("[Web Notes Extension] Failed to send share site message:", error);
+        console.error("[YAWN] Failed to send share site message:", error);
       });
   } catch (error) {
     logError("Error handling share site action", error);
+  }
+}
+
+/**
+ * Handle register page context menu action
+ * @param {Object} tab - Tab object
+ */
+async function handleRegisterPage(tab) {
+  try {
+    // Register the page without creating a note - call ServerAPI directly
+    const pageData = await ServerAPI.registerPage(tab.url, tab.title);
+
+    console.log("[YAWN] Page registered successfully:", pageData);
+
+    // Open the server page in a new tab
+    const baseUrl = await ServerAPI.getBaseUrl();
+    const serverPageUrl = `${baseUrl}/app/pages/${pageData.id}`;
+    chrome.tabs.create({ url: serverPageUrl });
+  } catch (error) {
+    console.error("[YAWN] Failed to register page:", error);
+
+    // Try to inject scripts first to show error
+    await injectContentScripts(tab.id);
+
+    // Send error message to content script to show alert
+    chrome.tabs
+      .sendMessage(tab.id, {
+        type: "showRegistrationError",
+        error: error.message || "Unknown error",
+      })
+      .catch(err => {
+        console.warn("[YAWN] Could not send error message to tab:", err);
+      });
+
+    logError("Error handling register page action", error);
+  }
+}
+
+/**
+ * Handle generate AI context action
+ * @param {Object} tab - Tab object
+ */
+async function handleGenerateAIContext(tab) {
+  try {
+    // Inject content scripts if needed
+    await injectContentScripts(tab.id);
+
+    // Send message to content script to show AI context dialog
+    chrome.tabs
+      .sendMessage(tab.id, {
+        type: "showAIContextDialog",
+      })
+      .then(response => {})
+      .catch(err => {
+        console.warn("[YAWN] Could not send message to tab:", err);
+      });
+  } catch (error) {
+    logError("Error handling generate AI context action", error);
+  }
+}
+
+/**
+ * Handle DOM test auto-notes generation
+ * @param {Object} tab - Tab object
+ */
+async function handleGenerateDOMTestNotes(tab) {
+  try {
+    // Inject content scripts if needed
+    const injected = await injectContentScripts(tab.id);
+    if (!injected) {
+      console.error("[YAWN] Could not inject content scripts");
+      return;
+    }
+
+    // Send message to content script to extract DOM and generate notes
+    chrome.tabs
+      .sendMessage(tab.id, {
+        type: "generateDOMTestNotes",
+      })
+      .then(response => {
+        if (response && response.success) {
+          console.log("[YAWN] DOM test notes generation initiated");
+        }
+      })
+      .catch(err => {
+        console.warn("[YAWN] Could not send message to tab:", err);
+      });
+  } catch (error) {
+    logError("Error handling DOM notes generation", error);
   }
 }
 
@@ -300,7 +735,322 @@ async function handleShareSite(info, tab) {
  * Handle messages from content scripts and popup
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || !message.type) {
+  if (!message) {
+    return;
+  }
+
+  // Handle API requests from content scripts (async)
+  if (message.action && message.action.startsWith("API_")) {
+    (async () => {
+      try {
+        let result;
+        switch (message.action) {
+          case "API_fetchNotesForPage":
+            result = await ServerAPI.fetchNotesForPage(message.url);
+            break;
+          case "API_createNote":
+            result = await ServerAPI.createNote(message.url, message.noteData);
+            break;
+          case "API_updateNote":
+            result = await ServerAPI.updateNote(message.serverId, message.noteData);
+            break;
+          case "API_deleteNote":
+            result = await ServerAPI.deleteNote(message.serverId);
+            break;
+          case "API_bulkSyncNotes":
+            result = await ServerAPI.bulkSyncNotes(message.url, message.notes);
+            break;
+          case "API_sharePageWithUser":
+            result = await ServerAPI.sharePageWithUser(message.pageId, message.userEmail, message.permissionLevel);
+            break;
+          case "API_shareSiteWithUser":
+            result = await ServerAPI.shareSiteWithUser(message.siteId, message.userEmail, message.permissionLevel);
+            break;
+          case "API_getPageShares":
+            result = await ServerAPI.getPageShares(message.pageId);
+            break;
+          case "API_getSiteShares":
+            result = await ServerAPI.getSiteShares(message.siteId);
+            break;
+          case "API_updatePageSharePermission":
+            result = await ServerAPI.updatePageSharePermission(
+              message.pageId,
+              message.userId,
+              message.newPermission,
+              message.isActive,
+            );
+            break;
+          case "API_updateSiteSharePermission":
+            result = await ServerAPI.updateSiteSharePermission(
+              message.siteId,
+              message.userId,
+              message.newPermission,
+              message.isActive,
+            );
+            break;
+          case "API_removePageShare":
+            result = await ServerAPI.removePageShare(message.pageId, message.userId);
+            break;
+          case "API_removeSiteShare":
+            result = await ServerAPI.removeSiteShare(message.siteId, message.userId);
+            break;
+          case "API_getConfig":
+            result = await ServerAPI.getConfig();
+            break;
+          case "API_generateDOMTestNotes":
+            // First register the page
+            const pageData = await ServerAPI.registerPage(message.url, message.title);
+            if (!pageData || !pageData.id) {
+              throw new Error("Failed to register page");
+            }
+            // Then generate notes with DOM
+            result = await ServerAPI.generateAutoNotesWithDOM(pageData.id, message.pageDom);
+            break;
+          case "API_registerPage":
+            // Register the page (called once before chunks)
+            result = await ServerAPI.registerPage(message.url, message.title);
+            break;
+          case "API_generateDOMTestNotesChunk":
+            // Generate notes with DOM chunk (page already registered)
+            result = await ServerAPI.generateAutoNotesWithDOMChunk(message.pageId, message.chunkData);
+            break;
+          case "API_generateAutoNotesFullDOM":
+            // New endpoint: server-side chunking with template and custom instructions
+            result = await ServerAPI.generateAutoNotesWithFullDOM(
+              message.pageId,
+              message.fullDOM,
+              message.templateType,
+              message.customInstructions,
+            );
+            break;
+          case "API_getLLMProviders":
+            // Get list of active LLM providers
+            result = await ServerAPI.getLLMProviders();
+            break;
+          case "API_getOrCreatePageByUrl":
+            // Get or create page by URL
+            result = await ServerAPI.getOrCreatePageByUrl(message.url, message.title);
+            break;
+          case "API_generatePageContext":
+            // Generate AI context for a page
+            result = await ServerAPI.generatePageContext(
+              message.pageId,
+              message.llmProviderId,
+              message.customInstructions,
+              message.pageSource,
+              message.pageDom,
+            );
+            break;
+          case "API_previewContextPrompt":
+            // Preview context generation prompt
+            result = await ServerAPI.previewContextPrompt(
+              message.pageId,
+              message.customInstructions,
+              message.pageSource,
+              message.pageDom,
+            );
+            break;
+          default:
+            throw new Error(`Unknown API action: ${message.action}`);
+        }
+        sendResponse({ success: true, data: result });
+      } catch (error) {
+        logError(`API call failed: ${message.action}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle AUTH fetch requests from content scripts (async)
+  if (message.action && message.action.startsWith("AUTH_")) {
+    (async () => {
+      try {
+        let result;
+        switch (message.action) {
+          case "AUTH_register":
+            result = await fetch(message.url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              body: JSON.stringify(message.body),
+            });
+            break;
+          case "AUTH_login":
+            result = await fetch(message.url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              body: JSON.stringify(message.body),
+            });
+            break;
+          case "AUTH_validateToken":
+            result = await fetch(message.url, {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${message.token}`,
+                Accept: "application/json",
+              },
+            });
+            break;
+          default:
+            throw new Error(`Unknown AUTH action: ${message.action}`);
+        }
+
+        // Process fetch response
+        const ok = result.ok;
+        const status = result.status;
+        let data;
+        const contentType = result.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await result.json();
+        } else {
+          data = await result.text();
+        }
+
+        sendResponse({ success: ok, status: status, data: data });
+      } catch (error) {
+        logError(`AUTH call failed: ${message.action}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle chrome.identity requests from content scripts (async)
+  if (message.action && message.action.startsWith("IDENTITY_")) {
+    (async () => {
+      try {
+        let result;
+        switch (message.action) {
+          case "IDENTITY_getAuthToken":
+            result = await new Promise(resolve => {
+              chrome.identity.getAuthToken(
+                {
+                  interactive: message.interactive,
+                  scopes: message.scopes,
+                },
+                token => {
+                  if (chrome.runtime.lastError) {
+                    resolve({ error: chrome.runtime.lastError.message || String(chrome.runtime.lastError) });
+                  } else {
+                    resolve({ token });
+                  }
+                },
+              );
+            });
+            sendResponse({ success: !result.error, data: result.token, error: result.error });
+            break;
+          case "IDENTITY_removeCachedAuthToken":
+            result = await new Promise(resolve => {
+              chrome.identity.removeCachedAuthToken({ token: message.token }, () => {
+                if (chrome.runtime.lastError) {
+                  resolve({ error: chrome.runtime.lastError.message || String(chrome.runtime.lastError) });
+                } else {
+                  resolve({ success: true });
+                }
+              });
+            });
+            sendResponse({ success: !result.error, error: result.error });
+            break;
+          default:
+            throw new Error(`Unknown IDENTITY action: ${message.action}`);
+        }
+      } catch (error) {
+        logError(`Identity call failed: ${message.action}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle AuthManager requests from content scripts (async)
+  if (message.action && message.action.startsWith("AUTHMANAGER_")) {
+    (async () => {
+      try {
+        let result;
+
+        // Ensure AuthManager is available
+        if (typeof AuthManager === "undefined") {
+          sendResponse({ success: false, error: "AuthManager not available" });
+          return;
+        }
+
+        // Wait for initialization before processing requests
+        const initialized = await AuthManager.waitForInitialization();
+        if (!initialized) {
+          sendResponse({ success: false, error: "AuthManager initialization timeout" });
+          return;
+        }
+
+        switch (message.action) {
+          case "AUTHMANAGER_isAuthenticated":
+            result = AuthManager.isAuthenticated();
+            sendResponse({ success: true, data: result });
+            break;
+          case "AUTHMANAGER_getCurrentToken":
+            if (AuthManager.isAuthenticated()) {
+              result = AuthManager.getCurrentToken();
+              sendResponse({ success: true, data: result });
+            } else {
+              sendResponse({ success: false, data: null });
+            }
+            break;
+          case "AUTHMANAGER_getCurrentUser":
+            if (AuthManager.isAuthenticated()) {
+              result = AuthManager.getCurrentUser();
+              sendResponse({ success: true, data: result });
+            } else {
+              sendResponse({ success: false, data: null });
+            }
+            break;
+          case "AUTHMANAGER_refreshTokenIfNeeded":
+            result = await AuthManager.refreshTokenIfNeeded();
+            sendResponse({ success: true, data: result });
+            break;
+          case "AUTHMANAGER_attemptAutoAuth":
+            result = await AuthManager.attemptAutoAuth();
+            sendResponse({ success: true, data: result });
+            break;
+          case "AUTHMANAGER_signIn":
+            result = await AuthManager.signIn(message.interactive || false);
+            sendResponse({ success: true, data: result });
+            break;
+          case "AUTHMANAGER_signOut":
+            await AuthManager.signOut();
+            sendResponse({ success: true });
+            break;
+          default:
+            throw new Error(`Unknown AUTHMANAGER action: ${message.action}`);
+        }
+      } catch (error) {
+        logError(`AuthManager call failed: ${message.action}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle script injection requests
+  if (message.action === "injectContentScripts") {
+    (async () => {
+      try {
+        const injected = await injectContentScripts(message.tabId);
+        sendResponse({ success: injected });
+      } catch (error) {
+        logError(`Script injection failed for tab ${message.tabId}`, error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // Keep message channel open for async response
+  }
+
+  // Handle regular message types
+  if (!message.type) {
     return;
   }
 
@@ -336,14 +1086,8 @@ async function handleContextMenuUpdate(data) {
   try {
     if (data && typeof data.hasSharingCapability === "boolean") {
       await updateSharingContextMenu(data.hasSharingCapability);
-      console.log("[Web Notes Extension] Context menu updated based on sharing capability");
     }
   } catch (error) {
     logError("Error updating context menu", error);
   }
 }
-
-// Handle extension errors
-chrome.runtime.onStartup.addListener(() => {
-  console.log("[Web Notes Extension] Extension startup");
-});

@@ -1,0 +1,35 @@
+{#
+Available Jinja2 Template Variables:
+- page_url: str - The page URL from the database (always present)
+- page_source: str | None - Optional alternate source for paywalled content (user-provided)
+- page_title: str - The page title (or "Untitled" if not set)
+- user_context: str | None - User-provided context to incorporate (optional)
+- page_summary: str | None - AI-generated summary to incorporate (optional)
+- notes_content: str | None - Concatenated content from all user notes on this page (optional)
+- custom_instructions: str | None - User-provided custom instructions for generation (optional)
+#}
+You are analyzing a web page to create a context summary optimized for LLM consumption, not human reading, with reduced token usage.
+Extract the main content, key points, and relevant metadata.
+Exclude navigation menus, ads, and unrelated sections. For brevity, do not list exclusions.
+Summarize the content in a concise manner, focusing on clarity and relevance for understanding the page's purpose and information.
+Future LLM sessions should not need the original page to understand the context.
+
+For pages that are fictional or historical narratives, include separate descriptions of plot, of settings, and characters.
+For pages that are scientific or technical, include separate descriptions of key concepts, methodologies, and findings.
+For pages that are argumentative or opinion pieces, include separate descriptions of main arguments, evidence, and conclusions.
+
+
+**Page Information:**
+{% if page_source %}
+- This is the source to analysis: {{ page_source }}
+{% else %}
+- This is the page to analysis: {{ page_url }}
+{% endif %}
+{% if page_summary %}
+- Existing User Summary to incorporate: {{ page_summary }}
+{% endif %}
+{% if custom_instructions %}
+
+**In addition to the summary, follow these instructions:**
+{{ custom_instructions }}
+{% endif %}

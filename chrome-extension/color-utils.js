@@ -18,7 +18,7 @@ const NoteColorUtils = {
     "light-purple": "#e2e3f3",
     "light-orange": "#ffeaa7",
     "light-gray": "#e9ecef",
-    "teal": "#a7f3d0",
+    teal: "#a7f3d0",
   },
 
   /**
@@ -65,8 +65,8 @@ const NoteColorUtils = {
    * @returns {string} Safe color value or fallback
    */
   sanitizeColor(color) {
-    if (!color || typeof color !== 'string') {
-      return '#fff3cd'; // Default light yellow
+    if (!color || typeof color !== "string") {
+      return "#fff3cd"; // Default light yellow
     }
 
     // Allow hex colors (3 or 6 digits)
@@ -99,15 +99,29 @@ const NoteColorUtils = {
 
     // Allow named colors (basic set for security)
     const namedColors = [
-      'transparent', 'white', 'black', 'red', 'green', 'blue', 'yellow', 'orange',
-      'purple', 'pink', 'gray', 'grey', 'brown', 'cyan', 'magenta', 'lime'
+      "transparent",
+      "white",
+      "black",
+      "red",
+      "green",
+      "blue",
+      "yellow",
+      "orange",
+      "purple",
+      "pink",
+      "gray",
+      "grey",
+      "brown",
+      "cyan",
+      "magenta",
+      "lime",
     ];
     if (namedColors.includes(color.toLowerCase())) {
       return color.toLowerCase();
     }
 
-    console.warn(`[Web Notes] Invalid color value: ${color}, using fallback`);
-    return '#fff3cd'; // Fallback to default
+    console.warn(`[YAWN] Invalid color value: ${color}, using fallback`);
+    return "#fff3cd"; // Fallback to default
   },
 };
 

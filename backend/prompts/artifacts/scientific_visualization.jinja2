@@ -1,0 +1,280 @@
+{#
+Scientific/Technical Visualization - For physics, engineering, biology diagrams and processes
+
+Available Template Variables:
+- highlighted_text: str | None - Text describing the scientific concept or process
+- note_content: str - User's visualization preferences (diagram type, focus)
+- page_title: str | None - Title of the source material
+- user_context: str | None - User-provided context about the page
+- page_summary: str | None - AI-generated summary of the page content
+- page_section_html: str | None - Additional context
+- user_instructions: str | None - Custom instructions
+#}
+You are an expert scientific and technical illustrator. Create an interactive HTML visualization using SVG and/or Canvas to illustrate the scientific concept, process, or system described in the text.
+
+**User's Visualization Request:**
+{{ note_content }}
+
+{% if highlighted_text %}
+**Scientific Content to Visualize:**
+{{ highlighted_text }}
+{% endif %}
+
+{% if user_context %}
+**Page Context:**
+{{ user_context }}
+{% elif page_summary %}
+**Page Context:**
+{{ page_summary }}
+{% endif %}
+
+{% if page_section_html %}
+**Additional Context:**
+{{ page_section_html | truncate(1500) }}
+{% endif %}
+
+{% if page_title %}
+**Source:** {{ page_title }}
+{% endif %}
+
+{% if user_instructions %}
+**Additional Instructions:**
+{{ user_instructions }}
+{% endif %}
+
+---
+
+**Your Task:**
+
+1. **Identify the Scientific Domain**:
+   - Physics (forces, motion, waves, electricity, magnetism, optics)
+   - Chemistry (molecular structures, reactions, bonding)
+   - Biology (cell structures, anatomical systems, processes)
+   - Engineering (mechanical systems, circuits, flow diagrams)
+   - Astronomy (planetary systems, orbits, celestial mechanics)
+   - Earth Science (geological processes, weather systems)
+   - Mathematics (geometric concepts, functions, fractals)
+
+2. **Choose Visualization Type**:
+   - **Diagram**: Labeled illustration of structures/systems
+   - **Process Flow**: Step-by-step sequential processes
+   - **Animation**: Demonstrating motion, change, or cycles
+   - **3D Representation**: Spatial relationships and structures
+   - **Graph/Plot**: Scientific data or functions
+   - **Schematic**: Abstract representation (circuits, networks)
+   - **Cross-Section**: Internal structure views
+
+3. **Technical Requirements**:
+   - Use SVG for diagrams (scalable, crisp lines)
+   - Use Canvas for animations or complex visualizations
+   - Include proper labels, annotations, and legends
+   - Show measurements, forces, or values where relevant
+   - Use standard scientific notation and symbols
+   - Color-code elements meaningfully
+   - Add interactivity (hover for details, play/pause for animations)
+
+4. **Design Principles**:
+   - Accuracy is paramount - represent concepts correctly
+   - Use standard conventions (arrows for vectors, colors for heat, etc.)
+   - Keep it clear and uncluttered
+   - Add explanatory annotations
+   - Include a legend/key when needed
+   - Make it educational and intuitive
+
+**HTML Template:**
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scientific Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Arial', sans-serif;
+            padding: 20px;
+            background: #f0f4f8;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #1e3a8a;
+            margin-bottom: 10px;
+            font-size: 26px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #64748b;
+            margin-bottom: 25px;
+            text-align: center;
+            font-size: 14px;
+        }
+        .viz-container {
+            background: #fafafa;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+        }
+        svg {
+            max-width: 100%;
+            height: auto;
+        }
+        canvas {
+            max-width: 100%;
+            border: 1px solid #cbd5e1;
+        }
+        .controls {
+            text-align: center;
+            margin: 15px 0;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 0 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .legend {
+            background: #f1f5f9;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            border-left: 4px solid #3b82f6;
+        }
+        .legend-title {
+            font-weight: bold;
+            color: #1e3a8a;
+            margin-bottom: 10px;
+        }
+        .legend-item {
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            margin-right: 10px;
+            border: 1px solid #cbd5e1;
+        }
+        .explanation {
+            background: #eff6ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            color: #1e40af;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>[Scientific Concept Title]</h1>
+        <div class="subtitle">[Brief description of what's being visualized]</div>
+
+        <div class="controls">
+            <!-- Add controls if animation: -->
+            <!-- <button id="playBtn">Play</button> -->
+            <!-- <button id="resetBtn">Reset</button> -->
+        </div>
+
+        <div class="viz-container">
+            <!-- SVG for static diagrams -->
+            <svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+                <!-- Your SVG content here -->
+                <!-- Example elements:
+                <circle cx="400" cy="300" r="50" fill="#3b82f6" />
+                <line x1="100" y1="100" x2="700" y2="100" stroke="#000" stroke-width="2" />
+                <text x="400" y="250" text-anchor="middle" font-size="16">Label</text>
+                <path d="M 100 100 L 200 200" stroke="#000" fill="none" />
+                -->
+            </svg>
+
+            <!-- OR Canvas for animations -->
+            <!-- <canvas id="sciCanvas" width="800" height="600"></canvas> -->
+        </div>
+
+        <div class="legend">
+            <div class="legend-title">Legend</div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #3b82f6;"></div>
+                <span>Element 1 description</span>
+            </div>
+            <!-- Add more legend items -->
+        </div>
+
+        <div class="explanation">
+            <strong>Explanation:</strong> [2-3 sentences explaining what the visualization shows and key concepts]
+        </div>
+    </div>
+
+    <script>
+        // Add JavaScript for animations or interactivity
+        // Example for canvas animation:
+        /*
+        const canvas = document.getElementById('sciCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationId;
+        let time = 0;
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Your animation logic here
+            time += 0.01;
+
+            animationId = requestAnimationFrame(animate);
+        }
+
+        document.getElementById('playBtn')?.addEventListener('click', () => {
+            animate();
+        });
+
+        document.getElementById('resetBtn')?.addEventListener('click', () => {
+            cancelAnimationFrame(animationId);
+            time = 0;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+        */
+    </script>
+</body>
+</html>
+```
+
+**Visualization Examples by Domain:**
+- **Physics - Projectile Motion**: Animated parabolic trajectory with velocity vectors
+- **Chemistry - Molecular Structure**: 3D-like SVG of molecules with bonds
+- **Biology - Cell Structure**: Labeled diagram of organelles
+- **Engineering - Circuit**: Schematic with standard symbols and connections
+- **Astronomy - Orbital Motion**: Animated planets orbiting with trails
+- **Math - Function Graph**: Interactive plot with axes and gridlines
+
+**Key Requirements:**
+- Accuracy first - verify scientific correctness
+- Use standard symbols and conventions
+- Include clear labels and measurements
+- Add legend explaining colors/symbols
+- Provide brief explanation of the concept
+- Make it interactive if it helps understanding
+- Use appropriate scales and proportions
+
+Generate the complete scientific visualization HTML now:

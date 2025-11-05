@@ -1,98 +1,108 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Text Selection Note Test</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-        }
-        .test-section {
-            margin: 20px 0;
-            padding: 15px;
-            background: #f5f5f5;
-            border-radius: 8px;
-        }
-        .highlight-text {
-            background: yellow;
-            padding: 2px 4px;
-        }
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        line-height: 1.6;
+      }
+      .test-section {
+        margin: 20px 0;
+        padding: 15px;
+        background: #f5f5f5;
+        border-radius: 8px;
+      }
+      .highlight-text {
+        background: yellow;
+        padding: 2px 4px;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Text Selection and Note Creation Test</h1>
 
     <div class="test-section">
-        <h2>Test Instructions</h2>
-        <p>To test the text selection and highlighting functionality:</p>
-        <ol>
-            <li>Select some text in any of the paragraphs below</li>
-            <li>Right-click on the selected text</li>
-            <li>Choose "🗒️ Add Web Note" from the context menu</li>
-            <li>The note should be created with the selected text as content</li>
-            <li>The original selected text should be highlighted with the note's background color</li>
-        </ol>
+      <h2>Test Instructions</h2>
+      <p>To test the text selection and highlighting functionality:</p>
+      <ol>
+        <li>Select some text in any of the paragraphs below</li>
+        <li>Right-click on the selected text</li>
+        <li>Choose "🗒️ Add Web Note" from the context menu</li>
+        <li>The note should be created with the selected text as content</li>
+        <li>The original selected text should be highlighted with the note's background color</li>
+      </ol>
     </div>
 
     <div class="test-section">
-        <h2>Sample Text for Selection</h2>
-        <p>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. <strong>This is some bold text that you can select.</strong>
-            Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
-            exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-        </p>
+      <h2>Sample Text for Selection</h2>
+      <p>
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+        <strong>This is some bold text that you can select.</strong>
+        Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud
+        exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+      </p>
 
-        <p>
-            <em>This paragraph contains italic text</em> and normal text. Duis aute irure dolor in reprehenderit in
-            voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident,
-            sunt in culpa qui officia deserunt mollit anim id est laborum.
-        </p>
+      <p>
+        <em>This paragraph contains italic text</em>
+        and normal text. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+        pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est
+        laborum.
+      </p>
     </div>
 
     <div class="test-section">
-        <h2>More Test Content</h2>
-        <p>
-            Here is another paragraph with different content. You can select any portion of this text to create a note.
-            The extension should capture the exact text you selected and use it as the note content.
-        </p>
+      <h2>More Test Content</h2>
+      <p>
+        Here is another paragraph with different content. You can select any portion of this text to create a note. The
+        extension should capture the exact text you selected and use it as the note content.
+      </p>
 
-        <p>
-            Testing cross-element selection: <span class="highlight-text">This span contains highlighted text</span>
-            that continues into regular paragraph text. Try selecting across the span boundary to test complex selection handling.
-        </p>
+      <p>
+        Testing cross-element selection:
+        <span class="highlight-text">This span contains highlighted text</span>
+        that continues into regular paragraph text. Try selecting across the span boundary to test complex selection
+        handling.
+      </p>
     </div>
 
     <div class="test-section">
-        <h2>Lists and Other Elements</h2>
-        <ul>
-            <li>List item one - select this text</li>
-            <li>List item two with <strong>bold content</strong></li>
-            <li>List item three with a <a href="#">link to test</a></li>
-        </ul>
+      <h2>Lists and Other Elements</h2>
+      <ul>
+        <li>List item one - select this text</li>
+        <li>
+          List item two with
+          <strong>bold content</strong>
+        </li>
+        <li>
+          List item three with a
+          <a href="#">link to test</a>
+        </li>
+      </ul>
 
-        <blockquote>
-            This is a blockquote that you can also select text from. It should work just like regular paragraphs.
-        </blockquote>
+      <blockquote>
+        This is a blockquote that you can also select text from. It should work just like regular paragraphs.
+      </blockquote>
     </div>
 
     <div class="test-section">
-        <h2>Testing Without Selection</h2>
-        <p>
-            Right-click anywhere in this area without selecting text first. The extension should create a note
-            with the default "MY NOTE #X" content at the click location.
-        </p>
+      <h2>Testing Without Selection</h2>
+      <p>
+        Right-click anywhere in this area without selecting text first. The extension should create a note with the
+        default "MY NOTE #X" content at the click location.
+      </p>
     </div>
 
     <script>
-        // Simple script to add some interactivity for testing
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Test page loaded. Ready for Web Notes extension testing.');
-        });
+      // Simple script to add some interactivity for testing
+      document.addEventListener("DOMContentLoaded", function () {
+        console.log("Test page loaded. Ready for Web Notes extension testing.");
+      });
     </script>
-</body>
+  </body>
 </html>

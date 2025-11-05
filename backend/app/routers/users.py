@@ -4,6 +4,7 @@ This router handles user authentication, registration, and profile management
 with Chrome Identity integration.
 """
 
+import logging
 from datetime import timedelta
 from typing import List
 
@@ -28,6 +29,8 @@ router = APIRouter(
     tags=["users"],
     responses={404: {"description": "Not found"}},
 )
+
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -81,6 +84,8 @@ async def register_user(
     except AuthenticationError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
+        logger.error("Failed to register user, generic exception")
+        logger.error(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Registration failed: {str(e)}",
@@ -334,7 +339,7 @@ async def update_user_by_id(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user_by_id(
     user_id: int,
-    admin_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete user by ID (admin only).
@@ -348,6 +353,7 @@ async def delete_user_by_id(
         HTTPException: If user not found or requester is not admin
     """
     try:
+
         stmt = select(User).where(User.id == user_id)
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
@@ -357,11 +363,11 @@ async def delete_user_by_id(
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
             )
 
-        # Prevent admin from deleting themselves
-        if user.id == admin_user.id:
+        # Prevent deleting otehr accounts
+        if user.id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete your own account",
+                detail="Can only delete your own account",
             )
 
         await session.delete(user)

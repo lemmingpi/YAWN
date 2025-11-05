@@ -2,11 +2,18 @@
 
 import logging
 from enum import Enum
+from pathlib import Path
 from typing import Dict, Optional, Union
+
+from jinja2 import Environment, FileSystemLoader
 
 from ..models import Note, Page, Site
 
 logger = logging.getLogger(__name__)
+
+# Set up Jinja2 environment for loading prompt templates
+PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts" / "artifacts"
+jinja_env = Environment(loader=FileSystemLoader(str(PROMPTS_DIR)))
 
 
 class ArtifactType(str, Enum):
@@ -19,6 +26,10 @@ class ArtifactType(str, Enum):
     CODE_SNIPPET = "code_snippet"
     EXPLANATION = "explanation"
     OUTLINE = "outline"
+    SCENE_ILLUSTRATION = "scene_illustration"
+    DATA_CHART = "data_chart"
+    SCIENTIFIC_VISUALIZATION = "scientific_visualization"
+    CUSTOM = "custom"
 
 
 # Prompt templates for different artifact types
@@ -100,6 +111,9 @@ Requirements:
 {user_instructions}
 
 Outline:""",
+    ArtifactType.CUSTOM: """{context}
+
+{user_instructions}""",
 }
 
 
@@ -145,10 +159,35 @@ class ContextBuilder:
         Raises:
             ValueError: If artifact_type is not supported
         """
+        # Check if this artifact type uses Jinja2 templates
+        # Map artifact types to their corresponding template files
+        jinja2_templates = {
+            ArtifactType.ANALYSIS: "analysis.jinja2",
+            ArtifactType.ACTION_ITEMS: "action_items.jinja2",
+            ArtifactType.CODE_SNIPPET: "code_snippet.jinja2",
+            ArtifactType.SCENE_ILLUSTRATION: "scene_illustration.jinja2",
+            ArtifactType.DATA_CHART: "data_chart.jinja2",
+            ArtifactType.SCIENTIFIC_VISUALIZATION: "scientific_visualization.jinja2",
+        }
+
+        if artifact_type in jinja2_templates:
+            return self._build_jinja2_prompt(
+                note=note,
+                template_file=jinja2_templates[artifact_type],
+                user_instructions=user_instructions,
+            )
+
+        # Standard template-based generation for non-visualization types
         if artifact_type not in ARTIFACT_TEMPLATES:
             raise ValueError(
                 f"Unsupported artifact type: {artifact_type}. "
                 f"Supported types: {list(ARTIFACT_TEMPLATES.keys())}"
+            )
+
+        # For CUSTOM type, user_instructions is required
+        if artifact_type == ArtifactType.CUSTOM and not user_instructions:
+            raise ValueError(
+                "Custom artifact type requires user_instructions (custom_prompt)"
             )
 
         # Assemble context from note and related objects
@@ -205,6 +244,60 @@ class ContextBuilder:
         )
 
         return prompt
+
+    def _build_jinja2_prompt(
+        self,
+        note: Note,
+        template_file: str,
+        user_instructions: Optional[str] = None,
+    ) -> str:
+        """
+        Build prompt using Jinja2 template for artifacts.
+
+        Args:
+            note: Note object with relationships loaded
+            template_file: Jinja2 template filename
+            user_instructions: Optional user instructions
+
+        Returns:
+            Rendered prompt string
+        """
+        # Prepare template variables
+        template_vars = {
+            "note_content": note.content or "",
+            "highlighted_text": note.highlighted_text,
+            "page_section_html": note.page_section_html,
+            "user_instructions": user_instructions,
+        }
+
+        # Add page data if available
+        if hasattr(note, "page") and note.page:
+            template_vars.update(
+                {
+                    "page_title": note.page.title,
+                    "page_url": note.page.url,
+                    "page_summary": note.page.page_summary,
+                    "user_context": note.page.user_context,
+                }
+            )
+
+            # Add site data if available
+            if hasattr(note.page, "site") and note.page.site:
+                template_vars.update(
+                    {
+                        "site_domain": note.page.site.domain,
+                        "site_context": note.page.site.user_context,
+                    }
+                )
+
+        # Load and render template
+        try:
+            template = jinja_env.get_template(template_file)
+            prompt: str = template.render(**template_vars)
+            return prompt
+        except Exception as e:
+            logger.error(f"Error rendering Jinja2 template {template_file}: {e}")
+            raise ValueError(f"Failed to render prompt from template: {e}")
 
     def _build_page_context(self, page: Page) -> str:
         """

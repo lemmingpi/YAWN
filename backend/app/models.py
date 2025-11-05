@@ -104,8 +104,8 @@ class Site(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     domain: Mapped[str] = mapped_column(
-        String(255), unique=True, index=True, nullable=False
-    )
+        String(255), index=True, nullable=False
+    )  # Unique per user, not globally
     user_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
@@ -123,10 +123,11 @@ class Site(Base, TimestampMixin):
         "UserSiteShare", back_populates="site", cascade="all, delete-orphan"
     )
 
-    # Add index for user_id for performance
+    # Add index for user_id for performance and composite unique constraint
     __table_args__ = (
         Index("idx_site_user_id", "user_id"),
         Index("idx_site_domain_user", "domain", "user_id"),
+        Index("ix_sites_domain_user_unique", "domain", "user_id", unique=True),
     )
 
 
@@ -141,6 +142,17 @@ class Page(Base, TimestampMixin):
     page_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     user_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Paywall support for auto-note generation
+    is_paywalled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Whether the page content is behind a paywall",
+    )
+    page_source: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="Alternate page source text for paywalled content"
+    )
 
     # Foreign Keys
     site_id: Mapped[int] = mapped_column(
@@ -182,6 +194,12 @@ class Note(Base, TimestampMixin):
     position_y: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     anchor_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Whether the note has been archived (soft delete for auto-generated batches)",
+    )
     server_link_id: Mapped[Optional[str]] = mapped_column(
         String(100), index=True, nullable=True
     )
@@ -189,6 +207,11 @@ class Note(Base, TimestampMixin):
     # Context fields for artifact generation
     highlighted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     page_section_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Auto-generation tracking for batch operations
+    generation_batch_id: Mapped[Optional[str]] = mapped_column(
+        String(100), index=True, nullable=True
+    )
 
     # Foreign Keys
     page_id: Mapped[int] = mapped_column(

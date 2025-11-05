@@ -147,12 +147,25 @@ class PageBase(BaseModel):
         None, description="User-defined context for this page"
     )
     is_active: bool = Field(True, description="Whether the page is active")
+    is_paywalled: bool = Field(
+        False, description="Whether the page content is behind a paywall"
+    )
+    page_source: Optional[str] = Field(
+        None, description="Alternate page source text for paywalled content"
+    )
 
 
 class PageCreate(PageBase):
     """Schema for creating a new page."""
 
     site_id: int = Field(..., description="ID of the associated site")
+
+
+class PageCreateWithURL(BaseModel):
+    """Schema for creating a new page with URL (auto-creates site if needed)."""
+
+    url: str = Field(..., min_length=1, max_length=2048, description="Page URL")
+    title: Optional[str] = Field(None, max_length=500, description="Page title")
 
 
 class PageUpdate(BaseModel):
@@ -163,6 +176,8 @@ class PageUpdate(BaseModel):
     page_summary: Optional[str] = None
     user_context: Optional[str] = None
     is_active: Optional[bool] = None
+    is_paywalled: Optional[bool] = None
+    page_source: Optional[str] = None
     site_id: Optional[int] = None
 
 
@@ -199,6 +214,7 @@ class NoteBase(BaseModel):
     server_link_id: Optional[str] = Field(
         None, max_length=100, description="External reference ID"
     )
+    url: Optional[str] = Field(None, description="URL of the page this note belongs to")
 
 
 class NoteCreate(NoteBase):
@@ -210,7 +226,6 @@ class NoteCreate(NoteBase):
 class NoteCreateWithURL(NoteBase):
     """Schema for creating a new note with URL (auto-creates page/site)."""
 
-    url: str = Field(..., description="URL of the page for this note")
     page_title: Optional[str] = Field(None, description="Title of the page (optional)")
 
 
@@ -256,7 +271,7 @@ class LLMProviderBase(BaseModel):
     )
     model_name: str = Field(..., min_length=1, max_length=100, description="Model name")
     max_tokens: int = Field(
-        4096, gt=0, le=100000, description="Maximum tokens for generation"
+        4096, gt=0, le=10000000, description="Maximum tokens for generation"
     )
     temperature: float = Field(
         0.7, ge=0.0, le=2.0, description="Generation temperature"
@@ -429,6 +444,9 @@ class ArtifactPreviewRequest(BaseModel):
         ..., min_length=1, max_length=50, description="Type of artifact to preview"
     )
     custom_prompt: Optional[str] = Field(None, description="Custom user instructions")
+    additional_instructions: Optional[str] = Field(
+        None, description="Additional instructions to append to base prompt"
+    )
 
 
 class ArtifactPreviewResponse(BaseModel):
@@ -566,15 +584,66 @@ class PageSummarizationResponse(BaseModel):
     tokens_used: Optional[int] = Field(None, description="Number of tokens used")
 
 
-# Bulk operation schemas
-class BulkNoteCreate(BaseModel):
-    """Schema for bulk note creation."""
+class PageContextGenerationRequest(BaseModel):
+    """Schema for AI-powered page context generation requests."""
 
-    notes: List[NoteCreate] = Field(
-        ..., min_length=1, max_length=100, description="List of notes to create"
+    llm_provider_id: int = Field(..., description="ID of the LLM provider to use")
+    custom_instructions: Optional[str] = Field(
+        None,
+        description="Optional custom instructions to guide context generation",
+    )
+    page_source: Optional[str] = Field(
+        None,
+        description="Optional alternate page source (for paywalled content)",
+    )
+    page_dom: Optional[str] = Field(
+        None,
+        description="Optional page DOM for content extraction",
     )
 
 
+class PageContextGenerationResponse(BaseModel):
+    """Schema for page context generation responses."""
+
+    user_context: str = Field(..., description="Generated context summary for the page")
+    detected_content_type: str = Field(
+        ..., description="Content type detected by the LLM"
+    )
+    tokens_used: int = Field(..., description="Total tokens consumed")
+    cost_usd: float = Field(..., description="Generation cost in USD")
+    generation_time_ms: int = Field(
+        ..., description="Time taken for generation in milliseconds"
+    )
+    input_tokens: int = Field(..., description="Input token count")
+    output_tokens: int = Field(..., description="Output token count")
+
+
+class PageContextPreviewRequest(BaseModel):
+    """Schema for preview prompt request."""
+
+    custom_instructions: Optional[str] = Field(
+        None,
+        description="Optional custom instructions to include in preview",
+    )
+    page_source: Optional[str] = Field(
+        None,
+        description="Optional alternate page source",
+    )
+    page_dom: Optional[str] = Field(
+        None,
+        description="Optional page DOM for content extraction",
+    )
+
+
+class PageContextPreviewResponse(BaseModel):
+    """Schema for preview prompt response."""
+
+    prompt: str = Field(
+        ..., description="The full rendered prompt that would be sent to the LLM"
+    )
+
+
+# Bulk operation schemas
 class BulkNoteCreateWithURL(BaseModel):
     """Schema for bulk note creation with URLs."""
 
@@ -793,3 +862,164 @@ class UserPageShareResponse(UserPageShareBase, TimestampSchema):
 
     class Config:
         from_attributes = True
+
+
+# Auto Note Generation schemas
+class AutoNoteGenerationRequest(BaseModel):
+    """Schema for requesting auto note generation."""
+
+    llm_provider_id: int = Field(1, description="LLM provider ID to use")
+    template_type: str = Field(
+        "study_guide",
+        description="Type of template: 'study_guide' or 'content_review'",
+    )
+    custom_instructions: Optional[str] = Field(
+        None, description="Optional custom instructions for generation"
+    )
+    page_source: Optional[str] = Field(
+        None, description="Optional alternate page source for paywalled content"
+    )
+    page_dom: Optional[str] = Field(
+        None, description="Optional page DOM/HTML content from extension"
+    )
+
+
+class GeneratedNoteData(BaseModel):
+    """Schema for a single generated note."""
+
+    id: int = Field(..., description="Note ID")
+    content: str = Field(..., description="Note commentary/content")
+    highlighted_text: Optional[str] = Field(
+        None, description="Highlighted text from page"
+    )
+    position_x: Optional[int] = Field(None, description="X position on page")
+    position_y: Optional[int] = Field(None, description="Y position on page")
+
+
+class AutoNoteGenerationResponse(BaseModel):
+    """Schema for auto note generation response."""
+
+    notes: List[GeneratedNoteData] = Field(..., description="List of generated notes")
+    generation_batch_id: Optional[str] = Field(
+        None, description="Batch ID for bulk operations"
+    )
+    tokens_used: int = Field(..., description="Total tokens consumed")
+    cost_usd: float = Field(..., description="Generation cost in USD")
+    generation_time_ms: int = Field(..., description="Generation time in milliseconds")
+    input_tokens: int = Field(..., description="Input token count")
+    output_tokens: int = Field(..., description="Output token count")
+
+
+class AutoNotePreviewRequest(BaseModel):
+    """Schema for previewing auto note generation prompt."""
+
+    template_type: str = Field(
+        "study_guide",
+        description="Type of template: 'study_guide' or 'content_review'",
+    )
+    custom_instructions: Optional[str] = Field(
+        None, description="Optional custom instructions for generation"
+    )
+    page_source: Optional[str] = Field(
+        None, description="Optional alternate page source for paywalled content"
+    )
+    page_dom: Optional[str] = Field(
+        None, description="Optional page DOM/HTML content from extension"
+    )
+
+
+class AutoNotePreviewResponse(BaseModel):
+    """Schema for auto note prompt preview response."""
+
+    prompt: str = Field(..., description="The full prompt that would be sent to LLM")
+    prompt_length: int = Field(..., description="Length of prompt in characters")
+    estimated_tokens: int = Field(..., description="Estimated token count")
+
+
+class BatchDeleteRequest(BaseModel):
+    """Schema for batch deleting auto-generated notes."""
+
+    generation_batch_id: str = Field(..., description="Batch ID of notes to delete")
+
+
+class BatchDeleteResponse(BaseModel):
+    """Schema for batch delete response."""
+
+    deleted_count: int = Field(..., description="Number of notes deleted")
+    generation_batch_id: str = Field(..., description="Batch ID that was deleted")
+
+
+class ChunkedAutoNoteRequest(BaseModel):
+    """Schema for chunked auto note generation requests (stateless).
+
+    Used for processing large pages by splitting them into chunks.
+    Frontend generates batch_id and sends chunks in parallel (3 at a time).
+    Backend processes each chunk independently without session management.
+    """
+
+    llm_provider_id: int = Field(1, description="LLM provider ID to use")
+    template_type: str = Field(
+        "study_guide",
+        description="Type of template: 'study_guide' or 'content_review'",
+    )
+    chunk_index: int = Field(..., ge=0, description="Index of current chunk (0-based)")
+    total_chunks: int = Field(..., gt=0, description="Total number of chunks")
+    chunk_dom: str = Field(..., min_length=1, description="DOM content for this chunk")
+    parent_context: Optional[Dict[str, Any]] = Field(
+        None, description="Parent document context for selector accuracy"
+    )
+    batch_id: str = Field(
+        ..., description="Frontend-generated batch ID (shared across all chunks)"
+    )
+    position_offset: int = Field(
+        0, description="Position offset for notes in this chunk"
+    )
+    custom_instructions: Optional[str] = Field(
+        None, description="Optional custom instructions for generation"
+    )
+
+
+class FullDOMAutoNoteRequest(BaseModel):
+    """Request schema for server-side chunking with full DOM."""
+
+    llm_provider_id: int = Field(1, description="LLM provider ID")
+    template_type: str = Field("study_guide", description="Template type")
+    full_dom: str = Field(..., min_length=1, description="Complete page DOM")
+    custom_instructions: Optional[str] = Field(None, description="Custom instructions")
+
+
+class FullDOMAutoNoteResponse(BaseModel):
+    """Response schema for server-side chunking."""
+
+    notes: List[GeneratedNoteData] = Field(..., description="All generated notes")
+    batch_id: str = Field(..., description="Batch ID for this generation")
+    total_chunks: int = Field(..., description="Number of chunks processed")
+    successful_chunks: int = Field(..., description="Successfully processed chunks")
+    failed_chunks: List[int] = Field(
+        default_factory=list, description="Failed chunk indices"
+    )
+    tokens_used: int = Field(..., description="Total tokens consumed")
+    cost_usd: float = Field(..., description="Total cost in USD")
+    generation_time_ms: int = Field(..., description="Total generation time")
+
+
+class ChunkedAutoNoteResponse(BaseModel):
+    """Schema for single chunk response (stateless, no aggregation).
+
+    Each chunk returns its generated notes immediately.
+    Frontend aggregates results from all chunks.
+    """
+
+    notes: List[GeneratedNoteData] = Field(
+        ..., description="Notes generated from this chunk"
+    )
+    chunk_index: int = Field(..., description="Index of processed chunk")
+    total_chunks: int = Field(..., description="Total chunks in request")
+    batch_id: str = Field(..., description="Batch ID for this set of notes")
+    tokens_used: int = Field(..., description="Tokens consumed for this chunk")
+    cost_usd: float = Field(..., description="Cost for this chunk in USD")
+    input_tokens: int = Field(..., description="Input tokens for this chunk")
+    output_tokens: int = Field(..., description="Output tokens for this chunk")
+    generation_time_ms: int = Field(
+        ..., description="Generation time for this chunk in milliseconds"
+    )
