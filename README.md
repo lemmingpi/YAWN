@@ -66,19 +66,16 @@ The API will be available at:
 
 ### In Progress 🔄
 
-- **LLM Integration Phase 1.2+**: Enhanced prompts, multiple provider support, advanced features (see [LLM_TODO.md](LLM_TODO.md))
-- **DOM Anchoring Improvements**: Enhanced selector generation and fallback strategies (see [SELECTOR_IMPROVEMENT_TODO.md](SELECTOR_IMPROVEMENT_TODO.md))
+- **LLM Integration Phase 1.2+**: Enhanced prompts, multiple provider support, advanced features
+- **DOM Anchoring Improvements**: Enhanced selector generation and fallback strategies
 
 ## Documentation
 
 - **[USER_GUIDE.md](USER_GUIDE.md)** - Complete guide for end users (installation, features, troubleshooting)
 - **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Local environment setup, database configuration, deployment
 - **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Architecture, code structure, data model, development workflows
-- **[PROJECT_SPEC.md](PROJECT_SPEC.md)** - Detailed architecture specification and design constraints
-- **[LLM_TODO.md](LLM_TODO.md)** - 18-phase LLM integration roadmap
 - **[TODO.md](TODO.md)** - General project tasks and technical debt
 - **[CLAUDE.md](CLAUDE.md)** - AI assistant guidelines and project state
-- **[CODE_REFERENCE.md](CODE_REFERENCE.md)** - Code navigation reference
 
 ## Contributing
 
