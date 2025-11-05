@@ -74,7 +74,6 @@ The API will be available at:
 - **[USER_GUIDE.md](USER_GUIDE.md)** - Complete guide for end users (installation, features, troubleshooting)
 - **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Local environment setup, database configuration, deployment
 - **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Architecture, code structure, data model, development workflows
-- **[TODO.md](TODO.md)** - General project tasks and technical debt
 - **[CLAUDE.md](CLAUDE.md)** - AI assistant guidelines and project state
 
 ## Contributing
