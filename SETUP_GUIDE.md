@@ -10,8 +10,12 @@ Complete guide for setting up YAWN (Yet Another Web Notes App) for local develop
 4. [Chrome Extension Setup](#chrome-extension-setup)
 5. [Configuration](#configuration)
 6. [Secrets Management](#secrets-management)
-7. [Deployment](#deployment)
-8. [Troubleshooting](#troubleshooting)
+7. [Domain Registration & DNS](#domain-registration--dns-production-only)
+8. [Deployment](#deployment)
+9. [Post-Deployment & Maintenance](#post-deployment--maintenance)
+10. [Troubleshooting](#troubleshooting)
+11. [Development Workflow Commands](#development-workflow-commands)
+12. [Next Steps](#next-steps)
 
 ---
 
@@ -327,26 +331,128 @@ For authentication features:
    }
    ```
 
-### LLM Provider Setup (Optional)
+### LLM Provider Setup (Optional but Recommended)
 
-For AI-powered features, configure LLM providers:
+YAWN supports AI-powered features for note generation and enhancement. Set up at least one provider.
 
-**OpenAI**:
+#### Option 1: Google Gemini API (Recommended for Free Tier)
+
+**Free Tier**: 15 requests per minute, 1,500 requests per day
+
+**Setup**:
+1. Visit https://makersuite.google.com/app/apikey
+2. Click "Create API Key"
+3. Select your GCP project
+4. Copy the API key
+
+**Test API Key**:
 ```bash
-OPENAI_API_KEY="sk-..."
+curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=YOUR_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
 ```
 
-**Anthropic**:
+**Configuration**:
 ```bash
-ANTHROPIC_API_KEY="sk-ant-..."
+GOOGLE_AI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-1.5-flash  # or gemini-1.5-pro
+LLM_PROVIDER=gemini
 ```
 
-**Google Gemini**:
+#### Option 2: OpenAI ChatGPT API
+
+**Free Tier**: $5 free credit for first 3 months (new accounts)
+
+**Setup**:
+1. Create account at https://platform.openai.com/signup
+2. Navigate to https://platform.openai.com/api-keys
+3. Click "Create new secret key" and name it "YAWN-Production"
+4. Copy the key (shown only once!)
+
+**Set Usage Limits** (Important!):
+- Go to https://platform.openai.com/account/billing/limits
+- Set monthly budget limit: $10
+- Set email alerts at 50% and 90%
+
+**Test API Key**:
 ```bash
-GOOGLE_GEMINI_API_KEY="..."
+curl https://api.openai.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "max_tokens": 50
+  }'
 ```
 
-Add these to your environment file or configure via the web dashboard at `/app/llm-providers`.
+**Configuration**:
+```bash
+OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxx
+OPENAI_MODEL=gpt-3.5-turbo  # or gpt-4-turbo
+LLM_PROVIDER=openai
+```
+
+**Pricing** (as of 2025):
+- GPT-3.5-turbo: $0.0005/1K tokens (input), $0.0015/1K tokens (output)
+- GPT-4-turbo: $0.01/1K tokens (input), $0.03/1K tokens (output)
+
+#### Option 3: Anthropic Claude API
+
+**No Free Tier** - Pay-as-you-go from day 1
+
+**Setup**:
+1. Create account at https://console.anthropic.com/
+2. Add payment method and set budget alerts ($20/month recommended)
+3. Navigate to https://console.anthropic.com/settings/keys
+4. Click "Create Key" and name it "YAWN-Production"
+5. Copy the key
+
+**Test API Key**:
+```bash
+curl https://api.anthropic.com/v1/messages \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{
+    "model": "claude-3-haiku-20240307",
+    "max_tokens": 100,
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+**Configuration**:
+```bash
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxx
+ANTHROPIC_MODEL=claude-3-haiku-20240307  # cheapest
+# Or: claude-3-5-sonnet-20241022  # best quality
+LLM_PROVIDER=anthropic
+```
+
+**Pricing** (as of 2025):
+- Claude 3 Haiku: $0.25/MTok (input), $1.25/MTok (output)
+- Claude 3.5 Sonnet: $3/MTok (input), $15/MTok (output)
+
+#### LLM Selection Strategy
+
+**For Development**:
+```bash
+LLM_PROVIDER=gemini  # Use free tier
+```
+
+**For Production (Cost-Optimized)**:
+```bash
+LLM_PROVIDER=gemini       # Primary (free tier)
+FALLBACK_PROVIDER=openai  # Fallback if rate limited
+```
+
+**For Production (Quality-Optimized)**:
+```bash
+LLM_PROVIDER=claude       # Best quality
+FALLBACK_PROVIDER=openai  # Fallback for cost
+```
+
+Add these to `backend/env/env.dev` or configure via the web dashboard at `/app/llm-providers`.
 
 ---
 
@@ -654,6 +760,75 @@ gcloud sql users set-password webnotes_user \
 
 ---
 
+## Domain Registration & DNS (Production Only)
+
+For production deployment, you'll need a custom domain for your API and potentially for your web dashboard.
+
+### Purchase Domain
+
+**Recommended Registrars**:
+- **Namecheap**: ~$12/year, easy DNS management
+- **Google Domains**: Integrates with GCP
+- **Cloudflare**: Competitive pricing with free DNS and CDN
+
+**Example Domain**: `yawn-notes.com`
+
+### Configure DNS
+
+After deploying your backend to Cloud Run (see Deployment section below), configure DNS:
+
+**1. Get Cloud Run URL**:
+```bash
+gcloud run services describe yawn-api --region=us-central1 --format='value(status.url)'
+# Example output: https://yawn-api-xxxxx-uc.a.run.app
+```
+
+**2. Add DNS Records** (Namecheap example):
+```
+Type: CNAME Record
+Host: api
+Value: gloo.run.app
+TTL: Automatic
+
+Type: CNAME Record
+Host: www
+Value: gloo.run.app
+TTL: Automatic
+```
+
+**3. Domain Mapping in GCP**:
+```bash
+# Enable required services
+gcloud services enable run.googleapis.com
+gcloud services enable compute.googleapis.com
+
+# Map your domain to Cloud Run
+gcloud run domain-mappings create \
+  --service yawn-api \
+  --domain api.yawn-notes.com \
+  --region us-central1
+
+# Verify mapping
+gcloud run domain-mappings list --region us-central1
+```
+
+### SSL Certificate (Automatic)
+
+Google Cloud Run automatically provisions SSL certificates via Let's Encrypt.
+
+**Verification** (wait 15-60 minutes for DNS propagation):
+```bash
+# Check certificate status
+gcloud run domain-mappings describe \
+  --domain api.yawn-notes.com \
+  --region us-central1
+
+# Test HTTPS
+curl -I https://api.yawn-notes.com/api/health
+```
+
+---
+
 ## Deployment
 
 ### Google Cloud Platform (GCP) Deployment
@@ -707,19 +882,117 @@ gcloud sql users create webnotes_user \
 gcloud sql instances describe yawn-db --format="value(connectionName)"
 ```
 
-#### Deploy Cloud Run
+#### Create Artifact Registry Repository
 
 ```bash
-# Build and deploy
+# Create Docker repository
+gcloud artifacts repositories create yawn-docker \
+  --repository-format=docker \
+  --location=us-central1 \
+  --description="YAWN application images"
+
+# Configure Docker authentication
+gcloud auth configure-docker us-central1-docker.pkg.dev
+```
+
+#### Build and Push Docker Image
+
+Create `backend/Dockerfile` (if not exists):
+
+```dockerfile
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y gcc postgresql-client && rm -rf /var/lib/apt/lists/*
+
+# Copy and install requirements
+COPY requirements/base.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application
+COPY . .
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8080
+
+# Run with uvicorn
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+**Build and push**:
+
+```bash
+cd backend
+
+# Build image
+docker build -t us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:latest .
+
+# Test locally (optional)
+docker run -p 8080:8080 \
+  -e DATABASE_URL="postgresql+asyncpg://user:pass@host.docker.internal:5432/webnotes" \
+  us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:latest
+
+# Push to registry
+docker push us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:latest
+```
+
+#### Deploy to Cloud Run
+
+```bash
+# Deploy with secrets and Cloud SQL
 gcloud run deploy yawn-api \
-  --source=backend \
+  --image=us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:latest \
   --region=us-central1 \
+  --platform=managed \
   --allow-unauthenticated \
-  --set-env-vars="DATABASE_URL=postgresql+asyncpg://webnotes_user:PASSWORD@/webnotes?host=/cloudsql/CONNECTION_NAME" \
-  --add-cloudsql-instances=CONNECTION_NAME
+  --min-instances=0 \
+  --max-instances=10 \
+  --memory=512Mi \
+  --cpu=1 \
+  --timeout=300 \
+  --concurrency=80 \
+  --port=8080 \
+  --add-cloudsql-instances=yawn-notes-prod:us-central1:yawn-postgres \
+  --set-secrets="DATABASE_URL=db-password:latest,JWT_SECRET_KEY=jwt-secret:latest,GOOGLE_AI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest" \
+  --set-env-vars="LLM_PROVIDER=gemini,ENVIRONMENT=production,LOG_LEVEL=INFO,GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com"
 
 # Get service URL
 gcloud run services describe yawn-api --region=us-central1 --format="value(status.url)"
+```
+
+#### Run Database Migrations
+
+**Method 1: Via Cloud SQL Proxy (local)**:
+
+```bash
+# Start proxy
+./cloud_sql_proxy -instances=yawn-notes-prod:us-central1:yawn-postgres=tcp:5432 &
+
+# Run migrations
+cd backend
+export DATABASE_URL="postgresql+asyncpg://yawn_app:PASSWORD@localhost:5432/yawn_production"
+alembic upgrade head
+```
+
+**Method 2: Via Cloud Run Job** (recommended):
+
+```bash
+# Create migration job
+gcloud run jobs create yawn-migrate \
+  --image=us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:latest \
+  --region=us-central1 \
+  --add-cloudsql-instances=yawn-notes-prod:us-central1:yawn-postgres \
+  --set-secrets="DATABASE_URL=db-password:latest" \
+  --command="alembic" \
+  --args="upgrade,head"
+
+# Execute migration
+gcloud run jobs execute yawn-migrate --region=us-central1
 ```
 
 #### Update Extension for Production
@@ -750,6 +1023,57 @@ make package-extension
 
 This creates: `dist/web-notes-extension-vX.Y.Z.zip`
 
+The packaging process:
+- ✅ Validates manifest.json syntax
+- ✅ Converts SVG icons to PNG (required by Chrome Web Store)
+- ✅ Excludes development/test files
+- ✅ Creates optimized ZIP package
+
+#### Create Store Listing Assets
+
+**Screenshots** (required: minimum 1, recommended: 5):
+- Size: 1280x800 or 640x400 pixels
+- Format: PNG or JPEG
+- Show extension in action on real websites
+
+**Screenshot Ideas**:
+1. Creating a note on a webpage
+2. Editing markdown content with toolbar
+3. Multiple notes with different colors
+4. Extension popup showing settings
+5. Context menu integration
+
+**Promotional Images**:
+- Small tile: 440x280 PNG (required, shown in search results)
+- Marquee: 1400x560 PNG (optional, for featured placement)
+
+#### Privacy Policy
+
+Create and host a privacy policy (required). Example template:
+
+```markdown
+# Privacy Policy for YAWN Chrome Extension
+
+**Data Collection**: YAWN does not collect, store, or transmit personal data without explicit consent.
+
+**Local Storage**: Notes are stored locally in your browser by default using Chrome's storage API.
+
+**Optional Sync**: If you enable server sync by signing in with Google, notes are stored on our secure servers.
+
+**Permissions**:
+- activeTab: To inject notes into web pages
+- storage: To save notes locally
+- scripting: To display notes on pages
+- contextMenus: For right-click menu
+- identity: Optional Google sign-in
+
+**Third-Party Services**: No third-party analytics or tracking services are used.
+
+**Contact**: [your-email@example.com]
+```
+
+Host this at a public URL (e.g., GitHub Pages, your domain).
+
 #### Upload to Chrome Web Store
 
 1. **Developer Account**:
@@ -757,26 +1081,273 @@ This creates: `dist/web-notes-extension-vX.Y.Z.zip`
    - Pay $5 one-time registration fee
    - Enable 2-Step Verification on Google account
 
-2. **Create New Item**:
+2. **Upload Extension**:
    - Click "New Item"
-   - Upload the ZIP file
-   - Fill out store listing:
-     - Name: "YAWN - Web Notes"
-     - Description: [Copy from USER_GUIDE.md intro]
-     - Screenshots: Take 4-5 screenshots of extension in use
-     - Category: Productivity
-     - Privacy policy URL
+   - Upload `dist/web-notes-extension-vX.Y.Z.zip`
+   - Wait for upload to complete
 
-3. **Submit for Review**:
-   - Review can take 1-3 business days
-   - Check email for approval or feedback
+3. **Fill Out Store Listing**:
+
+**Required Information**:
+- **Name**: YAWN - Yet Another Web Notes
+- **Summary**: Add persistent sticky notes to any webpage (max 132 characters)
+- **Category**: Productivity
+- **Language**: English
+
+**Description**:
+```
+Transform any webpage into your personal notepad with YAWN.
+
+FEATURES:
+• Create notes anywhere on any webpage
+• Rich markdown support with formatting toolbar
+• Notes anchor to page elements (survive page updates)
+• Highlight text and create notes from selection
+• Drag-and-drop positioning
+• Color-coded notes for organization
+• Sync across devices (optional)
+• Privacy-first: local storage by default
+
+PERFECT FOR:
+• Research and studying
+• Web development documentation
+• Collaborative learning
+• Content curation
+• Personal knowledge management
+
+PRIVACY FOCUSED:
+• Notes stored locally by default
+• Optional server sync requires Google sign-in
+• No tracking or analytics
+• Your notes remain completely private
+
+Get YAWN today and never lose track of important web content again!
+```
+
+**Requested Permissions Justification**:
+- **activeTab**: Access current tab to inject notes
+- **storage**: Store notes data locally in browser
+- **scripting**: Execute content scripts to display notes
+- **contextMenus**: Add right-click menu integration
+- **identity**: Optional Google sign-in for sync
+
+**Privacy Policy**: Link to your hosted privacy policy
+
+**Screenshots**: Upload 1-5 screenshots you created
+
+**Distribution Settings**:
+- Visibility: Public
+- Pricing: Free
+- Regions: All regions
+
+4. **Submit for Review**:
+   - Review all information
+   - Click "Submit for review"
+   - Review period: 1-3 business days (typically 24-48 hours)
+   - Monitor email for status updates
+
+**Common Review Issues**:
+- ❌ SVG icons not supported → Packaging script converts to PNG
+- ❌ Unclear permission justifications → Add detailed explanations above
+- ❌ Missing privacy policy → Create and link policy
+- ❌ Misleading screenshots → Use actual extension UI
+- ❌ Broken functionality → Test thoroughly before submission
+
+#### Post-Approval
+
+Once approved:
+- Extension appears in Chrome Web Store
+- Install link: `https://chrome.google.com/webstore/detail/YOUR_EXTENSION_ID`
+- Add install link to your website/README
+- Monitor reviews and ratings
+- Respond to user feedback
 
 #### Publishing Updates
 
-1. Update version in `manifest.json`
+1. Update `version` in `manifest.json` (e.g., 1.0.0 → 1.0.1)
 2. Run `make package-extension`
-3. Upload new ZIP to existing item in dashboard
-4. Submit for review
+3. Go to Developer Dashboard
+4. Select your extension
+5. Click "Package" tab
+6. Upload new ZIP
+7. Update store listing if needed
+8. Submit for review
+
+**Version Numbering** (semantic versioning):
+- Patch (1.0.X): Bug fixes
+- Minor (1.X.0): New features
+- Major (X.0.0): Breaking changes
+
+---
+
+## Post-Deployment & Maintenance
+
+### Monitoring & Alerts
+
+**View Cloud Run Logs**:
+```bash
+# Recent logs
+gcloud run services logs read yawn-api --region=us-central1 --limit=50
+
+# Follow logs in real-time
+gcloud run services logs tail yawn-api --region=us-central1
+```
+
+**Create Uptime Check**:
+```bash
+gcloud monitoring uptime create yawn-api-health \
+  --resource-type=uptime-url \
+  --host=api.yawn-notes.com \
+  --path=/api/health \
+  --check-interval=60s
+```
+
+**Set Budget Alert**:
+```bash
+gcloud billing budgets create \
+  --billing-account=YOUR_BILLING_ACCOUNT \
+  --display-name="YAWN Monthly Budget" \
+  --budget-amount=10 \
+  --threshold-rule=percent=50 \
+  --threshold-rule=percent=90 \
+  --threshold-rule=percent=100
+```
+
+### Database Backups
+
+Cloud SQL automatic backups are enabled by default (configured during setup).
+
+**Manual Backup**:
+```bash
+gcloud sql backups create \
+  --instance=yawn-postgres \
+  --description="Pre-migration backup $(date +%Y-%m-%d)"
+
+# List backups
+gcloud sql backups list --instance=yawn-postgres
+
+# Restore from backup (if needed)
+gcloud sql backups restore BACKUP_ID \
+  --backup-instance=yawn-postgres
+```
+
+**Database Maintenance**:
+```sql
+-- Connect to database
+psql "postgresql://yawn_app:PASSWORD@localhost:5432/yawn_production"
+
+-- Check table sizes
+SELECT tablename, pg_size_pretty(pg_total_relation_size('public.'||tablename))
+FROM pg_tables WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size('public.'||tablename) DESC;
+
+-- Vacuum and analyze
+VACUUM ANALYZE;
+```
+
+### Backend Updates
+
+**Update with Zero Downtime**:
+```bash
+# Build new version
+cd backend
+docker build -t us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:v1.1.0 .
+docker push us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:v1.1.0
+
+# Deploy without traffic first
+gcloud run deploy yawn-api \
+  --image=us-central1-docker.pkg.dev/yawn-notes-prod/yawn-docker/yawn-api:v1.1.0 \
+  --region=us-central1 \
+  --no-traffic
+
+# Test new revision
+REVISION_URL=$(gcloud run services describe yawn-api --region=us-central1 --format='value(status.traffic[0].url)')
+curl $REVISION_URL/api/health
+
+# Route traffic to new revision
+gcloud run services update-traffic yawn-api \
+  --region=us-central1 \
+  --to-latest
+
+# Rollback if needed
+gcloud run services update-traffic yawn-api \
+  --region=us-central1 \
+  --to-revisions=PREVIOUS_REVISION=100
+```
+
+### Cost Optimization
+
+**Enable Cloud SQL Auto-Pause** (saves ~$10/month):
+```bash
+gcloud sql instances patch yawn-postgres \
+  --database-flags=cloudsql.enable_auto_pause=on,cloudsql.auto_pause_delay=600
+```
+
+**Reduce Cloud Run Memory** (if usage is low):
+```bash
+gcloud run services update yawn-api \
+  --region=us-central1 \
+  --memory=256Mi  # Down from 512Mi
+```
+
+**Monitor Costs**:
+```bash
+# View current month costs
+gcloud billing projects describe yawn-notes-prod
+
+# Check Cloud Run usage
+gcloud run services describe yawn-api --region=us-central1 --format='value(status.observedGeneration)'
+```
+
+**LLM Cost Controls**:
+- Use Gemini free tier for development
+- Set monthly budget limits in provider dashboards
+- Monitor usage via web dashboard at `/app/llm-providers`
+- Implement daily spending limits in code if needed
+
+### Security Maintenance
+
+**Rotate Secrets** (recommended: quarterly):
+```bash
+# Generate new password
+NEW_PASSWORD=$(openssl rand -base64 32)
+
+# Update database password
+gcloud sql users set-password yawn_app \
+  --instance=yawn-postgres \
+  --password=$NEW_PASSWORD
+
+# Update secret
+echo -n "$NEW_PASSWORD" | gcloud secrets versions add db-password --data-file=-
+
+# Restart Cloud Run
+gcloud run services update yawn-api --region=us-central1
+```
+
+**Check for Updates**:
+- Python dependencies: `pip list --outdated`
+- Extension dependencies: Check Chrome Web Store dashboard
+- GCP services: Monitor GCP status dashboard
+
+### Monitoring Checklist
+
+Weekly:
+- [ ] Check Cloud Run logs for errors
+- [ ] Review Cloud SQL performance metrics
+- [ ] Check LLM API usage and costs
+- [ ] Monitor extension reviews/ratings
+
+Monthly:
+- [ ] Review GCP billing
+- [ ] Check database backup status
+- [ ] Update dependencies if needed
+- [ ] Review security alerts
+
+Quarterly:
+- [ ] Rotate secrets
+- [ ] Review and optimize costs
+- [ ] Update documentation
+- [ ] Plan feature releases
 
 ---
 
