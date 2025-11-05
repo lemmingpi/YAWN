@@ -69,56 +69,6 @@ The API will be available at:
 - **LLM Integration Phase 1.2+**: Enhanced prompts, multiple provider support, advanced features (see [LLM_TODO.md](LLM_TODO.md))
 - **DOM Anchoring Improvements**: Enhanced selector generation and fallback strategies (see [SELECTOR_IMPROVEMENT_TODO.md](SELECTOR_IMPROVEMENT_TODO.md))
 
-## Architecture Overview
-
-```
-┌─────────────────────┐
-│  Chrome Extension   │  Manifest v3, local storage, DOM manipulation
-│  (Manifest v3)      │
-└──────────┬──────────┘
-           │ REST API (JWT Auth)
-┌──────────▼──────────┐
-│   FastAPI Backend   │  Python 3.13, async operations
-│   (Python 3.13)     │
-└──────────┬──────────┘
-           │ SQLAlchemy
-┌──────────▼──────────┐
-│   PostgreSQL DB     │  Multi-tenant, sharing, cost tracking
-│  (Multi-tenant)     │
-└─────────────────────┘
-```
-
-**Architecture Principles**:
-- **Local-First**: Notes stored in `chrome.storage.local` for instant display
-- **Optimistic Updates**: All CRUD operations happen locally first, then sync
-- **Stateless Backend**: Horizontally scalable, no session state
-- **Last-Write-Wins**: Simple conflict resolution based on timestamps
-
-## Technology Stack
-
-### Frontend
-- **Extension**: Chrome Manifest v3, vanilla JavaScript (modular)
-- **Storage**: `chrome.storage.local` and `chrome.storage.sync`
-- **Security**: DOMPurify for XSS prevention, CSP in manifest
-
-### Backend
-- **API**: Python 3.13 + FastAPI + Uvicorn
-- **Database**: PostgreSQL 14+ with SQLAlchemy 2.0 (async)
-- **Auth**: Google OAuth2 + JWT (access + refresh tokens)
-- **LLM**: Multi-provider support (OpenAI, Anthropic, Google Gemini)
-- **Migrations**: Alembic
-
-### DevOps
-- **Code Quality**: Black, isort, flake8, mypy, ESLint, Prettier
-- **Testing**: pytest with coverage, async test fixtures
-- **CI/CD**: Pre-commit hooks, automated linting
-- **Deployment**: GCP (Cloud Run + Cloud SQL), auto-scaling
-
-### Deployment Target
-- **Platform**: Google Cloud Platform
-- **Cost**: $2-4/month for ~12 users
-- **Scaling**: Cloud Run scales to zero, db-f1-micro with auto-pause
-
 ## Documentation
 
 - **[USER_GUIDE.md](USER_GUIDE.md)** - Complete guide for end users (installation, features, troubleshooting)
@@ -132,29 +82,14 @@ The API will be available at:
 
 ## Contributing
 
-### Development Workflow
+We welcome contributions! To get started:
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Make changes and test: `make test && make lint`
-4. Commit with clear messages: `git commit -m "Add feature: ..."`
-5. Push and create pull request
+1. Fork the repository and create a feature branch
+2. Set up your development environment: see [SETUP_GUIDE.md](SETUP_GUIDE.md)
+3. Make your changes and ensure tests pass: `make test && make lint`
+4. Submit a pull request with a clear description
 
-### Code Quality Requirements
-
-- **Python**: PEP 8, type hints, docstrings
-- **JavaScript**: ESLint rules, modern ES6+
-- **Tests**: Maintain 80%+ coverage for critical paths
-- **Documentation**: Update relevant docs with changes
-
-### Pre-commit Checks
-
-All code must pass:
-- Black formatting (line length: 100)
-- isort import sorting
-- flake8 linting
-- mypy type checking
-- ESLint (for JavaScript)
+For detailed development workflows, code quality standards, and architecture information, see the **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)**.
 
 ## Deployment
 

@@ -6,11 +6,12 @@ This guide provides comprehensive information for developers working on YAWN (Ye
 
 1. [Quick Command Reference](#quick-command-reference)
 2. [Architecture Overview](#architecture-overview)
-3. [Code Organization](#code-organization)
-4. [Data Model](#data-model)
-5. [Component Communication](#component-communication)
-6. [Development Workflows](#development-workflows)
-7. [Adding New Features](#adding-new-features)
+3. [Technology Stack](#technology-stack)
+4. [Code Organization](#code-organization)
+5. [Data Model](#data-model)
+6. [Component Communication](#component-communication)
+7. [Development Workflows](#development-workflows)
+8. [Adding New Features](#adding-new-features)
 
 ---
 
@@ -104,6 +105,36 @@ YAWN follows a **local-first architecture** with cloud sync capabilities:
 3. Backend validates Google token and creates/finds user
 4. Server issues JWT (access token + refresh token)
 5. Extension stores JWT and uses it for all API requests
+
+---
+
+## Technology Stack
+
+### Frontend
+- **Extension**: Chrome Manifest v3, vanilla JavaScript (modular design)
+- **Storage**: `chrome.storage.local` and `chrome.storage.sync`
+- **Security**: DOMPurify for XSS prevention, Content Security Policy (CSP) in manifest
+- **UI**: Native web components, no framework dependencies
+
+### Backend
+- **API Framework**: Python 3.13 + FastAPI + Uvicorn
+- **Database**: PostgreSQL 14+ with SQLAlchemy 2.0 (async)
+- **Authentication**: Google OAuth2 + JWT (access + refresh tokens)
+- **LLM Integration**: Multi-provider support (OpenAI, Anthropic, Google Gemini)
+- **Database Migrations**: Alembic
+
+### DevOps & Quality
+- **Code Quality**: Black, isort, flake8, mypy (Python), ESLint, Prettier (JavaScript)
+- **Testing**: pytest with coverage, async test fixtures
+- **Version Control**: Git with pre-commit hooks for automated linting
+- **CI/CD**: Pre-commit hooks, automated code quality checks
+
+### Deployment Target
+- **Platform**: Google Cloud Platform (GCP)
+- **Backend**: Cloud Run (serverless, scales to zero)
+- **Database**: Cloud SQL PostgreSQL (db-f1-micro with auto-pause)
+- **Cost**: $2-4/month for ~12 users with sporadic usage
+- **Scalability**: Horizontal scaling, stateless backend design
 
 ---
 
