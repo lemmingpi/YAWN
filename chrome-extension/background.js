@@ -204,7 +204,7 @@ async function checkAndOnboardPage(tabId, url) {
       color: badgeColor,
     });
   } else {
-    console.log(`[YAWN] No notes found for this page`);
+    console.log("[YAWN] No notes found for this page");
 
     // Clear badge if no notes
     chrome.action.setBadgeText({
@@ -219,7 +219,7 @@ async function checkAndOnboardPage(tabId, url) {
  */
 chrome.tabs.onActivated.addListener(async activeInfo => {
   try {
-    console.log(`[YAWN] onActivated called`);
+    console.log("[YAWN] onActivated called");
     const tab = await chrome.tabs.get(activeInfo.tabId);
 
     // Skip chrome:// and other restricted URLs
@@ -496,7 +496,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
 
     // Check and request permission if needed (context menu click is a user gesture)
-    console.log(`[YAWN] Context menu clicked, checking permission...`);
+    console.log("[YAWN] Context menu clicked, checking permission...");
     await PermissionManager.checkAndRequestIfNeeded(tab.url, tab.id);
 
     switch (info.menuItemId) {
@@ -556,7 +556,7 @@ async function handleAddNote(info, tab) {
     console.log(`[YAWN] This will be note #${noteNumber} on this URL (first on domain: ${isFirstNoteOnDomain})`);
 
     // STEP 2: Inject scripts IMMEDIATELY using activeTab permission (before we lose user gesture context)
-    console.log(`[YAWN] Injecting scripts (activeTab permission)...`);
+    console.log("[YAWN] Injecting scripts (activeTab permission)...");
     const injected = await injectContentScripts(tab.id);
     if (!injected) {
       console.error("[YAWN] ✗ Could not inject content scripts");
@@ -564,7 +564,7 @@ async function handleAddNote(info, tab) {
     }
 
     // STEP 3: Wait for scripts to initialize properly
-    console.log(`[YAWN] Waiting 500ms for scripts to initialize...`);
+    console.log("[YAWN] Waiting 500ms for scripts to initialize...");
     await new Promise(resolve => setTimeout(resolve, 500));
 
     // STEP 4: Create the note
@@ -574,7 +574,7 @@ async function handleAddNote(info, tab) {
     const success = await createNoteWithCoordinates(tab.id, noteNumber, info.selectionText || null);
 
     if (success) {
-      console.log(`[YAWN] ✓ Note created successfully`);
+      console.log("[YAWN] ✓ Note created successfully");
       // Update stats only on successful creation
       const stats = await getStats();
       await setStats({
@@ -584,13 +584,13 @@ async function handleAddNote(info, tab) {
         lastSeen: Date.now(),
       });
     } else {
-      console.error(`[YAWN] ✗ Note creation failed`);
+      console.error("[YAWN] ✗ Note creation failed");
     }
   } catch (error) {
-    console.error(`[YAWN] ✗ Error in handleAddNote:`, error);
+    console.error("[YAWN] ✗ Error in handleAddNote:", error);
     logError("Error handling add note action", error);
   } finally {
-    console.log(`[YAWN] ===== handleAddNote END =====`);
+    console.log("[YAWN] ===== handleAddNote END =====");
   }
 }
 

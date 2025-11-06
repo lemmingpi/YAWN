@@ -520,7 +520,7 @@ async function addNote(url, noteData) {
     notes[normalizedUrl] = urlNotes;
     const success = await setNotes(notes, normalizedUrl);
 
-    console.log(`[YAWN] Added note to local storage`);
+    console.log("[YAWN] Added note to local storage");
     return success;
   } catch (error) {
     logError("Error adding note", error);
