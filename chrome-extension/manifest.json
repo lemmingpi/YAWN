@@ -3,7 +3,7 @@
   "name": "YAWN - Yet Another Web Notes App",
   "version": "1.0.1",
   "description": "Add sticky notes to any webpage. Rich text editing, markdown support, cloud sync, and sharing. Your notes follow you everywhere.",
-  "homepage_url": "https://yawn-api-1040678620671.us-central1.run.app/privacy",
+  "homepage_url": "https://github.com/lemmingpi/YAWN/blob/main/README.md",
   "permissions": [
     "activeTab",
     "tabs",
